@@ -95,6 +95,7 @@ def train_model(config):
     model = build_transformer(src_vocab_size=tokenizer_src.get_vocab_size(),
                               tgt_vocab_size=tokenizer_tgt.get_vocab_size(),
                               src_seq_len=config["seq_len"], tgt_seq_len=config['seq_len'], d_model=config['d_model'])
+    model = model.to(device)
 
     # use tensorboard
     writer = SummaryWriter(config['experiment_name'])

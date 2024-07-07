@@ -60,16 +60,21 @@ class FeedForwardBlock(nn.Module):
 
 
 class LayerNormalization(nn.Module):
-    def __init__(self, d_model: int) -> None:
+
+    def __init__(self, features: int, eps:float=10**-6) -> None:
         super().__init__()
-        self.alpha = nn.Parameter(torch.ones(d_model))  # alpha is a learnable parameter
-        self.bias = nn.Parameter(torch.zeros(d_model))  # bias is a learnable parameter
+        self.eps = eps
+        self.alpha = nn.Parameter(torch.ones(features)) # alpha is a learnable parameter
+        self.bias = nn.Parameter(torch.zeros(features)) # bias is a learnable parameter
 
     def forward(self, x):
         # x: (batch, seq_len, hidden_size)
-        mean = x.mean(dim=-1, keepdim=True)  # (batch, seq_len, 1)
-        std = x.std(dim=-1, keepdim=True)  # (batch, seq_len, 1)
-        return self.alpha * (x - mean / math.sqrt(std + 10 ** -6)) + self.bias
+         # Keep the dimension for broadcasting
+        mean = x.mean(dim = -1, keepdim = True) # (batch, seq_len, 1)
+        # Keep the dimension for broadcasting
+        std = x.std(dim = -1, keepdim = True) # (batch, seq_len, 1)
+        # eps is to prevent dividing by zero or when std is very small
+        return self.alpha * (x - mean) / (std + self.eps) + self.bias
 
 
 # layer_norm = nn.LayerNormalization(d_model)
@@ -104,10 +109,10 @@ class MultiHeadAttentionBlock(nn.Module):
         # q_i: (batch, h, seq_len, d_k), k_i: (batch, h, seq_len, d_k)
         d_k = q_i.shape[-1]
         attention_score = q_i @ k_i.transpose(-2, -1) / math.sqrt(d_k)  # (batch, h, seq_len, seq_len)
-        if mask:
+        if mask is not None:
             attention_score.masked_fill_(mask == 0, -1e9)
         attention_scores = attention_score.softmax(dim=-1)  # (batch, h, seq_len, seq_len)
-        if dropout:
+        if dropout is not None:
             attention_scores = dropout(attention_scores)
         # return attention_scores for visluazation
         return (attention_scores @ v_i), attention_scores
@@ -136,8 +141,8 @@ class EncoderBlock(nn.Module):
         self.residual_connections = nn.ModuleList(ResidualConnection(d_model, dropout) for _ in range(2))
 
     def forward(self, x, src_mask):
-        x = self.residual_connections[0](self.self_attention_block(x, x, x, src_mask))  # TODO: different than org
-        x = self.residual_connections[1](self.feed_forward_block(x))
+        x = self.residual_connections[0](x, lambda x: self.self_attention_block(x, x, x, src_mask))
+        x = self.residual_connections[1](x, self.feed_forward_block)
         return x
 
 
@@ -164,8 +169,8 @@ class DecoderBlock(nn.Module):
         self.residual_connections = nn.ModuleList(ResidualConnection(d_model, dropout) for _ in range(3))
 
     def forward(self, x, encoder_output, src_mask, tgt_mask):
-        x = self.residual_connections[0](self.self_attention_block(x, x, x, tgt_mask))  # TODO: different than org
-        x = self.residual_connections[1](self.cross_attention_block(x, encoder_output, encoder_output, src_mask))
+        x = self.residual_connections[0](x, lambda x: self.self_attention_block(x, x, x, tgt_mask))
+        x = self.residual_connections[1](x, lambda x: self.cross_attention_block(x, encoder_output, encoder_output, src_mask))
         x = self.residual_connections[2](self.feed_forward_block(x))
         return x
 
@@ -249,7 +254,7 @@ def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int
     encoder = Encoder(d_model, nn.ModuleList(encoder_blocks))
     decoder = Decoder(d_model, nn.ModuleList(encoder_blocks))
 
-    # create projection layter
+    # create projection layer
     projection_layer = ProjectionLayer(d_model, tgt_vocab_size)
 
     transformer = Transformer(encoder, decoder, src_embed, tgt_embed, src_pos, tgt_pos, projection_layer)
