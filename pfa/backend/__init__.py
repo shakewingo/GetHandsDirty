@@ -1,3 +1,0 @@
-"""
-Financial Tracker Backend Package
-""" 

@@ -72,3 +72,9 @@ End-to-End Testing:
    - Complete user flows
    - Real device testing
    - Network conditions
+
+
+
+cursor使用感受：新任务正确率很高，token长了以后后面容易越改越乱；最新3.5和hauki同样prompt差距蛮大的
+
+codebase太牛了，帮我scan all codes and debug example说一下

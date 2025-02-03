@@ -5,6 +5,14 @@ struct MultipleDocumentPicker: View {
     @Binding var selectedFiles: [(URL, String)]  // (fileURL, sourceType)
     @State private var isShowingPicker = false
     @State private var currentSourceType: String = ""
+    @State private var isShowingSourceTypePicker = false
+    
+    let sourceTypes = [
+        "td_chequing": "TD Chequing",
+        "td_credit": "TD Credit",
+        "cmb_chequing": "CMB Chequing",
+        "cmb_credit": "CMB Credit"
+    ]
     
     var body: some View {
         VStack(spacing: 20) {
@@ -16,7 +24,7 @@ struct MultipleDocumentPicker: View {
                             VStack(alignment: .leading) {
                                 Text(file.lastPathComponent)
                                     .font(.headline)
-                                Text(sourceType)
+                                Text(sourceTypes[sourceType] ?? sourceType)
                                     .font(.subheadline)
                                     .foregroundColor(.secondary)
                             }
@@ -35,31 +43,51 @@ struct MultipleDocumentPicker: View {
                 .frame(maxHeight: 200)
             }
             
-            // Add files buttons
+            // Action buttons
             VStack(spacing: 12) {
+                // Upload button
                 Button(action: {
-                    currentSourceType = "td_chequing"
+                    isShowingSourceTypePicker = false
                     isShowingPicker = true
                 }) {
-                    Label("Add TD Chequing Statement (PDF)", systemImage: "doc.fill")
+                    Label("Upload Statements", systemImage: "doc.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 
+                // Type selection button
                 Button(action: {
-                    currentSourceType = "td_credit"
-                    isShowingPicker = true
+                    isShowingSourceTypePicker = true
                 }) {
-                    Label("Add TD Credit Statement (CSV)", systemImage: "doc.text.fill")
+                    Label("Select Type", systemImage: "list.bullet")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
+                
+                // Type selection menu
+                if isShowingSourceTypePicker {
+                    VStack(spacing: 8) {
+                        ForEach(Array(sourceTypes.keys.sorted()), id: \.self) { key in
+                            Button(action: {
+                                currentSourceType = key
+                                isShowingPicker = true
+                                isShowingSourceTypePicker = false
+                            }) {
+                                Text(sourceTypes[key] ?? key)
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                    .transition(.scale)
+                }
             }
             .padding()
+            .animation(.easeInOut, value: isShowingSourceTypePicker)
         }
         .fileImporter(
             isPresented: $isShowingPicker,
-            allowedContentTypes: currentSourceType == "td_chequing" ? [.pdf] : [.commaSeparatedText],
+            allowedContentTypes: [.pdf, .commaSeparatedText],
             allowsMultipleSelection: true
         ) { result in
             switch result {
