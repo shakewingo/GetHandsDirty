@@ -15,7 +15,7 @@ struct AddAssetView: View {
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("Asset Details")) {
+                Section(header: Text("Details")) {
                     TextField("Asset Type", text: $assetType)
                     
                     TextField("Market Value", text: $marketValue)
