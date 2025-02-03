@@ -17,9 +17,15 @@ class FinancialViewModel: ObservableObject {
     
     init() {
         // Load initial data from CoreData
+        loadFromCoreData()
+    }
+    
+    private func loadFromCoreData() {
         transactions = coreDataManager.fetchTransactions()
         assets = coreDataManager.fetchAssets()
         credits = coreDataManager.fetchCredits()
+        print("Loaded from CoreData - Assets count: \(assets.count), Credits count: \(credits.count)")
+        calculateLocalSummary()
     }
     
     func uploadSelectedFiles() async {
@@ -50,15 +56,26 @@ class FinancialViewModel: ObservableObject {
         
         do {
             summary = try await apiService.fetchSummary()
+            // Clear any previous error since API call succeeded
+            errorMessage = nil
             await fetchAssets()  // Fetch assets
             await fetchCredits() // Fetch credits
+            print("After API fetch - Assets count: \(assets.count), Credits count: \(credits.count)")
+        } catch let error as APIError {
+            // Handle specific API errors
+            switch error {
+            case .networkError(_):
+                // For network errors (like server not running), just load from CoreData silently
+                loadFromCoreData()
+            default:
+                // For other API errors, show the error message
+                errorMessage = error.localizedDescription
+                loadFromCoreData()
+            }
         } catch {
+            // For unexpected errors, show the error message
             errorMessage = error.localizedDescription
-            // Load from CoreData if API fails
-            assets = coreDataManager.fetchAssets()
-            credits = coreDataManager.fetchCredits()
-            transactions = coreDataManager.fetchTransactions()
-            calculateLocalSummary()
+            loadFromCoreData()
         }
         
         isLoading = false
@@ -67,12 +84,16 @@ class FinancialViewModel: ObservableObject {
     func fetchAssets() async {
         do {
             let fetchedAssets = try await apiService.fetchGroupedAssets()
-            assets = fetchedAssets
-            // Save to CoreData
-            coreDataManager.saveAssets(fetchedAssets)
+            print("fetchedAssets: \(fetchedAssets)")
+            if !fetchedAssets.isEmpty {
+                assets = fetchedAssets
+                // Save to CoreData only if we got data from API
+                coreDataManager.saveAssets(fetchedAssets)
+            }
+            // Clear any error since the call succeeded
+            errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
-            // Load from CoreData if API fails
+            // Don't show error message for asset fetching, just fall back to CoreData
             assets = coreDataManager.fetchAssets()
         }
     }
@@ -80,13 +101,15 @@ class FinancialViewModel: ObservableObject {
     func fetchCredits() async {
         do {
             let fetchedCredits = try await apiService.fetchGroupedCredits()
-            credits = fetchedCredits
-            // Save to CoreData
-            coreDataManager.saveCredits(fetchedCredits)
+            if !fetchedCredits.isEmpty {
+                credits = fetchedCredits
+                // Save to CoreData only if we got data from API
+                coreDataManager.saveCredits(fetchedCredits)
+            }
+            // Clear any error since the call succeeded
+            errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
-            print("Error fetching credits: \(error)")
-            // Load from CoreData if API fails
+            // Don't show error message for credit fetching, just fall back to CoreData
             credits = coreDataManager.fetchCredits()
         }
     }

@@ -15,7 +15,7 @@ struct AddCreditView: View {
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("Credit Details")) {
+                Section(header: Text("Details")) {
                     TextField("Credit Type", text: $creditType)
                     
                     TextField("Market Value", text: $marketValue)

@@ -4,6 +4,7 @@ struct AssetsView: View {
     @StateObject private var viewModel = FinancialViewModel()
     @State private var isShowingAddSheet = false
     @State private var selectedAddType: AddType? = nil
+    @State private var showError = false
     
     enum AddType {
         case asset
@@ -104,10 +105,15 @@ struct AssetsView: View {
                 await viewModel.fetchSummary()
             }
         }
-        .task {
-            await viewModel.fetchSummary()
+        .onAppear {
+            Task {
+                await viewModel.fetchSummary()
+            }
         }
-        .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
+        .onChange(of: viewModel.errorMessage) { newValue in
+            showError = newValue != nil
+        }
+        .alert("Error", isPresented: $showError) {
             Button("OK") {
                 viewModel.clearError()
             }
