@@ -2,6 +2,7 @@ anthropic
 pypdf2
 pandas
 python-dotenv
-React
 fastapi
 python-multipart
+uvicorn
+sqlalchemy

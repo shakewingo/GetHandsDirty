@@ -7,8 +7,20 @@ class FinancialViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var summary: AccountSummary?
+    @Published var assets: [Asset] = []
+    @Published var credits: [Credit] = []
+    @Published var selectedAssetDetails: [Asset] = []
+    @Published var selectedCreditDetails: [Credit] = []
     
     private let apiService = APIService.shared
+    private let coreDataManager = CoreDataManager.shared
+    
+    init() {
+        // Load initial data from CoreData
+        transactions = coreDataManager.fetchTransactions()
+        assets = coreDataManager.fetchAssets()
+        credits = coreDataManager.fetchCredits()
+    }
     
     func uploadSelectedFiles() async {
         guard !selectedFiles.isEmpty else { return }
@@ -20,6 +32,10 @@ class FinancialViewModel: ObservableObject {
             let newTransactions = try await apiService.uploadStatements(files: selectedFiles)
             self.transactions = newTransactions
             self.selectedFiles = []  // Clear selected files after successful upload
+            
+            // Save to CoreData
+            coreDataManager.saveTransactions(newTransactions)
+            
             await fetchSummary()  // Refresh summary after upload
         } catch {
             errorMessage = error.localizedDescription
@@ -34,6 +50,149 @@ class FinancialViewModel: ObservableObject {
         
         do {
             summary = try await apiService.fetchSummary()
+            await fetchAssets()  // Fetch assets
+            await fetchCredits() // Fetch credits
+        } catch {
+            errorMessage = error.localizedDescription
+            // Load from CoreData if API fails
+            assets = coreDataManager.fetchAssets()
+            credits = coreDataManager.fetchCredits()
+            transactions = coreDataManager.fetchTransactions()
+            calculateLocalSummary()
+        }
+        
+        isLoading = false
+    }
+    
+    func fetchAssets() async {
+        do {
+            let fetchedAssets = try await apiService.fetchGroupedAssets()
+            assets = fetchedAssets
+            // Save to CoreData
+            coreDataManager.saveAssets(fetchedAssets)
+        } catch {
+            errorMessage = error.localizedDescription
+            // Load from CoreData if API fails
+            assets = coreDataManager.fetchAssets()
+        }
+    }
+    
+    func fetchCredits() async {
+        do {
+            let fetchedCredits = try await apiService.fetchGroupedCredits()
+            credits = fetchedCredits
+            // Save to CoreData
+            coreDataManager.saveCredits(fetchedCredits)
+        } catch {
+            errorMessage = error.localizedDescription
+            print("Error fetching credits: \(error)")
+            // Load from CoreData if API fails
+            credits = coreDataManager.fetchCredits()
+        }
+    }
+    
+//    func fetchAssetDetails(assetType: String, currency: String) async {
+//        isLoading = true
+//        errorMessage = nil
+//        
+//        do {
+//            selectedAssetDetails = try await apiService.fetchAssetDetails(assetType: assetType, currency: currency)
+//        } catch {
+//            errorMessage = error.localizedDescription
+//            selectedAssetDetails = []
+//        }
+//        
+//        isLoading = false
+//    }
+//    
+//    func fetchCreditDetails(creditType: String, currency: String) async {
+//        isLoading = true
+//        errorMessage = nil
+//        
+//        do {
+//            selectedCreditDetails = try await apiService.fetchCreditDetails(creditType: creditType, currency: currency)
+//        } catch {
+//            errorMessage = error.localizedDescription
+//            selectedCreditDetails = []
+//        }
+//        
+//        isLoading = false
+//    }
+
+    private func calculateLocalSummary() {
+        let totalAssets = assets.reduce(0) { $0 + $1.marketValue }
+        let totalCredit = credits.reduce(0) { $0 + $1.marketValue }
+        
+        // Create monthly summary
+        var monthlySummary: [String: [String: Double]] = [:]
+        for transaction in transactions {
+            let year = String(transaction.date.suffix(4))
+            let month = String(transaction.date.prefix(2))
+            let monthKey = "\(year)-\(month)"
+            
+            if monthlySummary[monthKey] == nil {
+                monthlySummary[monthKey] = [:]
+            }
+            
+            if monthlySummary[monthKey]?[transaction.category] == nil {
+                monthlySummary[monthKey]?[transaction.category] = 0
+            }
+            
+            monthlySummary[monthKey]?[transaction.category]? += transaction.amount
+        }
+        
+        summary = AccountSummary(
+            totalAssets: totalAssets,
+            totalCredit: totalCredit,
+            netWorth: totalAssets + totalCredit,
+            monthlySummary: monthlySummary
+        )
+    }
+
+    func clearSelectedDetails() {
+        selectedAssetDetails = []
+        selectedCreditDetails = []
+    }
+
+    func clearError() {
+        errorMessage = nil
+    }
+    
+    // Helper methods for formatting
+    func formatCurrency(_ value: Double, currency: String = "RMB") -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = currency
+        formatter.maximumFractionDigits = 0
+        formatter.minimumFractionDigits = 0
+        
+        // Use appropriate currency symbols
+        switch currency {
+        case "RMB":
+            formatter.currencySymbol = "¥"
+        case "USD":
+            formatter.currencySymbol = "$"
+        case "EUR":
+            formatter.currencySymbol = "€"
+        case "CAD":
+            formatter.currencySymbol = "C$"
+        default:
+            formatter.currencySymbol = currency
+        }
+        
+        return formatter.string(from: NSNumber(value: abs(value))) ?? "0"
+    }
+
+    func addAsset(assetType: String, marketValue: Double, currency: String) async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            let asset = try await apiService.addAsset(assetType: assetType, marketValue: marketValue, currency: currency)
+            // Save to CoreData
+            coreDataManager.saveAssets([asset])
+            // Refresh assets list
+            await fetchAssets()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -41,17 +200,21 @@ class FinancialViewModel: ObservableObject {
         isLoading = false
     }
     
-    func clearError() {
+    func addCredit(creditType: String, marketValue: Double, currency: String) async {
+        isLoading = true
         errorMessage = nil
-    }
-    
-    // Helper methods for formatting
-    func formatCurrency(_ value: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "CAD"
-        formatter.maximumFractionDigits = 1
-        formatter.minimumFractionDigits = 1
-        return formatter.string(from: NSNumber(value: abs(value))) ?? "$0.0"
+        
+        do {
+            let credit = try await apiService.addCredit(creditType: creditType, marketValue: marketValue, currency: currency)
+            // Save to CoreData
+            coreDataManager.saveCredits([credit])
+            // Refresh credits list
+            await fetchCredits()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        
+        isLoading = false
     }
 } 
+

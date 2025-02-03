@@ -9,9 +9,22 @@ import SwiftUI
 
 @main
 struct FinancialTrackerApp: App {
+    let persistenceController = CoreDataManager.shared
+    
     var body: some Scene {
         WindowGroup {
-            DashboardView()
+            TabView {
+                BillsView()
+                    .tabItem {
+                        Label("Bills", systemImage: "dollarsign.circle")
+                    }
+                
+                AssetsView()
+                    .tabItem {
+                        Label("Assets", systemImage: "chart.pie")
+                    }
+            }
+            .environment(\.managedObjectContext, persistenceController.context)
         }
     }
 }
