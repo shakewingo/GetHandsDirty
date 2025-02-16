@@ -32,12 +32,14 @@ class Transaction(BaseModel):
     source: str
 
 class Asset(BaseModel):
+    id: int = 0  # Add id field with default value
     asset_type: str
     market_value: float
     currency: str
     created_at: str = ""  # Make it optional with default empty string\
 
 class Credit(BaseModel):
+    id: int = 0  # Add id field with default value
     credit_type: str
     market_value: float
     currency: str
@@ -64,12 +66,14 @@ class FinancialAnalyzer:
         db.commit()
 
     def add_asset(self, asset: Asset, db: Session):
+        logger.debug(f"Adding asset with createdAt: {asset.created_at}")
         db_asset = AssetModel(
             asset_type=asset.asset_type,
             market_value=asset.market_value,
             currency=asset.currency,
             created_at=datetime.strptime(asset.created_at, "%Y-%m-%d %H:%M:%S") if asset.created_at else datetime.now(timezone.utc)
         )
+        logger.debug(f"Created DB asset with createdAt: {db_asset.created_at}")
         db.add(db_asset)
         db.commit()
 
@@ -169,6 +173,7 @@ class FinancialAnalyzer:
     def get_assets(self, db: Session) -> List[Asset]:
         return [
             Asset(
+                id=asset.id, 
                 asset_type=asset.asset_type,
                 market_value=asset.market_value,
                 currency=asset.currency,
@@ -180,6 +185,7 @@ class FinancialAnalyzer:
     def get_asset_details(self, asset_type: str, currency: str, db: Session) -> List[Asset]:
         return [
             Asset(
+                id=asset.id, 
                 asset_type=asset.asset_type,
                 market_value=asset.market_value,
                 currency=asset.currency,
@@ -194,6 +200,7 @@ class FinancialAnalyzer:
     def get_credits(self, db: Session) -> List[Credit]:
         return [
             Credit(
+                id=credit.id, 
                 credit_type=credit.credit_type,
                 market_value=credit.market_value,
                 currency=credit.currency,
@@ -205,6 +212,7 @@ class FinancialAnalyzer:
     def get_credit_details(self, credit_type: str, currency: str, db: Session) -> List[Credit]:
         return [
             Credit(
+                id=credit.id,  
                 credit_type=credit.credit_type,
                 market_value=credit.market_value,
                 currency=credit.currency,
@@ -219,6 +227,11 @@ class FinancialAnalyzer:
     def get_grouped_assets(self, db: Session) -> List[Asset]:
         # Get all assets
         assets = db.query(AssetModel).all()
+        logger.debug(f"Raw assets from DB: {assets}")
+        
+        # Add detailed logging for each asset
+        for asset in assets:
+            logger.debug(f"Asset details - type: {asset.asset_type}, value: {asset.market_value}, currency: {asset.currency}, created_at: {asset.created_at}, created_at_type: {type(asset.created_at)}")
         
         # Create a dictionary to group assets
         grouped = {}
@@ -226,16 +239,18 @@ class FinancialAnalyzer:
             key = (asset.asset_type, asset.currency)
             if key not in grouped:
                 grouped[key] = {
+                    'id': asset.id,  # Include the id from the first asset of this type
                     'asset_type': asset.asset_type,
                     'currency': asset.currency,
                     'market_value': 0,
                     'created_at': asset.created_at
                 }
             grouped[key]['market_value'] += asset.market_value
-
+        
         # Convert grouped dictionary to list of Asset objects
-        return [
+        result = [
             Asset(
+                id=data['id'],
                 asset_type=data['asset_type'],
                 market_value=data['market_value'],
                 currency=data['currency'],
@@ -243,6 +258,9 @@ class FinancialAnalyzer:
             )
             for data in grouped.values()
         ]
+        
+        logger.debug(f"Final result: {result}")
+        return result
 
     def get_grouped_credits(self, db: Session) -> List[Credit]:
         # Get all credits
@@ -254,6 +272,7 @@ class FinancialAnalyzer:
             key = (credit.credit_type, credit.currency)
             if key not in grouped:
                 grouped[key] = {
+                    'id': credit.id,  # Include the id from the first credit of this type
                     'credit_type': credit.credit_type,
                     'currency': credit.currency,
                     'market_value': 0,
@@ -264,6 +283,7 @@ class FinancialAnalyzer:
         # Convert grouped dictionary to list of Credit objects
         return [
             Credit(
+                id=data['id'],
                 credit_type=data['credit_type'],
                 market_value=data['market_value'],
                 currency=data['currency'],
@@ -420,12 +440,13 @@ async def get_summary(db: Session = Depends(get_db)) -> AccountSummary:
 
 @app.post("/api/assets")
 async def add_asset(asset: Asset, db: Session = Depends(get_db)):
+    logger.debug(f"Received asset to add: {asset}")
     if not asset.created_at:
         asset.created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     if asset.market_value <= 0:
         raise HTTPException(status_code=400, detail="Asset market value must be positive")
     financial_analyzer.add_asset(asset, db)
-    return asset
+    return {"status": "success"}
 
 @app.get("/api/assets")
 async def get_assets(db: Session = Depends(get_db)) -> List[Asset]:
@@ -462,11 +483,102 @@ async def get_credit_details(
 
 @app.get("/api/grouped_assets")
 async def get_grouped_assets(db: Session = Depends(get_db)) -> List[Asset]:
-    return financial_analyzer.get_grouped_assets(db)
+    logger.debug("Entering /api/grouped_assets endpoint")
+    result = financial_analyzer.get_grouped_assets(db)
+    logger.debug(f"Endpoint result: {result}")
+    return result
 
 @app.get("/api/grouped_credits")
 async def get_grouped_credits(db: Session = Depends(get_db)) -> List[Credit]:
     return financial_analyzer.get_grouped_credits(db)
+
+@app.put("/api/assets/{asset_id}")
+async def update_asset(asset_id: int, asset: Asset, db: Session = Depends(get_db)):
+    logger.debug(f"Updating asset with id: {asset_id}")
+    logger.debug(f"Update data: {asset}")
+    
+    db_asset = db.query(AssetModel).filter(AssetModel.id == asset_id).first()
+    logger.debug(f"Found asset in DB: {db_asset}")
+    
+    if not db_asset:
+        logger.error(f"Asset not found with id: {asset_id}")
+        raise HTTPException(status_code=404, detail="Asset not found")
+    
+    db_asset.market_value = asset.market_value
+    db_asset.currency = asset.currency
+    try:
+        db.commit()
+        logger.debug(f"Successfully updated asset: {db_asset}")
+        return asset
+    except Exception as e:
+        logger.error(f"Error updating asset: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/assets/{asset_id}")
+async def delete_asset(asset_id: int, db: Session = Depends(get_db)):
+    logger.debug(f"Deleting asset with id: {asset_id}")
+    
+    db_asset = db.query(AssetModel).filter(AssetModel.id == asset_id).first()
+    logger.debug(f"Found asset in DB: {db_asset}")
+    
+    if not db_asset:
+        logger.error(f"Asset not found with id: {asset_id}")
+        raise HTTPException(status_code=404, detail="Asset not found")
+    
+    try:
+        db.delete(db_asset)
+        db.commit()
+        logger.debug(f"Successfully deleted asset with id: {asset_id}")
+        return {"message": "Asset deleted successfully"}
+    except Exception as e:
+        logger.error(f"Error deleting asset: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/credits/{credit_id}")
+async def update_credit(credit_id: int, credit: Credit, db: Session = Depends(get_db)):
+    logger.debug(f"Updating credit with id: {credit_id}")
+    logger.debug(f"Update data: {credit}")
+    
+    db_credit = db.query(CreditModel).filter(CreditModel.id == credit_id).first()
+    logger.debug(f"Found credit in DB: {db_credit}")
+    
+    if not db_credit:
+        logger.error(f"Credit not found with id: {credit_id}")
+        raise HTTPException(status_code=404, detail="Credit not found")
+    
+    db_credit.market_value = credit.market_value
+    db_credit.currency = credit.currency
+    try:
+        db.commit()
+        logger.debug(f"Successfully updated credit: {db_credit}")
+        return credit
+    except Exception as e:
+        logger.error(f"Error updating credit: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/credits/{credit_id}")
+async def delete_credit(credit_id: int, db: Session = Depends(get_db)):
+    logger.debug(f"Deleting credit with id: {credit_id}")
+    
+    db_credit = db.query(CreditModel).filter(CreditModel.id == credit_id).first()
+    logger.debug(f"Found credit in DB: {db_credit}")
+    
+    if not db_credit:
+        logger.error(f"Credit not found with id: {credit_id}")
+        raise HTTPException(status_code=404, detail="Credit not found")
+    
+    try:
+        db.delete(db_credit)
+        db.commit()
+        logger.debug(f"Successfully deleted credit with id: {credit_id}")
+        return {"message": "Credit deleted successfully"}
+    except Exception as e:
+        logger.error(f"Error deleting credit: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     run(app, host="127.0.0.1", port=8000)

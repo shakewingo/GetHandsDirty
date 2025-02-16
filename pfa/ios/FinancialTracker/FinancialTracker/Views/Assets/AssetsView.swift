@@ -75,26 +75,41 @@ struct AssetsView: View {
             .navigationTitle("Assets")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
+                    HStack {
                         Button(action: {
-                            selectedAddType = .asset
-                            isShowingAddSheet = true
+                            Task {
+                                await viewModel.fetchSummary()
+                            }
                         }) {
-                            Label("Add Asset", systemImage: "plus.circle")
+                            Image(systemName: "arrow.clockwise")
                         }
                         
-                        Button(action: {
-                            selectedAddType = .credit
-                            isShowingAddSheet = true
-                        }) {
-                            Label("Add Credit", systemImage: "plus.circle")
+                        Menu {
+                            Button(action: {
+                                selectedAddType = .asset
+                                isShowingAddSheet = true
+                            }) {
+                                Label("Add Asset", systemImage: "plus.circle")
+                            }
+                            
+                            Button(action: {
+                                selectedAddType = .credit
+                                isShowingAddSheet = true
+                            }) {
+                                Label("Add Credit", systemImage: "plus.circle")
+                            }
+                        } label: {
+                            Image(systemName: "plus")
                         }
-                    } label: {
-                        Image(systemName: "plus")
                     }
                 }
             }
-            .sheet(isPresented: $isShowingAddSheet) {
+            .sheet(isPresented: $isShowingAddSheet, onDismiss: {
+                selectedAddType = nil
+                Task {
+                    await viewModel.fetchSummary()
+                }
+            }) {
                 if selectedAddType == .asset {
                     AddAssetView(viewModel: viewModel)
                 } else if selectedAddType == .credit {
@@ -111,7 +126,10 @@ struct AssetsView: View {
             }
         }
         .onChange(of: viewModel.errorMessage) { newValue in
-            showError = newValue != nil
+            // Only show error if add sheet is not presented
+            if newValue != nil && !isShowingAddSheet {
+                showError = true
+            }
         }
         .alert("Error", isPresented: $showError) {
             Button("OK") {
@@ -185,6 +203,9 @@ struct AssetGroupRow: View {
     let group: AssetGroup
     @ObservedObject var viewModel: FinancialViewModel
     @State private var isExpanded = false
+    @State private var selectedAsset: Asset?
+    @State private var showEditAssetSheet = false
+    @State private var showDeleteAssetAlert = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -232,12 +253,35 @@ struct AssetGroupRow: View {
                             LazyVStack(alignment: .leading, spacing: 8) {
                                 ForEach(viewModel.selectedAssetDetails) { asset in
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text(viewModel.formatCurrency(asset.marketValue, currency: asset.currency))
-                                            .font(.subheadline)
-                                            .foregroundColor(.green)
-                                        Text(asset.createdAt)
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
+                                        HStack {
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(viewModel.formatCurrency(asset.marketValue, currency: asset.currency))
+                                                    .font(.subheadline)
+                                                    .foregroundColor(.green)
+                                                Text(asset.createdAt)
+                                                    .font(.caption)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                            Spacer()
+                                            HStack(spacing: 16) {
+                                                Button(action: {
+                                                    // Show edit sheet
+                                                    showEditAssetSheet = true
+                                                    selectedAsset = asset
+                                                }) {
+                                                    Image(systemName: "pencil")
+                                                        .foregroundColor(.blue)
+                                                }
+                                                Button(action: {
+                                                    // Show delete confirmation
+                                                    showDeleteAssetAlert = true
+                                                    selectedAsset = asset
+                                                }) {
+                                                    Image(systemName: "trash")
+                                                        .foregroundColor(.red)
+                                                }
+                                            }
+                                        }
                                     }
                                     .padding(.leading)
                                     if asset.id != viewModel.selectedAssetDetails.last?.id {
@@ -246,7 +290,7 @@ struct AssetGroupRow: View {
                                 }
                             }
                         }
-                        .frame(maxHeight: 200) // Limit the height of the details scroll view
+                        .frame(maxHeight: 200)
                     }
                 }
                 .transition(.opacity)
@@ -257,6 +301,27 @@ struct AssetGroupRow: View {
         .background(Color(.systemBackground))
         .cornerRadius(10)
         .shadow(radius: 2)
+        .fullScreenCover(item: $selectedAsset, onDismiss: {
+            selectedAsset = nil
+            Task {
+                await viewModel.fetchAssetDetails(assetType: group.assetType, currency: group.currency)
+            }
+        }) { asset in
+            EditAssetView(viewModel: viewModel, asset: asset)
+        }
+        .alert("Delete Asset", isPresented: $showDeleteAssetAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                if let asset = selectedAsset {
+                    Task {
+                        await viewModel.deleteAsset(id: asset.id)
+                        await viewModel.fetchAssetDetails(assetType: group.assetType, currency: group.currency)
+                    }
+                }
+            }
+        } message: {
+            Text("Are you sure you want to delete this asset?")
+        }
     }
 }
 
@@ -264,6 +329,9 @@ struct CreditGroupRow: View {
     let group: CreditGroup
     @ObservedObject var viewModel: FinancialViewModel
     @State private var isExpanded = false
+    @State private var selectedCredit: Credit?
+    @State private var showEditCreditSheet = false
+    @State private var showDeleteCreditAlert = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -311,12 +379,35 @@ struct CreditGroupRow: View {
                             LazyVStack(alignment: .leading, spacing: 8) {
                                 ForEach(viewModel.selectedCreditDetails) { credit in
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text(viewModel.formatCurrency(credit.marketValue, currency: credit.currency))
-                                            .font(.subheadline)
-                                            .foregroundColor(.red)
-                                        Text(credit.createdAt)
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
+                                        HStack {
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(viewModel.formatCurrency(credit.marketValue, currency: credit.currency))
+                                                    .font(.subheadline)
+                                                    .foregroundColor(.red)
+                                                Text(credit.createdAt)
+                                                    .font(.caption)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                            Spacer()
+                                            HStack(spacing: 16) {
+                                                Button(action: {
+                                                    // Show edit sheet
+                                                    showEditCreditSheet = true
+                                                    selectedCredit = credit
+                                                }) {
+                                                    Image(systemName: "pencil")
+                                                        .foregroundColor(.blue)
+                                                }
+                                                Button(action: {
+                                                    // Show delete confirmation
+                                                    showDeleteCreditAlert = true
+                                                    selectedCredit = credit
+                                                }) {
+                                                    Image(systemName: "trash")
+                                                        .foregroundColor(.red)
+                                                }
+                                            }
+                                        }
                                     }
                                     .padding(.leading)
                                     if credit.id != viewModel.selectedCreditDetails.last?.id {
@@ -325,7 +416,7 @@ struct CreditGroupRow: View {
                                 }
                             }
                         }
-                        .frame(maxHeight: 200) // Limit the height of the details scroll view
+                        .frame(maxHeight: 200)
                     }
                 }
                 .transition(.opacity)
@@ -336,5 +427,27 @@ struct CreditGroupRow: View {
         .background(Color(.systemBackground))
         .cornerRadius(10)
         .shadow(radius: 2)
+        .fullScreenCover(item: $selectedCredit, onDismiss: {
+            selectedCredit = nil
+            Task {
+                await viewModel.fetchCreditDetails(creditType: group.creditType, currency: group.currency)
+            }
+        }) { credit in
+            EditCreditView(viewModel: viewModel, credit: credit)
+        }
+        .alert("Delete Credit", isPresented: $showDeleteCreditAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                if let credit = selectedCredit {
+                    Task {
+                        await viewModel.deleteCredit(id: credit.id)
+                        await viewModel.fetchCreditDetails(creditType: group.creditType, currency: group.currency)
+                    }
+                }
+            }
+        } message: {
+            Text("Are you sure you want to delete this credit?")
+        }
     }
 }
+

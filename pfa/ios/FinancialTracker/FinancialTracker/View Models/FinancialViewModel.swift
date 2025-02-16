@@ -93,6 +93,7 @@ class FinancialViewModel: ObservableObject {
             // Clear any error since the call succeeded
             errorMessage = nil
         } catch {
+            print("Error fetching assets: \(error)")
             // Don't show error message for asset fetching, just fall back to CoreData
             assets = coreDataManager.fetchAssets()
         }
@@ -222,7 +223,8 @@ class FinancialViewModel: ObservableObject {
         
         isLoading = false
     }
-    
+
+
     func addCredit(creditType: String, marketValue: Double, currency: String) async {
         isLoading = true
         errorMessage = nil
@@ -238,6 +240,74 @@ class FinancialViewModel: ObservableObject {
         }
         
         isLoading = false
+    }
+    
+    func updateAsset(_ asset: Asset) async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            let updatedAsset = try await apiService.updateAsset(asset)
+            if let index = assets.firstIndex(where: { $0.id == asset.id }) {
+                assets[index] = updatedAsset
+            }
+            // Update CoreData
+            coreDataManager.updateAsset(updatedAsset)
+            
+            // Update local summary without making network calls
+            calculateLocalSummary()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        
+        isLoading = false
+    }
+    
+    func deleteAsset(id: Int) async {
+        do {
+            try await apiService.deleteAsset(id: String(id))
+            assets.removeAll { $0.id == id }
+            coreDataManager.deleteAsset(id: id)
+            
+            // Update local summary without making network calls
+            calculateLocalSummary()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+    
+    func updateCredit(_ credit: Credit) async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            let updatedCredit = try await apiService.updateCredit(credit)
+            if let index = credits.firstIndex(where: { $0.id == credit.id }) {
+                credits[index] = updatedCredit
+            }
+            // Update CoreData
+            coreDataManager.updateCredit(updatedCredit)
+            
+            // Update local summary without making network calls
+            calculateLocalSummary()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        
+        isLoading = false
+    }
+    
+    func deleteCredit(id: Int) async {
+        do {
+            try await apiService.deleteCredit(id: String(id))
+            credits.removeAll { $0.id == id }
+            coreDataManager.deleteCredit(id: id)
+            
+            // Update local summary without making network calls
+            calculateLocalSummary()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 } 
 

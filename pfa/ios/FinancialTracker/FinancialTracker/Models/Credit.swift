@@ -1,13 +1,13 @@
 import Foundation
 
 struct Credit: Identifiable, Codable {
-    var id: UUID = UUID()
+    var id: Int = 0
     let creditType: String
     let marketValue: Double
     let currency: String
     let createdAt: String
     
     private enum CodingKeys: String, CodingKey {
-        case creditType, marketValue, currency, createdAt
+        case id, creditType, marketValue, currency, createdAt
     }
 }

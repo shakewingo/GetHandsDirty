@@ -67,9 +67,13 @@ class APIService {
         let (data, response) = try await URLSession.shared.data(from: url)
         _ = try handleResponse(response)
         
+        print("Raw API response data: \(String(data: data, encoding: .utf8) ?? "none")")
+        
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode([Asset].self, from: data)
+        let assets = try decoder.decode([Asset].self, from: data)
+        print("Decoded assets: \(assets)")
+        return assets
     }
     
     func fetchGroupedCredits() async throws -> [Credit] {
@@ -207,6 +211,72 @@ class APIService {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return try decoder.decode([Credit].self, from: data)
+    }
+    
+    func updateAsset(_ asset: Asset) async throws -> Asset {
+        guard let url = URL(string: "\(baseURL)/assets/\(asset.id)") else {
+            throw APIError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        request.httpBody = try encoder.encode(asset)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        _ = try handleResponse(response)
+        
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode(Asset.self, from: data)
+    }
+    
+    func deleteAsset(id: String) async throws {
+        guard let url = URL(string: "\(baseURL)/assets/\(id)") else {
+            throw APIError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        _ = try handleResponse(response)
+    }
+    
+    func updateCredit(_ credit: Credit) async throws -> Credit {
+        guard let url = URL(string: "\(baseURL)/credits/\(credit.id)") else {
+            throw APIError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        request.httpBody = try encoder.encode(credit)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        _ = try handleResponse(response)
+        
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode(Credit.self, from: data)
+    }
+    
+    func deleteCredit(id: String) async throws {
+        guard let url = URL(string: "\(baseURL)/credits/\(id)") else {
+            throw APIError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        _ = try handleResponse(response)
     }
 }
 
