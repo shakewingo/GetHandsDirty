@@ -11,7 +11,7 @@ extension CreditEntity {
         return NSFetchRequest<CreditEntity>(entityName: "CreditEntity")
     }
     
-    @NSManaged public var id: UUID?
+    @NSManaged public var id: Int32
     @NSManaged public var creditType: String?
     @NSManaged public var marketValue: Double
     @NSManaged public var currency: String?
