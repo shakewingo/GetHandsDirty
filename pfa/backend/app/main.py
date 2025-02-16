@@ -88,6 +88,7 @@ class FinancialAnalyzer:
         db.commit()
 
     def get_summary(self, db: Session) -> AccountSummary:
+        # TODO: not working properly in UI
         # Group transactions by month
         monthly_transactions = {}
         
@@ -128,7 +129,7 @@ class FinancialAnalyzer:
         # Use Claude to calculate totals (keep existing prompts)
         prompt1 = f"""
         Sum up all assets from the assets list: {assets}
-        Consider converting all assets to RMB based on the realtime exchange rate.
+        Based on each of its currency e.g USD/EUR/RMB/CAD etc, converting all assets to RMB based on the realtime exchange rate.
         Return ONLY the final numeric value, without any text or explanation.
         For example: 1234.56
         If the list is empty, return 0.
@@ -145,7 +146,7 @@ class FinancialAnalyzer:
 
         prompt2 = f"""
         Sum up all credits from the credit list: {credits}
-        Consider converting all credit to RMB based on the realtime exchange rate.
+        Based on each of its currency e.g USD/EUR/RMB/CAD etc, converting all credit to RMB based on the realtime exchange rate.
         Return ONLY the final numeric value, without any text or explanation.
         For example: -1234.56
         If the list is empty, return 0.

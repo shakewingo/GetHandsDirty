@@ -6,32 +6,12 @@ struct BillsView: View {
     
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Monthly Summary Chart
-                    if let summary = viewModel.summary,
-                       !summary.monthlySummary.isEmpty {
-                        MonthlySummaryChart(data: summary.monthlySummary)
-                            .frame(height: 300)
-                            .padding()
-                    }
-                    
-                    // Recent Transactions
-                    if !viewModel.transactions.isEmpty {
-                        VStack(alignment: .leading) {
-                            Text("Recent Transactions")
-                                .font(.headline)
-                                .padding(.horizontal)
-                            
-                            ForEach(viewModel.transactions) { transaction in
-                                TransactionRow(transaction: transaction)
-                                    .padding(.horizontal)
-                            }
-                        }
-                    }
-                }
-                .padding()
+            VStack {
+                Text("To Be Continued")
+                    .font(.title)
+                    .foregroundColor(.gray)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .navigationTitle("Bills")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -45,12 +25,6 @@ struct BillsView: View {
             .sheet(isPresented: $isShowingUploadSheet) {
                 StatementUploadView(viewModel: viewModel)
             }
-            .refreshable {
-                await viewModel.fetchSummary()
-            }
-        }
-        .task {
-            await viewModel.fetchSummary()
         }
         .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
             Button("OK") {
