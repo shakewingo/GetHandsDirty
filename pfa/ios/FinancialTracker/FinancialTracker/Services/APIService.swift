@@ -178,6 +178,36 @@ class APIService {
         let uploadResponse = try decoder.decode(UploadResponse.self, from: responseData)
         return uploadResponse.transactions
     }
+    
+    func fetchAssetDetails(assetType: String, currency: String) async throws -> [Asset] {
+        guard let encodedType = assetType.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let encodedCurrency = currency.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "\(baseURL)/asset_details?asset_type=\(encodedType)&currency=\(encodedCurrency)") else {
+            throw APIError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        _ = try handleResponse(response)
+        
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode([Asset].self, from: data)
+    }
+    
+    func fetchCreditDetails(creditType: String, currency: String) async throws -> [Credit] {
+        guard let encodedType = creditType.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let encodedCurrency = currency.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "\(baseURL)/credit_details?credit_type=\(encodedType)&currency=\(encodedCurrency)") else {
+            throw APIError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        _ = try handleResponse(response)
+        
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode([Credit].self, from: data)
+    }
 }
 
 struct UploadResponse: Codable {

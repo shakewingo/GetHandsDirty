@@ -114,33 +114,33 @@ class FinancialViewModel: ObservableObject {
         }
     }
     
-//    func fetchAssetDetails(assetType: String, currency: String) async {
-//        isLoading = true
-//        errorMessage = nil
-//        
-//        do {
-//            selectedAssetDetails = try await apiService.fetchAssetDetails(assetType: assetType, currency: currency)
-//        } catch {
-//            errorMessage = error.localizedDescription
-//            selectedAssetDetails = []
-//        }
-//        
-//        isLoading = false
-//    }
-//    
-//    func fetchCreditDetails(creditType: String, currency: String) async {
-//        isLoading = true
-//        errorMessage = nil
-//        
-//        do {
-//            selectedCreditDetails = try await apiService.fetchCreditDetails(creditType: creditType, currency: currency)
-//        } catch {
-//            errorMessage = error.localizedDescription
-//            selectedCreditDetails = []
-//        }
-//        
-//        isLoading = false
-//    }
+    func fetchAssetDetails(assetType: String, currency: String) async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            selectedAssetDetails = try await apiService.fetchAssetDetails(assetType: assetType, currency: currency)
+        } catch {
+            errorMessage = error.localizedDescription
+            selectedAssetDetails = []
+        }
+        
+        isLoading = false
+    }
+    
+    func fetchCreditDetails(creditType: String, currency: String) async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            selectedCreditDetails = try await apiService.fetchCreditDetails(creditType: creditType, currency: currency)
+        } catch {
+            errorMessage = error.localizedDescription
+            selectedCreditDetails = []
+        }
+        
+        isLoading = false
+    }
 
     private func calculateLocalSummary() {
         let totalAssets = assets.reduce(0) { $0 + $1.marketValue }
