@@ -188,7 +188,16 @@ struct AssetGroupRow: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Button(action: { isExpanded.toggle() }) {
+            Button(action: {
+                isExpanded.toggle()
+                if isExpanded {
+                    Task {
+                        await viewModel.fetchAssetDetails(assetType: group.assetType, currency: group.currency)
+                    }
+                } else {
+                    viewModel.clearSelectedDetails()
+                }
+            }) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(group.assetType)
@@ -215,19 +224,29 @@ struct AssetGroupRow: View {
             if isExpanded {
                 VStack(alignment: .leading, spacing: 8) {
                     Divider()
-                    ForEach(group.assets) { asset in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(viewModel.formatCurrency(asset.marketValue, currency: asset.currency))
-                                .font(.subheadline)
-                                .foregroundColor(.green)
-                            Text(asset.createdAt)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                    if viewModel.isLoading {
+                        ProgressView()
+                            .padding()
+                    } else {
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 8) {
+                                ForEach(viewModel.selectedAssetDetails) { asset in
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(viewModel.formatCurrency(asset.marketValue, currency: asset.currency))
+                                            .font(.subheadline)
+                                            .foregroundColor(.green)
+                                        Text(asset.createdAt)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .padding(.leading)
+                                    if asset.id != viewModel.selectedAssetDetails.last?.id {
+                                        Divider()
+                                    }
+                                }
+                            }
                         }
-                        .padding(.leading)
-                        if asset.id != group.assets.last?.id {
-                            Divider()
-                        }
+                        .frame(maxHeight: 200) // Limit the height of the details scroll view
                     }
                 }
                 .transition(.opacity)
@@ -248,7 +267,16 @@ struct CreditGroupRow: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Button(action: { isExpanded.toggle() }) {
+            Button(action: {
+                isExpanded.toggle()
+                if isExpanded {
+                    Task {
+                        await viewModel.fetchCreditDetails(creditType: group.creditType, currency: group.currency)
+                    }
+                } else {
+                    viewModel.clearSelectedDetails()
+                }
+            }) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(group.creditType)
@@ -275,19 +303,29 @@ struct CreditGroupRow: View {
             if isExpanded {
                 VStack(alignment: .leading, spacing: 8) {
                     Divider()
-                    ForEach(group.credits) { credit in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(viewModel.formatCurrency(credit.marketValue, currency: credit.currency))
-                                .font(.subheadline)
-                                .foregroundColor(.red)
-                            Text(credit.createdAt)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                    if viewModel.isLoading {
+                        ProgressView()
+                            .padding()
+                    } else {
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 8) {
+                                ForEach(viewModel.selectedCreditDetails) { credit in
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(viewModel.formatCurrency(credit.marketValue, currency: credit.currency))
+                                            .font(.subheadline)
+                                            .foregroundColor(.red)
+                                        Text(credit.createdAt)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .padding(.leading)
+                                    if credit.id != viewModel.selectedCreditDetails.last?.id {
+                                        Divider()
+                                    }
+                                }
+                            }
                         }
-                        .padding(.leading)
-                        if credit.id != group.credits.last?.id {
-                            Divider()
-                        }
+                        .frame(maxHeight: 200) // Limit the height of the details scroll view
                     }
                 }
                 .transition(.opacity)

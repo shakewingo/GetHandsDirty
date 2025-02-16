@@ -177,19 +177,19 @@ class FinancialAnalyzer:
             for asset in db.query(AssetModel).all()
         ]
 
-    # def get_asset_details(self, asset_type: str, currency: str, db: Session) -> List[Asset]:
-    #     return [
-    #         Asset(
-    #             asset_type=asset.asset_type,
-    #             market_value=asset.market_value,
-    #             currency=asset.currency,
-    #             created_at=asset.created_at.strftime("%Y-%m-%d %H:%M:%S")
-    #         )
-    #         for asset in db.query(AssetModel).filter(
-    #             AssetModel.asset_type == asset_type,
-    #             AssetModel.currency == currency
-    #         ).all()
-    #     ]
+    def get_asset_details(self, asset_type: str, currency: str, db: Session) -> List[Asset]:
+        return [
+            Asset(
+                asset_type=asset.asset_type,
+                market_value=asset.market_value,
+                currency=asset.currency,
+                created_at=asset.created_at.strftime("%Y-%m-%d %H:%M:%S")
+            )
+            for asset in db.query(AssetModel).filter(
+                AssetModel.asset_type == asset_type,
+                AssetModel.currency == currency
+            ).all()
+        ]
 
     def get_credits(self, db: Session) -> List[Credit]:
         return [
@@ -202,19 +202,19 @@ class FinancialAnalyzer:
             for credit in db.query(CreditModel).all()
         ]
 
-    # def get_credit_details(self, credit_type: str, currency: str, db: Session) -> List[Credit]:
-    #     return [
-    #         Credit(
-    #             credit_type=credit.credit_type,
-    #             market_value=credit.market_value,
-    #             currency=credit.currency,
-    #             created_at=credit.created_at.strftime("%Y-%m-%d %H:%M:%S")
-    #         )
-    #         for credit in db.query(CreditModel).filter(
-    #             CreditModel.credit_type == credit_type,
-    #             CreditModel.currency == currency
-    #         ).all()
-    #     ]
+    def get_credit_details(self, credit_type: str, currency: str, db: Session) -> List[Credit]:
+        return [
+            Credit(
+                credit_type=credit.credit_type,
+                market_value=credit.market_value,
+                currency=credit.currency,
+                created_at=credit.created_at.strftime("%Y-%m-%d %H:%M:%S")
+            )
+            for credit in db.query(CreditModel).filter(
+                CreditModel.credit_type == credit_type,
+                CreditModel.currency == currency
+            ).all()
+        ]
 
     def get_grouped_assets(self, db: Session) -> List[Asset]:
         # Get all assets
@@ -229,7 +229,7 @@ class FinancialAnalyzer:
                     'asset_type': asset.asset_type,
                     'currency': asset.currency,
                     'market_value': 0,
-                    'created_at': datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                    'created_at': asset.created_at
                 }
             grouped[key]['market_value'] += asset.market_value
 
@@ -239,7 +239,7 @@ class FinancialAnalyzer:
                 asset_type=data['asset_type'],
                 market_value=data['market_value'],
                 currency=data['currency'],
-                created_at=data['created_at']
+                created_at=data['created_at'].strftime("%Y-%m-%d %H:%M:%S")
             )
             for data in grouped.values()
         ]
@@ -257,7 +257,7 @@ class FinancialAnalyzer:
                     'credit_type': credit.credit_type,
                     'currency': credit.currency,
                     'market_value': 0,
-                    'created_at': datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                    'created_at': credit.created_at
                 }
             grouped[key]['market_value'] += credit.market_value
 
@@ -267,7 +267,7 @@ class FinancialAnalyzer:
                 credit_type=data['credit_type'],
                 market_value=data['market_value'],
                 currency=data['currency'],
-                created_at=data['created_at']
+                created_at=data['created_at'].strftime("%Y-%m-%d %H:%M:%S")
             )
             for data in grouped.values()
         ]
@@ -427,9 +427,9 @@ async def add_asset(asset: Asset, db: Session = Depends(get_db)):
     financial_analyzer.add_asset(asset, db)
     return asset
 
-# @app.get("/api/assets")
-# async def get_assets(db: Session = Depends(get_db)) -> List[Asset]:
-#     return financial_analyzer.get_assets(db)
+@app.get("/api/assets")
+async def get_assets(db: Session = Depends(get_db)) -> List[Asset]:
+    return financial_analyzer.get_assets(db)
 
 @app.post("/api/credits")
 async def add_credit(credit: Credit, db: Session = Depends(get_db)):
@@ -440,25 +440,25 @@ async def add_credit(credit: Credit, db: Session = Depends(get_db)):
     financial_analyzer.add_credit(credit, db)
     return credit
 
-# @app.get("/api/credits")
-# async def get_credits(db: Session = Depends(get_db)) -> List[Credit]:
-#     return financial_analyzer.get_credits(db)
+@app.get("/api/credits")
+async def get_credits(db: Session = Depends(get_db)) -> List[Credit]:
+    return financial_analyzer.get_credits(db)
 
-# @app.get("/api/assets_details")
-# async def get_asset_details(
-#     asset_type: str,
-#     currency: str,
-#     db: Session = Depends(get_db)
-# ) -> List[Asset]:
-#     return financial_analyzer.get_asset_details(asset_type, currency, db)
+@app.get("/api/asset_details")
+async def get_asset_details(
+    asset_type: str,
+    currency: str,
+    db: Session = Depends(get_db)
+) -> List[Asset]:
+    return financial_analyzer.get_asset_details(asset_type, currency, db)
 
-# @app.get("/api/credit_details")
-# async def get_credit_details(
-#     credit_type: str,
-#     currency: str,
-#     db: Session = Depends(get_db)
-# ) -> List[Credit]:
-#     return financial_analyzer.get_credit_details(credit_type, currency, db)
+@app.get("/api/credit_details")
+async def get_credit_details(
+    credit_type: str,
+    currency: str,
+    db: Session = Depends(get_db)
+) -> List[Credit]:
+    return financial_analyzer.get_credit_details(credit_type, currency, db)
 
 @app.get("/api/grouped_assets")
 async def get_grouped_assets(db: Session = Depends(get_db)) -> List[Asset]:
