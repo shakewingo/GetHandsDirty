@@ -36,6 +36,8 @@ struct EditCreditView: View {
                         Text("USD").tag("USD")
                         Text("EUR").tag("EUR")
                         Text("RMB").tag("RMB")
+                        Text("CAD").tag("CAD")
+
                     }
                 }
             }

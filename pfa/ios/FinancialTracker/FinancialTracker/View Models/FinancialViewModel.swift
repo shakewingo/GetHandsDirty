@@ -9,8 +9,8 @@ class FinancialViewModel: ObservableObject {
     @Published var summary: AccountSummary?
     @Published var assets: [Asset] = []
     @Published var credits: [Credit] = []
-    @Published var selectedAssetDetails: [Asset] = []
-    @Published var selectedCreditDetails: [Credit] = []
+    @Published private var assetDetailsMap: [String: [Asset]] = [:]
+    @Published private var creditDetailsMap: [String: [Credit]] = [:]
     
     private let apiService = APIService.shared
     private let coreDataManager = CoreDataManager.shared
@@ -115,15 +115,24 @@ class FinancialViewModel: ObservableObject {
         }
     }
     
+    func getAssetDetails(assetType: String, currency: String) -> [Asset] {
+        return assetDetailsMap["\(assetType)|\(currency)"] ?? []
+    }
+    
+    func getCreditDetails(creditType: String, currency: String) -> [Credit] {
+        return creditDetailsMap["\(creditType)|\(currency)"] ?? []
+    }
+    
     func fetchAssetDetails(assetType: String, currency: String) async {
         isLoading = true
         errorMessage = nil
         
         do {
-            selectedAssetDetails = try await apiService.fetchAssetDetails(assetType: assetType, currency: currency)
+            let details = try await apiService.fetchAssetDetails(assetType: assetType, currency: currency)
+            assetDetailsMap["\(assetType)|\(currency)"] = details
         } catch {
             errorMessage = error.localizedDescription
-            selectedAssetDetails = []
+            assetDetailsMap["\(assetType)|\(currency)"] = []
         }
         
         isLoading = false
@@ -134,10 +143,11 @@ class FinancialViewModel: ObservableObject {
         errorMessage = nil
         
         do {
-            selectedCreditDetails = try await apiService.fetchCreditDetails(creditType: creditType, currency: currency)
+            let details = try await apiService.fetchCreditDetails(creditType: creditType, currency: currency)
+            creditDetailsMap["\(creditType)|\(currency)"] = details
         } catch {
             errorMessage = error.localizedDescription
-            selectedCreditDetails = []
+            creditDetailsMap["\(creditType)|\(currency)"] = []
         }
         
         isLoading = false
@@ -174,8 +184,8 @@ class FinancialViewModel: ObservableObject {
     }
 
     func clearSelectedDetails() {
-        selectedAssetDetails = []
-        selectedCreditDetails = []
+        assetDetailsMap.removeAll()
+        creditDetailsMap.removeAll()
     }
 
     func clearError() {

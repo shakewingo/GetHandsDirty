@@ -5,6 +5,7 @@ struct AssetsView: View {
     @State private var isShowingAddSheet = false
     @State private var selectedAddType: AddType? = nil
     @State private var showError = false
+    @State private var canPresentSheet = true
     
     enum AddType {
         case asset
@@ -86,28 +87,36 @@ struct AssetsView: View {
                         
                         Menu {
                             Button(action: {
-                                selectedAddType = .asset
-                                isShowingAddSheet = true
+                                if canPresentSheet {
+                                    selectedAddType = .asset
+                                    isShowingAddSheet = true
+                                }
                             }) {
                                 Label("Add Asset", systemImage: "plus.circle")
                             }
                             
                             Button(action: {
-                                selectedAddType = .credit
-                                isShowingAddSheet = true
+                                if canPresentSheet {
+                                    selectedAddType = .credit
+                                    isShowingAddSheet = true
+                                }
                             }) {
                                 Label("Add Credit", systemImage: "plus.circle")
                             }
                         } label: {
                             Image(systemName: "plus")
                         }
+                        .disabled(!canPresentSheet)
                     }
                 }
             }
             .sheet(isPresented: $isShowingAddSheet, onDismiss: {
+                canPresentSheet = false
                 selectedAddType = nil
                 Task {
                     await viewModel.fetchSummary()
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    canPresentSheet = true
                 }
             }) {
                 if selectedAddType == .asset {
@@ -125,8 +134,7 @@ struct AssetsView: View {
                 await viewModel.fetchSummary()
             }
         }
-        .onChange(of: viewModel.errorMessage) { newValue in
-            // Only show error if add sheet is not presented
+        .onChange(of: viewModel.errorMessage) { oldValue, newValue in
             if newValue != nil && !isShowingAddSheet {
                 showError = true
             }
@@ -142,11 +150,10 @@ struct AssetsView: View {
         }
     }
     
-    // Helper function to group assets by type and currency
     private func groupAssets(_ assets: [Asset]) -> [AssetGroup] {
         Dictionary(grouping: assets) { asset in
             "\(asset.assetType)|\(asset.currency)"
-    }
+        }
         .map { key, assets in
             let components = key.split(separator: "|")
             let totalValue = assets.reduce(0) { $0 + $1.marketValue }
@@ -161,7 +168,6 @@ struct AssetsView: View {
         .sorted { $0.totalValue > $1.totalValue }
     }
     
-    // Helper function to group credits by type and currency
     private func groupCredits(_ credits: [Credit]) -> [CreditGroup] {
         Dictionary(grouping: credits) { credit in
             "\(credit.creditType)|\(credit.currency)"
@@ -181,7 +187,6 @@ struct AssetsView: View {
     }
 }
 
-// Model for grouped assets
 struct AssetGroup: Identifiable {
     let id: String
     let assetType: String
@@ -190,7 +195,6 @@ struct AssetGroup: Identifiable {
     let assets: [Asset]
 }
 
-// Model for grouped credits
 struct CreditGroup: Identifiable {
     let id: String
     let creditType: String
@@ -206,6 +210,7 @@ struct AssetGroupRow: View {
     @State private var selectedAsset: Asset?
     @State private var showEditAssetSheet = false
     @State private var showDeleteAssetAlert = false
+    @State private var canPresentSheet = true
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -251,7 +256,7 @@ struct AssetGroupRow: View {
                     } else {
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 8) {
-                                ForEach(viewModel.selectedAssetDetails) { asset in
+                                ForEach(viewModel.getAssetDetails(assetType: group.assetType, currency: group.currency)) { asset in
                                     VStack(alignment: .leading, spacing: 4) {
                                         HStack {
                                             VStack(alignment: .leading, spacing: 4) {
@@ -265,15 +270,16 @@ struct AssetGroupRow: View {
                                             Spacer()
                                             HStack(spacing: 16) {
                                                 Button(action: {
-                                                    // Show edit sheet
-                                                    showEditAssetSheet = true
-                                                    selectedAsset = asset
+                                                    if canPresentSheet {
+                                                        showEditAssetSheet = true
+                                                        selectedAsset = asset
+                                                    }
                                                 }) {
                                                     Image(systemName: "pencil")
                                                         .foregroundColor(.blue)
                                                 }
+                                                .disabled(!canPresentSheet)
                                                 Button(action: {
-                                                    // Show delete confirmation
                                                     showDeleteAssetAlert = true
                                                     selectedAsset = asset
                                                 }) {
@@ -284,7 +290,7 @@ struct AssetGroupRow: View {
                                         }
                                     }
                                     .padding(.leading)
-                                    if asset.id != viewModel.selectedAssetDetails.last?.id {
+                                    if asset.id != viewModel.getAssetDetails(assetType: group.assetType, currency: group.currency).last?.id {
                                         Divider()
                                     }
                                 }
@@ -301,13 +307,17 @@ struct AssetGroupRow: View {
         .background(Color(.systemBackground))
         .cornerRadius(10)
         .shadow(radius: 2)
-        .fullScreenCover(item: $selectedAsset, onDismiss: {
+        .sheet(isPresented: $showEditAssetSheet, onDismiss: {
+            canPresentSheet = false
             selectedAsset = nil
             Task {
-                await viewModel.fetchAssetDetails(assetType: group.assetType, currency: group.currency)
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                canPresentSheet = true
             }
-        }) { asset in
-            EditAssetView(viewModel: viewModel, asset: asset)
+        }) {
+            if let asset = selectedAsset {
+                EditAssetView(viewModel: viewModel, asset: asset)
+            }
         }
         .alert("Delete Asset", isPresented: $showDeleteAssetAlert) {
             Button("Cancel", role: .cancel) { }
@@ -377,7 +387,7 @@ struct CreditGroupRow: View {
                     } else {
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 8) {
-                                ForEach(viewModel.selectedCreditDetails) { credit in
+                                ForEach(viewModel.getCreditDetails(creditType: group.creditType, currency: group.currency)) { credit in
                                     VStack(alignment: .leading, spacing: 4) {
                                         HStack {
                                             VStack(alignment: .leading, spacing: 4) {
@@ -391,7 +401,6 @@ struct CreditGroupRow: View {
                                             Spacer()
                                             HStack(spacing: 16) {
                                                 Button(action: {
-                                                    // Show edit sheet
                                                     showEditCreditSheet = true
                                                     selectedCredit = credit
                                                 }) {
@@ -399,7 +408,6 @@ struct CreditGroupRow: View {
                                                         .foregroundColor(.blue)
                                                 }
                                                 Button(action: {
-                                                    // Show delete confirmation
                                                     showDeleteCreditAlert = true
                                                     selectedCredit = credit
                                                 }) {
@@ -410,7 +418,7 @@ struct CreditGroupRow: View {
                                         }
                                     }
                                     .padding(.leading)
-                                    if credit.id != viewModel.selectedCreditDetails.last?.id {
+                                    if credit.id != viewModel.getCreditDetails(creditType: group.creditType, currency: group.currency).last?.id {
                                         Divider()
                                     }
                                 }
