@@ -1,100 +1,120 @@
 import SwiftUI
 
 struct EditAssetView: View {
+    @ObservedObject var viewModel: FinancialViewModel
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var viewModel: FinancialViewModel
+    
     let asset: Asset
     
+    @State private var assetType: String
     @State private var marketValue: String
-    @State private var selectedCurrency: String
-    @State private var showingAlert = false
+    @State private var marketShare: String
+    @State private var currency: String
+    @State private var showAlert = false
     @State private var alertMessage = ""
-    @State private var isLoading = false
+    
+    private let currencies = ["RMB", "USD", "EUR", "CAD"]
     
     init(viewModel: FinancialViewModel, asset: Asset) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+        self.viewModel = viewModel
         self.asset = asset
-        _marketValue = State(initialValue: String(asset.marketValue))
-        _selectedCurrency = State(initialValue: asset.currency)
+        _assetType = State(initialValue: asset.assetType)
+        _marketValue = State(initialValue: asset.marketValue.map { String($0) } ?? "")
+        _marketShare = State(initialValue: asset.marketShare.map { String($0) } ?? "")
+        _currency = State(initialValue: asset.currency)
     }
     
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("Asset Details")) {
-                    HStack {
-                        Text("Type")
-                        Spacer()
-                        Text(asset.assetType)
-                            .foregroundColor(.gray)
+                Section(header: Text("Details")) {
+                    TextField("Asset Type (e.g. Gold, AAPL)", text: $assetType)
+                    
+                    Section(header: Text("Fill Either Value or Shares")) {
+                        TextField("Market Value", text: $marketValue)
+                            .keyboardType(.decimalPad)
+                        
+                        TextField("Market Share (# of shares)", text: $marketShare)
+                            .keyboardType(.decimalPad)
                     }
                     
-                    TextField("Market Value", text: $marketValue)
-                        .keyboardType(.decimalPad)
-                    
-                    Picker("Currency", selection: $selectedCurrency) {
-                        Text("USD").tag("USD")
-                        Text("EUR").tag("EUR")
-                        Text("RMB").tag("RMB")
-                        Text("CAD").tag("CAD")
-                    }
-                }
-            }
-            .navigationTitle("Edit Asset")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
+                    Picker("Currency", selection: $currency) {
+                        ForEach(currencies, id: \.self) { currency in
+                            Text(currency).tag(currency)
+                        }
                     }
                 }
                 
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        saveAsset()
-                    }
-                    .disabled(isLoading)
+                if !marketValue.isEmpty && !marketShare.isEmpty {
+                    Text("Please fill only one: Market Value or Market Share")
+                        .foregroundColor(.red)
                 }
             }
-            .alert("Error", isPresented: $showingAlert) {
+            .navigationTitle("Edit Asset")
+            .navigationBarItems(
+                leading: Button("Cancel") {
+                    dismiss()
+                },
+                trailing: Button("Save") {
+                    saveAsset()
+                }
+                .disabled(assetType.isEmpty || 
+                         (marketValue.isEmpty && marketShare.isEmpty) ||
+                         (!marketValue.isEmpty && !marketShare.isEmpty))
+            )
+            .alert("Error", isPresented: $showAlert) {
                 Button("OK", role: .cancel) { }
             } message: {
                 Text(alertMessage)
             }
         }
-        .interactiveDismissDisabled()
     }
     
     private func saveAsset() {
-        guard let value = Double(marketValue) else {
-            alertMessage = "Please enter a valid market value"
-            showingAlert = true
+        guard !assetType.isEmpty else {
+            alertMessage = "Please enter an asset type"
+            showAlert = true
             return
         }
         
-        isLoading = true
+        // Check that exactly one of marketValue or marketShare is filled
+        if marketValue.isEmpty && marketShare.isEmpty {
+            alertMessage = "Please enter either market value or market share"
+            showAlert = true
+            return
+        }
+        
+        if !marketValue.isEmpty && !marketShare.isEmpty {
+            alertMessage = "Please enter only one: market value or market share"
+            showAlert = true
+            return
+        }
         
         Task {
             let updatedAsset = Asset(
                 id: asset.id,
-                assetType: asset.assetType,
-                marketValue: value,
-                currency: selectedCurrency,
+                assetType: assetType,
+                marketValue: marketValue.isEmpty ? nil : Double(marketValue),
+                marketShare: marketShare.isEmpty ? nil : Double(marketShare),
+                currency: currency,
                 createdAt: asset.createdAt
             )
-            
             await viewModel.updateAsset(updatedAsset)
-            
-            // Only dismiss if there was no error
-            if viewModel.errorMessage == nil {
-                dismiss()
-            } else {
-                alertMessage = viewModel.errorMessage ?? "Unknown error occurred"
-                showingAlert = true
-                viewModel.clearError() // Clear the error so it doesn't trigger the parent view's alert
-            }
-            
-            isLoading = false
+            dismiss()
         }
     }
+}
+
+#Preview {
+    EditAssetView(
+        viewModel: FinancialViewModel(),
+        asset: Asset(
+            id: 1,
+            assetType: "AAPL",
+            marketValue: 150.0,
+            marketShare: nil,
+            currency: "USD",
+            createdAt: ""
+        )
+    )
 } 

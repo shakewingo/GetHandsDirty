@@ -6,6 +6,7 @@ struct AddAssetView: View {
     
     @State private var assetType: String = ""
     @State private var marketValue: String = ""
+    @State private var marketShare: String = ""
     @State private var currency: String = "RMB"
     @State private var showAlert = false
     @State private var alertMessage = ""
@@ -16,16 +17,26 @@ struct AddAssetView: View {
         NavigationView {
             Form {
                 Section(header: Text("Details")) {
-                    TextField("Asset Type", text: $assetType)
+                    TextField("Asset Type (e.g. AAPL)", text: $assetType)
                     
-                    TextField("Market Value", text: $marketValue)
-                        .keyboardType(.decimalPad)
+                    Section(header: Text("Fill Either Value or Shares")) {
+                        TextField("Market Value", text: $marketValue)
+                            .keyboardType(.decimalPad)
+                        
+                        TextField("Market Share (# of shares)", text: $marketShare)
+                            .keyboardType(.decimalPad)
+                    }
                     
                     Picker("Currency", selection: $currency) {
                         ForEach(currencies, id: \.self) { currency in
                             Text(currency).tag(currency)
                         }
                     }
+                }
+                
+                if !marketValue.isEmpty && !marketShare.isEmpty {
+                    Text("Please fill only one: Market Value or Market Share")
+                        .foregroundColor(.red)
                 }
             }
             .navigationTitle("Add Asset")
@@ -36,6 +47,9 @@ struct AddAssetView: View {
                 trailing: Button("Save") {
                     saveAsset()
                 }
+                .disabled(assetType.isEmpty || 
+                         (marketValue.isEmpty && marketShare.isEmpty) ||
+                         (!marketValue.isEmpty && !marketShare.isEmpty))
             )
             .alert("Error", isPresented: $showAlert) {
                 Button("OK", role: .cancel) { }
@@ -52,22 +66,41 @@ struct AddAssetView: View {
             return
         }
         
-        guard let value = Double(marketValue) else {
-            alertMessage = "Please enter a valid market value"
+        // Check that exactly one of marketValue or marketShare is filled
+        if marketValue.isEmpty && marketShare.isEmpty {
+            alertMessage = "Please enter either market value or market share"
             showAlert = true
             return
         }
         
-        // Check if the value is negative and show warning
-        guard value > 0 else {
-            alertMessage = "Asset values should be positive. Please enter a positive amount."
+        if !marketValue.isEmpty && !marketShare.isEmpty {
+            alertMessage = "Please enter only one: market value or market share"
             showAlert = true
             return
         }
         
         Task {
-            await viewModel.addAsset(assetType: assetType, marketValue: value, currency: currency)
-            dismiss()
+            if !marketValue.isEmpty {
+                if let value = Double(marketValue) {
+                    await viewModel.addAsset(
+                        assetType: assetType,
+                        marketValue: value,
+                        marketShare: nil,
+                        currency: currency
+                    )
+                    dismiss()
+                }
+            } else if !marketShare.isEmpty {
+                if let shares = Double(marketShare) {
+                    await viewModel.addAsset(
+                        assetType: assetType,
+                        marketValue: nil,
+                        marketShare: shares,
+                        currency: currency
+                    )
+                    dismiss()
+                }
+            }
         }
     }
 }

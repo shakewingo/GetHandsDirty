@@ -78,7 +78,8 @@ class CoreDataManager {
                 let entity = AssetEntity(context: context)
                 entity.id = Int32(asset.id)
                 entity.assetType = asset.assetType
-                entity.marketValue = asset.marketValue
+                entity.marketValueDouble = asset.marketValue
+                entity.marketShareDouble = asset.marketShare
                 entity.currency = asset.currency
                 entity.createdAt = asset.createdAt
             }
@@ -97,7 +98,8 @@ class CoreDataManager {
             return result.map { entity in
                 Asset(id: Int(entity.id),
                      assetType: entity.assetType ?? "",
-                     marketValue: entity.marketValue,
+                     marketValue: entity.marketValueDouble,
+                     marketShare: entity.marketShareDouble,
                      currency: entity.currency ?? "USD",
                      createdAt: entity.createdAt ?? "")
             }
@@ -115,7 +117,8 @@ class CoreDataManager {
             let results = try context.fetch(fetchRequest)
             if let entity = results.first {
                 entity.assetType = asset.assetType
-                entity.marketValue = asset.marketValue
+                entity.marketValueDouble = asset.marketValue
+                entity.marketShareDouble = asset.marketShare
                 entity.currency = asset.currency
                 entity.createdAt = asset.createdAt
                 saveContext()

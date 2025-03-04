@@ -21,7 +21,8 @@ class AssetModel(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     asset_type = Column(String)
-    market_value = Column(Float)
+    market_value = Column(Float, nullable=True)
+    market_share = Column(Float, nullable=True)
     currency = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -30,6 +31,6 @@ class CreditModel(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     credit_type = Column(String)
-    market_value = Column(Float)
+    market_value = Column(Float, nullable=True)
     currency = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow) 
