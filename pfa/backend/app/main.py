@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from typing import List, Dict
 import asyncio
@@ -6,6 +7,7 @@ from io import BytesIO
 from datetime import datetime, timezone
 
 import PyPDF2
+import yfinance as yf
 import pandas as pd
 from anthropic import Anthropic
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
@@ -32,18 +34,19 @@ class Transaction(BaseModel):
     source: str
 
 class Asset(BaseModel):
-    id: int = 0  # Add id field with default value
+    id: int = 0
     asset_type: str
-    market_value: float
+    market_value: float | None = None
+    market_share: float | None = None
     currency: str
-    created_at: str = ""  # Make it optional with default empty string\
+    created_at: str = ""
 
 class Credit(BaseModel):
-    id: int = 0  # Add id field with default value
+    id: int = 0
     credit_type: str
-    market_value: float
+    market_value: float  # Required field
     currency: str
-    created_at: str = ""  # Make it optional with default empty string
+    created_at: str = ""
 
 class AccountSummary(BaseModel):
     total_assets: float
@@ -66,16 +69,38 @@ class FinancialAnalyzer:
         db.commit()
 
     def add_asset(self, asset: Asset, db: Session):
-        logger.debug(f"Adding asset with createdAt: {asset.created_at}")
+        if asset.market_value is None and asset.market_share is None:
+            raise HTTPException(
+                status_code=400, 
+                detail="Either market_value or market_share must be provided"
+            )
+            
+        # Calculate market value if only share is provided
+        if asset.market_share is not None:
+            market_value = self.calculate_market_value(
+                asset.asset_type, 
+                asset.market_share
+            )
+            if market_value is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Could not calculate market value for {asset.asset_type}. Please verify the ticker symbol."
+                )
+            asset.market_value = market_value
+            logger.info(f"Calculated market value: {market_value} for {asset.asset_type}")
+
         db_asset = AssetModel(
             asset_type=asset.asset_type,
             market_value=asset.market_value,
+            market_share=asset.market_share,
             currency=asset.currency,
-            created_at=datetime.strptime(asset.created_at, "%Y-%m-%d %H:%M:%S") if asset.created_at else datetime.now(timezone.utc)
+            created_at=datetime.strptime(asset.created_at, "%Y-%m-%d %H:%M:%S") 
+                if asset.created_at else datetime.now(timezone.utc)
         )
-        logger.debug(f"Created DB asset with createdAt: {db_asset.created_at}")
         db.add(db_asset)
         db.commit()
+        db.refresh(db_asset)  # Refresh to get the updated data
+        logger.info(f"Added asset to DB: {db_asset.__dict__}")
 
     def add_credit(self, credit: Credit, db: Session):
         db_credit = CreditModel(
@@ -86,9 +111,9 @@ class FinancialAnalyzer:
         )
         db.add(db_credit)
         db.commit()
-
+        
+    # avoid calling everytime when refresh/edit/add asset/credit, too slow
     def get_summary(self, db: Session) -> AccountSummary:
-        # TODO: not working properly in UI
         # Group transactions by month
         monthly_transactions = {}
         
@@ -109,7 +134,8 @@ class FinancialAnalyzer:
         assets = [
             Asset(
                 asset_type=asset.asset_type,
-                market_value=asset.market_value,
+                market_value=self.calculate_market_value(asset.asset_type, asset.market_share) if asset.market_share else asset.market_value,
+                market_share=asset.market_share,
                 currency=asset.currency,
                 created_at=asset.created_at.strftime("%Y-%m-%d %H:%M:%S")
             )
@@ -125,14 +151,16 @@ class FinancialAnalyzer:
             )
             for credit in db.query(CreditModel).all()
         ]
+
+        assets_results = [f"{asset.asset_type} {asset.currency} {asset.market_value}" for asset in assets]
+        credits_results = [f"{credit.credit_type} {credit.currency} {credit.market_value}" for credit in credits]
         
         # Use Claude to calculate totals (keep existing prompts)
         prompt1 = f"""
-        Sum up all assets from the assets list: {assets}
-        Based on each of its currency e.g USD/EUR/RMB/CAD etc, converting all assets to RMB based on the realtime exchange rate.
-        Return ONLY the final numeric value, without any text or explanation.
-        For example: 1234.56
-        If the list is empty, return 0.
+        Analyzing {assets_results} which represent its type, currency and value in the string:
+        1) Based on currency e.g USD/EUR/RMB/CAD etc, converting the value to RMB based on the realtime exchange rate.
+        2) Sum the converted value, and ensure your answer include the extract words: "Total sum in RMB = XXXX RMB" which XXXX is a number
+        If {assets_results} is empty, "Total sum in RMB = 0 RMB"
         """
         message1 = anthropic.messages.create(
             model=model,
@@ -145,11 +173,10 @@ class FinancialAnalyzer:
         )
 
         prompt2 = f"""
-        Sum up all credits from the credit list: {credits}
-        Based on each of its currency e.g USD/EUR/RMB/CAD etc, converting all credit to RMB based on the realtime exchange rate.
-        Return ONLY the final numeric value, without any text or explanation.
-        For example: -1234.56
-        If the list is empty, return 0.
+        Analyzing {credits_results} which represent its type, currency and value in the string:
+        1) Based on currency e.g USD/EUR/RMB/CAD etc, converting the value to RMB based on the realtime exchange rate.
+        2) Sum the converted value, and ensure your answer include the extract words: "Total sum in RMB = XXXX RMB" which XXXX is a number
+        If {credits_results} is empty, "Total sum in RMB = 0 RMB"
         """
         message2 = anthropic.messages.create(
             model=model,
@@ -161,8 +188,13 @@ class FinancialAnalyzer:
             }]
         )
 
-        total_assets = float(message1.content[0].text.strip())
-        total_credit = float(message2.content[0].text.strip())
+        match1 = re.search(r"Total sum in RMB = (-?\d+(?:\.\d+)?) RMB", message1.content[0].text)
+        total_assets = float(match1.group(1))
+        match2 = re.search(r"Total sum in RMB = (-?\d+(?:\.\d+)?) RMB", message2.content[0].text)
+        total_credit = float(match2.group(1))
+        logger.debug(f"message1: {message1.content[0].text}")
+        logger.debug(f"message2: {message2.content[0].text}")
+        logger.debug(f"Total assets: {total_assets}, Total credit: {total_credit}")
 
         return AccountSummary(
             total_assets=round(total_assets, 2),
@@ -170,38 +202,88 @@ class FinancialAnalyzer:
             net_worth=round(total_assets + total_credit, 2),
             monthly_summary=monthly_transactions
         )
+    
+    @staticmethod
+    def calculate_market_value(asset_type: str, market_share: float) -> float | None:
+        """Calculate market value based on market share"""
+        try:
+            ticker = yf.Ticker(asset_type)
+            price = ticker.info.get('currentPrice')
+            if price is None:
+                price = ticker.info.get('regularMarketPrice')  # Try alternative price field
+            
+            logger.info(f'asset_type: {asset_type}, price: {price}, market_share: {market_share}')
+            
+            if price is None:
+                logger.error(f"Could not get price for {asset_type}")
+                return None
+            
+            return price * market_share 
+        except Exception as e:
+            logger.error(f"Error calculating market value for {asset_type}: {e}")
+            return None
 
     def get_assets(self, db: Session) -> List[Asset]:
-        return [
-            Asset(
-                id=asset.id, 
+        assets = db.query(AssetModel).all()
+        result = []
+        
+        for asset in assets:
+            # Calculate current market value if market_share exists
+            if asset.market_share is not None:
+                current_value = self.calculate_market_value(
+                    asset.asset_type,
+                    asset.market_share
+                )
+                # Update market value in DB
+                asset.market_value = current_value
+                
+            result.append(Asset(
+                id=asset.id,
                 asset_type=asset.asset_type,
                 market_value=asset.market_value,
+                market_share=asset.market_share,
                 currency=asset.currency,
                 created_at=asset.created_at.strftime("%Y-%m-%d %H:%M:%S") if asset.created_at else ""
-            )
-            for asset in db.query(AssetModel).all()
-        ]
+            ))
+        
+        # Commit updates to DB
+        db.commit()
+        return result
 
     def get_asset_details(self, asset_type: str, currency: str, db: Session) -> List[Asset]:
-        return [
-            Asset(
-                id=asset.id, 
+        assets = db.query(AssetModel).filter(
+            AssetModel.asset_type == asset_type,
+            AssetModel.currency == currency
+        ).all()
+        
+        result = []
+        for asset in assets:
+            # Calculate current market value if market_share exists
+            if asset.market_share is not None:
+                current_value = self.calculate_market_value(
+                    asset.asset_type,
+                    asset.market_share
+                )
+                # Update market value in DB
+                asset.market_value = current_value
+                
+            result.append(Asset(
+                id=asset.id,
                 asset_type=asset.asset_type,
                 market_value=asset.market_value,
+                market_share=asset.market_share,
                 currency=asset.currency,
                 created_at=asset.created_at.strftime("%Y-%m-%d %H:%M:%S")
-            )
-            for asset in db.query(AssetModel).filter(
-                AssetModel.asset_type == asset_type,
-                AssetModel.currency == currency
-            ).all()
-        ]
+            ))
+        
+        # Commit updates to DB
+        db.commit()
+        return result
 
     def get_credits(self, db: Session) -> List[Credit]:
         return [
             Credit(
-                id=credit.id, 
+                id=credit.id,
                 credit_type=credit.credit_type,
                 market_value=credit.market_value,
                 currency=credit.currency,
@@ -213,7 +295,7 @@ class FinancialAnalyzer:
     def get_credit_details(self, credit_type: str, currency: str, db: Session) -> List[Credit]:
         return [
             Credit(
-                id=credit.id,  
+                id=credit.id,
                 credit_type=credit.credit_type,
                 market_value=credit.market_value,
                 currency=credit.currency,
@@ -230,9 +312,16 @@ class FinancialAnalyzer:
         assets = db.query(AssetModel).all()
         logger.debug(f"Raw assets from DB: {assets}")
         
-        # Add detailed logging for each asset
+        # Update market values first
         for asset in assets:
-            logger.debug(f"Asset details - type: {asset.asset_type}, value: {asset.market_value}, currency: {asset.currency}, created_at: {asset.created_at}, created_at_type: {type(asset.created_at)}")
+            if asset.market_share is not None:
+                current_value = self.calculate_market_value(
+                    asset.asset_type,
+                    asset.market_share
+                )
+                asset.market_value = current_value
+        
+        db.commit()
         
         # Create a dictionary to group assets
         grouped = {}
@@ -240,10 +329,11 @@ class FinancialAnalyzer:
             key = (asset.asset_type, asset.currency)
             if key not in grouped:
                 grouped[key] = {
-                    'id': asset.id,  # Include the id from the first asset of this type
+                    'id': asset.id,
                     'asset_type': asset.asset_type,
                     'currency': asset.currency,
                     'market_value': 0,
+                    'market_share': asset.market_share,
                     'created_at': asset.created_at
                 }
             grouped[key]['market_value'] += asset.market_value
@@ -254,6 +344,7 @@ class FinancialAnalyzer:
                 id=data['id'],
                 asset_type=data['asset_type'],
                 market_value=data['market_value'],
+                market_share=data['market_share'],
                 currency=data['currency'],
                 created_at=data['created_at'].strftime("%Y-%m-%d %H:%M:%S")
             )
@@ -273,7 +364,7 @@ class FinancialAnalyzer:
             key = (credit.credit_type, credit.currency)
             if key not in grouped:
                 grouped[key] = {
-                    'id': credit.id,  # Include the id from the first credit of this type
+                    'id': credit.id,
                     'credit_type': credit.credit_type,
                     'currency': credit.currency,
                     'market_value': 0,
@@ -292,6 +383,24 @@ class FinancialAnalyzer:
             )
             for data in grouped.values()
         ]
+
+    # TODO: maybe use later
+    def update_market_values(self, db: Session):
+        """Update market values for assets with only market share"""
+        assets = db.query(AssetModel).filter(
+            AssetModel.market_share.isnot(None),
+            AssetModel.market_value.is_(None)
+        ).all()
+
+        for asset in assets:
+            market_value = self.calculate_market_value(
+                asset.asset_type,
+                asset.market_share
+            )
+            if market_value is not None:
+                asset.market_value = market_value
+        
+        db.commit()
 
 # Create a global analyzer instance
 financial_analyzer = FinancialAnalyzer()
@@ -444,7 +553,7 @@ async def add_asset(asset: Asset, db: Session = Depends(get_db)):
     logger.debug(f"Received asset to add: {asset}")
     if not asset.created_at:
         asset.created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    if asset.market_value <= 0:
+    if asset.market_value and asset.market_value <= 0:
         raise HTTPException(status_code=400, detail="Asset market value must be positive")
     financial_analyzer.add_asset(asset, db)
     return {"status": "success"}
@@ -506,6 +615,7 @@ async def update_asset(asset_id: int, asset: Asset, db: Session = Depends(get_db
         raise HTTPException(status_code=404, detail="Asset not found")
     
     db_asset.market_value = asset.market_value
+    db_asset.market_share = asset.market_share
     db_asset.currency = asset.currency
     try:
         db.commit()
@@ -540,23 +650,20 @@ async def delete_asset(asset_id: int, db: Session = Depends(get_db)):
 @app.put("/api/credits/{credit_id}")
 async def update_credit(credit_id: int, credit: Credit, db: Session = Depends(get_db)):
     logger.debug(f"Updating credit with id: {credit_id}")
-    logger.debug(f"Update data: {credit}")
     
     db_credit = db.query(CreditModel).filter(CreditModel.id == credit_id).first()
-    logger.debug(f"Found credit in DB: {db_credit}")
-    
     if not db_credit:
-        logger.error(f"Credit not found with id: {credit_id}")
         raise HTTPException(status_code=404, detail="Credit not found")
+    
+    if credit.market_value >= 0:
+        raise HTTPException(status_code=400, detail="Credit market value must be negative")
     
     db_credit.market_value = credit.market_value
     db_credit.currency = credit.currency
     try:
         db.commit()
-        logger.debug(f"Successfully updated credit: {db_credit}")
         return credit
     except Exception as e:
-        logger.error(f"Error updating credit: {str(e)}")
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -580,6 +687,7 @@ async def delete_credit(credit_id: int, db: Session = Depends(get_db)):
         logger.error(f"Error deleting credit: {str(e)}")
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     run(app, host="127.0.0.1", port=8000)

@@ -6,3 +6,4 @@ fastapi
 python-multipart
 uvicorn
 sqlalchemy
+yfinance

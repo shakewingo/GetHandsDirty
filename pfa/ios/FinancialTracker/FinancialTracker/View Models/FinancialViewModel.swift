@@ -25,7 +25,10 @@ class FinancialViewModel: ObservableObject {
         assets = coreDataManager.fetchAssets()
         credits = coreDataManager.fetchCredits()
         print("Loaded from CoreData - Assets count: \(assets.count), Credits count: \(credits.count)")
-        calculateLocalSummary()
+        // Fetch summary from API instead of calculating locally
+        Task {
+            await fetchSummary()
+        }
     }
     
     func uploadSelectedFiles() async {
@@ -153,36 +156,6 @@ class FinancialViewModel: ObservableObject {
         isLoading = false
     }
 
-    private func calculateLocalSummary() {
-        let totalAssets = assets.reduce(0) { $0 + $1.marketValue }
-        let totalCredit = credits.reduce(0) { $0 + $1.marketValue }
-        
-        // Create monthly summary
-        var monthlySummary: [String: [String: Double]] = [:]
-        for transaction in transactions {
-            let year = String(transaction.date.suffix(4))
-            let month = String(transaction.date.prefix(2))
-            let monthKey = "\(year)-\(month)"
-            
-            if monthlySummary[monthKey] == nil {
-                monthlySummary[monthKey] = [:]
-            }
-            
-            if monthlySummary[monthKey]?[transaction.category] == nil {
-                monthlySummary[monthKey]?[transaction.category] = 0
-            }
-            
-            monthlySummary[monthKey]?[transaction.category]? += transaction.amount
-        }
-        
-        summary = AccountSummary(
-            totalAssets: totalAssets,
-            totalCredit: totalCredit,
-            netWorth: totalAssets + totalCredit,
-            monthlySummary: monthlySummary
-        )
-    }
-
     func clearSelectedDetails() {
         assetDetailsMap.removeAll()
         creditDetailsMap.removeAll()
@@ -217,18 +190,27 @@ class FinancialViewModel: ObservableObject {
         return formatter.string(from: NSNumber(value: abs(value))) ?? "0"
     }
 
-    func addAsset(assetType: String, marketValue: Double, currency: String) async {
+    func addAsset(assetType: String, marketValue: Double?, marketShare: Double?, currency: String) async {
         isLoading = true
         errorMessage = nil
         
         do {
-            let asset = try await apiService.addAsset(assetType: assetType, marketValue: marketValue, currency: currency)
+            let asset = try await apiService.addAsset(
+                assetType: assetType,
+                marketValue: marketValue,
+                marketShare: marketShare,
+                currency: currency
+            )
             // Save to CoreData
             coreDataManager.saveAssets([asset])
             // Refresh assets list
             await fetchAssets()
+        } catch let error as APIError {
+            errorMessage = "API Error: \(error.localizedDescription)"
+            print("API Error: \(error)")
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = "Unexpected error: \(error.localizedDescription)"
+            print("Unexpected error: \(error)")
         }
         
         isLoading = false
@@ -264,8 +246,8 @@ class FinancialViewModel: ObservableObject {
             // Update CoreData
             coreDataManager.updateAsset(updatedAsset)
             
-            // Update local summary without making network calls
-            calculateLocalSummary()
+            // Fetch fresh summary from API
+            await fetchSummary()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -279,8 +261,8 @@ class FinancialViewModel: ObservableObject {
             assets.removeAll { $0.id == id }
             coreDataManager.deleteAsset(id: id)
             
-            // Update local summary without making network calls
-            calculateLocalSummary()
+            // Fetch fresh summary from API
+            await fetchSummary()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -298,8 +280,8 @@ class FinancialViewModel: ObservableObject {
             // Update CoreData
             coreDataManager.updateCredit(updatedCredit)
             
-            // Update local summary without making network calls
-            calculateLocalSummary()
+            // Fetch fresh summary from API
+            await fetchSummary()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -313,8 +295,8 @@ class FinancialViewModel: ObservableObject {
             credits.removeAll { $0.id == id }
             coreDataManager.deleteCredit(id: id)
             
-            // Update local summary without making network calls
-            calculateLocalSummary()
+            // Fetch fresh summary from API
+            await fetchSummary()
         } catch {
             errorMessage = error.localizedDescription
         }

@@ -2,6 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from pathlib import Path
+import os
 from .config import project_dir
 from .models import Base, TransactionModel, AssetModel, CreditModel  # Import models
 
@@ -10,7 +11,9 @@ db_dir = Path(project_dir, "data", "db")
 db_dir.mkdir(parents=True, exist_ok=True)
 
 # Database URL
-SQLALCHEMY_DATABASE_URL = f"sqlite:///{db_dir}/financial_tracker.db"
+db_file = Path(db_dir, "financial_tracker.db")
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{db_file}"
+
 
 # Create SQLAlchemy engine
 engine = create_engine(

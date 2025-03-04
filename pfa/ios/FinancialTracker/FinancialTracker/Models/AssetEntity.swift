@@ -3,7 +3,12 @@ import CoreData
 
 @objc(AssetEntity)
 public class AssetEntity: NSManagedObject, Identifiable {
-
+    @NSManaged public var id: Int32
+    @NSManaged public var assetType: String?
+    @NSManaged public var marketValue: NSNumber?
+    @NSManaged public var marketShare: NSNumber?
+    @NSManaged public var currency: String?
+    @NSManaged public var createdAt: String?
 }
 
 extension AssetEntity {
@@ -11,9 +16,13 @@ extension AssetEntity {
         return NSFetchRequest<AssetEntity>(entityName: "AssetEntity")
     }
     
-    @NSManaged public var id: Int32
-    @NSManaged public var assetType: String?
-    @NSManaged public var marketValue: Double
-    @NSManaged public var currency: String?
-    @NSManaged public var createdAt: String?
+    var marketValueDouble: Double? {
+        get { return marketValue?.doubleValue }
+        set { marketValue = newValue.map { NSNumber(value: $0) } }
+    }
+    
+    var marketShareDouble: Double? {
+        get { return marketShare?.doubleValue }
+        set { marketShare = newValue.map { NSNumber(value: $0) } }
+    }
 }

@@ -156,7 +156,7 @@ struct AssetsView: View {
         }
         .map { key, assets in
             let components = key.split(separator: "|")
-            let totalValue = assets.reduce(0) { $0 + $1.marketValue }
+            let totalValue = assets.reduce(0) { $0 + ($1.marketValue ?? 0) }
             return AssetGroup(
                 id: key,
                 assetType: String(components[0]),
@@ -260,7 +260,7 @@ struct AssetGroupRow: View {
                                     VStack(alignment: .leading, spacing: 4) {
                                         HStack {
                                             VStack(alignment: .leading, spacing: 4) {
-                                                Text(viewModel.formatCurrency(asset.marketValue, currency: asset.currency))
+                                                Text(viewModel.formatCurrency(asset.marketValue ?? 0, currency: asset.currency))
                                                     .font(.subheadline)
                                                     .foregroundColor(.green)
                                                 Text(asset.createdAt)

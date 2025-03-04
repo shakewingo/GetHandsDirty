@@ -26,11 +26,7 @@ enum APIError: Error {
 class APIService {
     static let shared = APIService()
     
-    #if targetEnvironment(simulator)
-    private let baseURL = "http://localhost:8000/api"
-    #else
-    private let baseURL = "http://127.0.0.1:8000/api"
-    #endif
+    private let baseURL = "https://your-production-server.com/api"
     
     private init() {}
     
@@ -89,7 +85,7 @@ class APIService {
         return try decoder.decode([Credit].self, from: data)
     }
     
-    func addAsset(assetType: String, marketValue: Double, currency: String) async throws -> Asset {
+    func addAsset(assetType: String, marketValue: Double?, marketShare: Double?, currency: String) async throws -> Asset {
         guard let url = URL(string: "\(baseURL)/assets") else {
             throw APIError.invalidURL
         }
@@ -101,6 +97,7 @@ class APIService {
         let asset = Asset(
             assetType: assetType,
             marketValue: marketValue,
+            marketShare: marketShare,
             currency: currency,
             createdAt: ""
         )
@@ -109,7 +106,11 @@ class APIService {
         encoder.keyEncodingStrategy = .convertToSnakeCase
         request.httpBody = try encoder.encode(asset)
         
+        print("Sending request with body: \(String(data: request.httpBody!, encoding: .utf8) ?? "")")
+        
         let (data, response) = try await URLSession.shared.data(for: request)
+        print("Raw response: \(String(data: data, encoding: .utf8) ?? "")")
+        
         _ = try handleResponse(response)
         
         let decoder = JSONDecoder()
