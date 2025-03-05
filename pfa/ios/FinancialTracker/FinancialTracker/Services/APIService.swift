@@ -26,7 +26,11 @@ enum APIError: Error {
 class APIService {
     static let shared = APIService()
     
-    private let baseURL = "https://your-production-server.com/api"
+//     if targetEnvironment(simulator)
+//     private let baseURL = "http://localhost:8000/api"
+//     else
+    private let baseURL = "https://gethandsdirty.onrender.com/api"
+
     
     private init() {}
     

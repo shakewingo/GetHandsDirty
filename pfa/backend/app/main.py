@@ -476,7 +476,10 @@ class FinancialParser:
                 ))
 
         return transactions
-    
+
+import os
+port = int(os.environ.get("PORT", 8000))
+host = os.environ.get("HOST", "0.0.0.0")
 
 app = FastAPI(title="Financial Tracker API")
 parser = FinancialParser()
@@ -690,4 +693,4 @@ async def delete_credit(credit_id: int, db: Session = Depends(get_db)):
 
 
 if __name__ == "__main__":
-    run(app, host="127.0.0.1", port=8000)
+    run(app, host=host, port=port)
