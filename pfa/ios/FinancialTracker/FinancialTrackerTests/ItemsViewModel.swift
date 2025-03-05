@@ -12,7 +12,8 @@ class ItemsViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     
-    private let baseURL = "http://localhost:8000" // Change this to your server URL
+    // private let baseURL = "http://localhost:8000" // Change this to your server URL
+    private let baseURL = "http://0.0.0.0:8000"
     
     func fetchItems() {
         isLoading = true
