@@ -7,41 +7,40 @@
 	objects = {
 
 /* Begin PBXContainerItemProxy section */
-		2C7674EA2D2030A2007A2C33 /* PBXContainerItemProxy */ = {
+		2C57CF792D8079A70076A2FD /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
-			containerPortal = 2C7674D12D2030A1007A2C33 /* Project object */;
+			containerPortal = 2C57CF5B2D8079A60076A2FD /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = 2C7674D82D2030A1007A2C33;
+			remoteGlobalIDString = 2C57CF622D8079A60076A2FD;
 			remoteInfo = FinancialTracker;
 		};
-		2C7674F42D2030A2007A2C33 /* PBXContainerItemProxy */ = {
+		2C57CF832D8079A70076A2FD /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
-			containerPortal = 2C7674D12D2030A1007A2C33 /* Project object */;
+			containerPortal = 2C57CF5B2D8079A60076A2FD /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = 2C7674D82D2030A1007A2C33;
+			remoteGlobalIDString = 2C57CF622D8079A60076A2FD;
 			remoteInfo = FinancialTracker;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		2C7674D92D2030A1007A2C33 /* FinancialTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FinancialTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		2C7674E92D2030A2007A2C33 /* FinancialTrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FinancialTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		2C7674F32D2030A2007A2C33 /* FinancialTrackerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FinancialTrackerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		2C7675092D20311D007A2C33 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		2C57CF632D8079A60076A2FD /* FinancialTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FinancialTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2C57CF782D8079A70076A2FD /* FinancialTrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FinancialTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		2C57CF822D8079A70076A2FD /* FinancialTrackerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FinancialTrackerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		2C7674DB2D2030A1007A2C33 /* FinancialTracker */ = {
+		2C57CF652D8079A60076A2FD /* FinancialTracker */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = FinancialTracker;
 			sourceTree = "<group>";
 		};
-		2C7674EC2D2030A2007A2C33 /* FinancialTrackerTests */ = {
+		2C57CF7B2D8079A70076A2FD /* FinancialTrackerTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = FinancialTrackerTests;
 			sourceTree = "<group>";
 		};
-		2C7674F62D2030A2007A2C33 /* FinancialTrackerUITests */ = {
+		2C57CF852D8079A70076A2FD /* FinancialTrackerUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = FinancialTrackerUITests;
 			sourceTree = "<group>";
@@ -49,21 +48,21 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		2C7674D62D2030A1007A2C33 /* Frameworks */ = {
+		2C57CF602D8079A60076A2FD /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		2C7674E62D2030A2007A2C33 /* Frameworks */ = {
+		2C57CF752D8079A70076A2FD /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		2C7674F02D2030A2007A2C33 /* Frameworks */ = {
+		2C57CF7F2D8079A70076A2FD /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -73,23 +72,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		2C7674D02D2030A1007A2C33 = {
+		2C57CF5A2D8079A60076A2FD = {
 			isa = PBXGroup;
 			children = (
-				2C7675092D20311D007A2C33 /* README.md */,
-				2C7674DB2D2030A1007A2C33 /* FinancialTracker */,
-				2C7674EC2D2030A2007A2C33 /* FinancialTrackerTests */,
-				2C7674F62D2030A2007A2C33 /* FinancialTrackerUITests */,
-				2C7674DA2D2030A1007A2C33 /* Products */,
+				2C57CF652D8079A60076A2FD /* FinancialTracker */,
+				2C57CF7B2D8079A70076A2FD /* FinancialTrackerTests */,
+				2C57CF852D8079A70076A2FD /* FinancialTrackerUITests */,
+				2C57CF642D8079A60076A2FD /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		2C7674DA2D2030A1007A2C33 /* Products */ = {
+		2C57CF642D8079A60076A2FD /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				2C7674D92D2030A1007A2C33 /* FinancialTracker.app */,
-				2C7674E92D2030A2007A2C33 /* FinancialTrackerTests.xctest */,
-				2C7674F32D2030A2007A2C33 /* FinancialTrackerUITests.xctest */,
+				2C57CF632D8079A60076A2FD /* FinancialTracker.app */,
+				2C57CF782D8079A70076A2FD /* FinancialTrackerTests.xctest */,
+				2C57CF822D8079A70076A2FD /* FinancialTrackerUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -97,127 +95,134 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		2C7674D82D2030A1007A2C33 /* FinancialTracker */ = {
+		2C57CF622D8079A60076A2FD /* FinancialTracker */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 2C7674FD2D2030A2007A2C33 /* Build configuration list for PBXNativeTarget "FinancialTracker" */;
+			buildConfigurationList = 2C57CF8C2D8079A70076A2FD /* Build configuration list for PBXNativeTarget "FinancialTracker" */;
 			buildPhases = (
-				2C7674D52D2030A1007A2C33 /* Sources */,
-				2C7674D62D2030A1007A2C33 /* Frameworks */,
+				2C57CF5F2D8079A60076A2FD /* Sources */,
+				2C57CF602D8079A60076A2FD /* Frameworks */,
+				2C57CF612D8079A60076A2FD /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				2C7674DB2D2030A1007A2C33 /* FinancialTracker */,
+				2C57CF652D8079A60076A2FD /* FinancialTracker */,
 			);
 			name = FinancialTracker;
 			packageProductDependencies = (
 			);
 			productName = FinancialTracker;
-			productReference = 2C7674D92D2030A1007A2C33 /* FinancialTracker.app */;
+			productReference = 2C57CF632D8079A60076A2FD /* FinancialTracker.app */;
 			productType = "com.apple.product-type.application";
 		};
-		2C7674E82D2030A2007A2C33 /* FinancialTrackerTests */ = {
+		2C57CF772D8079A70076A2FD /* FinancialTrackerTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 2C7675002D2030A2007A2C33 /* Build configuration list for PBXNativeTarget "FinancialTrackerTests" */;
+			buildConfigurationList = 2C57CF8F2D8079A70076A2FD /* Build configuration list for PBXNativeTarget "FinancialTrackerTests" */;
 			buildPhases = (
-				2C7674E52D2030A2007A2C33 /* Sources */,
-				2C7674E62D2030A2007A2C33 /* Frameworks */,
-				2C7674E72D2030A2007A2C33 /* Resources */,
+				2C57CF742D8079A70076A2FD /* Sources */,
+				2C57CF752D8079A70076A2FD /* Frameworks */,
+				2C57CF762D8079A70076A2FD /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				2C7674EB2D2030A2007A2C33 /* PBXTargetDependency */,
+				2C57CF7A2D8079A70076A2FD /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				2C7674EC2D2030A2007A2C33 /* FinancialTrackerTests */,
+				2C57CF7B2D8079A70076A2FD /* FinancialTrackerTests */,
 			);
 			name = FinancialTrackerTests;
 			packageProductDependencies = (
 			);
 			productName = FinancialTrackerTests;
-			productReference = 2C7674E92D2030A2007A2C33 /* FinancialTrackerTests.xctest */;
+			productReference = 2C57CF782D8079A70076A2FD /* FinancialTrackerTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		2C7674F22D2030A2007A2C33 /* FinancialTrackerUITests */ = {
+		2C57CF812D8079A70076A2FD /* FinancialTrackerUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 2C7675032D2030A2007A2C33 /* Build configuration list for PBXNativeTarget "FinancialTrackerUITests" */;
+			buildConfigurationList = 2C57CF922D8079A70076A2FD /* Build configuration list for PBXNativeTarget "FinancialTrackerUITests" */;
 			buildPhases = (
-				2C7674EF2D2030A2007A2C33 /* Sources */,
-				2C7674F02D2030A2007A2C33 /* Frameworks */,
-				2C7674F12D2030A2007A2C33 /* Resources */,
+				2C57CF7E2D8079A70076A2FD /* Sources */,
+				2C57CF7F2D8079A70076A2FD /* Frameworks */,
+				2C57CF802D8079A70076A2FD /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				2C7674F52D2030A2007A2C33 /* PBXTargetDependency */,
+				2C57CF842D8079A70076A2FD /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				2C7674F62D2030A2007A2C33 /* FinancialTrackerUITests */,
+				2C57CF852D8079A70076A2FD /* FinancialTrackerUITests */,
 			);
 			name = FinancialTrackerUITests;
 			packageProductDependencies = (
 			);
 			productName = FinancialTrackerUITests;
-			productReference = 2C7674F32D2030A2007A2C33 /* FinancialTrackerUITests.xctest */;
+			productReference = 2C57CF822D8079A70076A2FD /* FinancialTrackerUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		2C7674D12D2030A1007A2C33 /* Project object */ = {
+		2C57CF5B2D8079A60076A2FD /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1620;
 				LastUpgradeCheck = 1620;
 				TargetAttributes = {
-					2C7674D82D2030A1007A2C33 = {
+					2C57CF622D8079A60076A2FD = {
 						CreatedOnToolsVersion = 16.2;
-						LastSwiftMigration = 1620;
 					};
-					2C7674E82D2030A2007A2C33 = {
+					2C57CF772D8079A70076A2FD = {
 						CreatedOnToolsVersion = 16.2;
-						TestTargetID = 2C7674D82D2030A1007A2C33;
+						TestTargetID = 2C57CF622D8079A60076A2FD;
 					};
-					2C7674F22D2030A2007A2C33 = {
+					2C57CF812D8079A70076A2FD = {
 						CreatedOnToolsVersion = 16.2;
-						TestTargetID = 2C7674D82D2030A1007A2C33;
+						TestTargetID = 2C57CF622D8079A60076A2FD;
 					};
 				};
 			};
-			buildConfigurationList = 2C7674D42D2030A1007A2C33 /* Build configuration list for PBXProject "FinancialTracker" */;
+			buildConfigurationList = 2C57CF5E2D8079A60076A2FD /* Build configuration list for PBXProject "FinancialTracker" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
 			);
-			mainGroup = 2C7674D02D2030A1007A2C33;
+			mainGroup = 2C57CF5A2D8079A60076A2FD;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 2C7674DA2D2030A1007A2C33 /* Products */;
+			productRefGroup = 2C57CF642D8079A60076A2FD /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				2C7674D82D2030A1007A2C33 /* FinancialTracker */,
-				2C7674E82D2030A2007A2C33 /* FinancialTrackerTests */,
-				2C7674F22D2030A2007A2C33 /* FinancialTrackerUITests */,
+				2C57CF622D8079A60076A2FD /* FinancialTracker */,
+				2C57CF772D8079A70076A2FD /* FinancialTrackerTests */,
+				2C57CF812D8079A70076A2FD /* FinancialTrackerUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		2C7674E72D2030A2007A2C33 /* Resources */ = {
+		2C57CF612D8079A60076A2FD /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		2C7674F12D2030A2007A2C33 /* Resources */ = {
+		2C57CF762D8079A70076A2FD /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2C57CF802D8079A70076A2FD /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -227,21 +232,21 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		2C7674D52D2030A1007A2C33 /* Sources */ = {
+		2C57CF5F2D8079A60076A2FD /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		2C7674E52D2030A2007A2C33 /* Sources */ = {
+		2C57CF742D8079A70076A2FD /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		2C7674EF2D2030A2007A2C33 /* Sources */ = {
+		2C57CF7E2D8079A70076A2FD /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -251,20 +256,20 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		2C7674EB2D2030A2007A2C33 /* PBXTargetDependency */ = {
+		2C57CF7A2D8079A70076A2FD /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 2C7674D82D2030A1007A2C33 /* FinancialTracker */;
-			targetProxy = 2C7674EA2D2030A2007A2C33 /* PBXContainerItemProxy */;
+			target = 2C57CF622D8079A60076A2FD /* FinancialTracker */;
+			targetProxy = 2C57CF792D8079A70076A2FD /* PBXContainerItemProxy */;
 		};
-		2C7674F52D2030A2007A2C33 /* PBXTargetDependency */ = {
+		2C57CF842D8079A70076A2FD /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 2C7674D82D2030A1007A2C33 /* FinancialTracker */;
-			targetProxy = 2C7674F42D2030A2007A2C33 /* PBXContainerItemProxy */;
+			target = 2C57CF622D8079A60076A2FD /* FinancialTracker */;
+			targetProxy = 2C57CF832D8079A70076A2FD /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		2C7674FB2D2030A2007A2C33 /* Debug */ = {
+		2C57CF8A2D8079A70076A2FD /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -327,7 +332,7 @@
 			};
 			name = Debug;
 		};
-		2C7674FC2D2030A2007A2C33 /* Release */ = {
+		2C57CF8B2D8079A70076A2FD /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -383,12 +388,11 @@
 			};
 			name = Release;
 		};
-		2C7674FE2D2030A2007A2C33 /* Debug */ = {
+		2C57CF8D2D8079A70076A2FD /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"FinancialTracker/Preview Content\"";
@@ -408,18 +412,16 @@
 				PRODUCT_BUNDLE_IDENTIFIER = shakewingo.FinancialTracker;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
-		2C7674FF2D2030A2007A2C33 /* Release */ = {
+		2C57CF8E2D8079A70076A2FD /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"FinancialTracker/Preview Content\"";
@@ -444,7 +446,7 @@
 			};
 			name = Release;
 		};
-		2C7675012D2030A2007A2C33 /* Debug */ = {
+		2C57CF902D8079A70076A2FD /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -463,7 +465,7 @@
 			};
 			name = Debug;
 		};
-		2C7675022D2030A2007A2C33 /* Release */ = {
+		2C57CF912D8079A70076A2FD /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -482,7 +484,7 @@
 			};
 			name = Release;
 		};
-		2C7675042D2030A2007A2C33 /* Debug */ = {
+		2C57CF932D8079A70076A2FD /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
@@ -499,7 +501,7 @@
 			};
 			name = Debug;
 		};
-		2C7675052D2030A2007A2C33 /* Release */ = {
+		2C57CF942D8079A70076A2FD /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
@@ -519,43 +521,43 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		2C7674D42D2030A1007A2C33 /* Build configuration list for PBXProject "FinancialTracker" */ = {
+		2C57CF5E2D8079A60076A2FD /* Build configuration list for PBXProject "FinancialTracker" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				2C7674FB2D2030A2007A2C33 /* Debug */,
-				2C7674FC2D2030A2007A2C33 /* Release */,
+				2C57CF8A2D8079A70076A2FD /* Debug */,
+				2C57CF8B2D8079A70076A2FD /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		2C7674FD2D2030A2007A2C33 /* Build configuration list for PBXNativeTarget "FinancialTracker" */ = {
+		2C57CF8C2D8079A70076A2FD /* Build configuration list for PBXNativeTarget "FinancialTracker" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				2C7674FE2D2030A2007A2C33 /* Debug */,
-				2C7674FF2D2030A2007A2C33 /* Release */,
+				2C57CF8D2D8079A70076A2FD /* Debug */,
+				2C57CF8E2D8079A70076A2FD /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		2C7675002D2030A2007A2C33 /* Build configuration list for PBXNativeTarget "FinancialTrackerTests" */ = {
+		2C57CF8F2D8079A70076A2FD /* Build configuration list for PBXNativeTarget "FinancialTrackerTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				2C7675012D2030A2007A2C33 /* Debug */,
-				2C7675022D2030A2007A2C33 /* Release */,
+				2C57CF902D8079A70076A2FD /* Debug */,
+				2C57CF912D8079A70076A2FD /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		2C7675032D2030A2007A2C33 /* Build configuration list for PBXNativeTarget "FinancialTrackerUITests" */ = {
+		2C57CF922D8079A70076A2FD /* Build configuration list for PBXNativeTarget "FinancialTrackerUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				2C7675042D2030A2007A2C33 /* Debug */,
-				2C7675052D2030A2007A2C33 /* Release */,
+				2C57CF932D8079A70076A2FD /* Debug */,
+				2C57CF942D8079A70076A2FD /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = 2C7674D12D2030A1007A2C33 /* Project object */;
+	rootObject = 2C57CF5B2D8079A60076A2FD /* Project object */;
 }

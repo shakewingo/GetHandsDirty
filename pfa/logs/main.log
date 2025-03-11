@@ -3078,3 +3078,818 @@ Total sum in RMB = 35013.42 RMB
 
 Total sum in RMB = -1000.0 RMB
 2025-03-05 21:33:29,351 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35013.42, Total credit: -1000.0
+2025-03-05 22:14:51,646 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.93, market_share: 12.0
+2025-03-05 22:14:52,513 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 272.04, market_share: 1.0
+2025-03-05 22:14:53,039 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 272.04, market_share: 2.0
+2025-03-05 22:15:00,070 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2831.16 → 20384.35 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 272.04 → 1958.69 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 544.08 → 3917.38 RMB
+
+Total sum in RMB = 35013.42 RMB
+2025-03-05 22:15:00,071 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-05 22:15:00,071 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35013.42, Total credit: -1000.0
+2025-03-05 22:15:00,716 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.93, market_share: 12.0
+2025-03-05 22:15:01,281 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 272.04, market_share: 1.0
+2025-03-05 22:15:01,818 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 272.04, market_share: 2.0
+2025-03-05 22:15:08,945 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2831.16 → 20384.35 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 272.04 → 1958.69 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 544.08 → 3917.38 RMB
+
+Total sum in RMB = 35013.42 RMB
+2025-03-05 22:15:08,945 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-05 22:15:08,945 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35013.42, Total credit: -1000.0
+2025-03-05 22:15:09,521 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.93, market_share: 12.0
+2025-03-05 22:15:10,093 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 272.04, market_share: 1.0
+2025-03-05 22:15:10,588 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 272.04, market_share: 2.0
+2025-03-05 22:15:16,890 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2831.16 → 20384.35 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 272.04 → 1958.69 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 544.08 → 3917.38 RMB
+
+Total sum in RMB = 35013.42 RMB
+2025-03-05 22:15:16,890 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-05 22:15:16,890 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35013.42, Total credit: -1000.0
+2025-03-05 22:15:16,893 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Entering /api/grouped_assets endpoint
+2025-03-05 22:15:16,893 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Raw assets from DB: [<backend.app.models.AssetModel object at 0x108bd16c0>, <backend.app.models.AssetModel object at 0x108bd1870>, <backend.app.models.AssetModel object at 0x108bd18a0>, <backend.app.models.AssetModel object at 0x108bd18d0>, <backend.app.models.AssetModel object at 0x108bd1900>, <backend.app.models.AssetModel object at 0x108bd1930>, <backend.app.models.AssetModel object at 0x108bd1960>]
+2025-03-05 22:15:17,466 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.93, market_share: 12.0
+2025-03-05 22:15:18,354 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 272.04, market_share: 1.0
+2025-03-05 22:15:18,906 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 272.04, market_share: 2.0
+2025-03-05 22:15:18,926 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Final result: [Asset(id=1, asset_type='AAPL', market_value=2831.16, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=816.1200000000001, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-05 22:15:18,926 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Endpoint result: [Asset(id=1, asset_type='AAPL', market_value=2831.16, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=816.1200000000001, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-05 22:15:18,928 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Entering /api/grouped_assets endpoint
+2025-03-05 22:15:18,928 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Raw assets from DB: [<backend.app.models.AssetModel object at 0x108bc79d0>, <backend.app.models.AssetModel object at 0x108bc6f80>, <backend.app.models.AssetModel object at 0x108bc66e0>, <backend.app.models.AssetModel object at 0x108bc4f70>, <backend.app.models.AssetModel object at 0x108bc40a0>, <backend.app.models.AssetModel object at 0x108bc5b10>, <backend.app.models.AssetModel object at 0x108bc5870>]
+2025-03-05 22:15:19,496 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.93, market_share: 12.0
+2025-03-05 22:15:20,060 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 272.04, market_share: 1.0
+2025-03-05 22:15:20,552 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 272.04, market_share: 2.0
+2025-03-05 22:15:20,556 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Final result: [Asset(id=1, asset_type='AAPL', market_value=2831.16, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=816.1200000000001, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-05 22:15:20,556 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Endpoint result: [Asset(id=1, asset_type='AAPL', market_value=2831.16, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=816.1200000000001, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-05 22:15:20,560 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Entering /api/grouped_assets endpoint
+2025-03-05 22:15:20,562 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Raw assets from DB: [<backend.app.models.AssetModel object at 0x108bc7f40>, <backend.app.models.AssetModel object at 0x108bc4e20>, <backend.app.models.AssetModel object at 0x108bc4190>, <backend.app.models.AssetModel object at 0x108bc4280>, <backend.app.models.AssetModel object at 0x108bc4d60>, <backend.app.models.AssetModel object at 0x108bc41c0>, <backend.app.models.AssetModel object at 0x108bc41f0>]
+2025-03-05 22:15:21,090 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.93, market_share: 12.0
+2025-03-05 22:15:21,713 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 272.04, market_share: 1.0
+2025-03-05 22:15:22,209 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 272.04, market_share: 2.0
+2025-03-05 22:15:22,214 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Final result: [Asset(id=1, asset_type='AAPL', market_value=2831.16, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=816.1200000000001, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-05 22:15:22,214 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Endpoint result: [Asset(id=1, asset_type='AAPL', market_value=2831.16, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=816.1200000000001, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-05 22:15:37,257 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.93, market_share: 12.0
+2025-03-05 22:15:37,882 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 272.04, market_share: 1.0
+2025-03-05 22:15:38,391 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 272.04, market_share: 2.0
+2025-03-05 22:15:46,189 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2831.16 → 20384.35 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 272.04 → 1958.69 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 544.08 → 3917.38 RMB
+
+Total sum in RMB = 35013.42 RMB
+2025-03-05 22:15:46,189 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-05 22:15:46,189 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35013.42, Total credit: -1000.0
+2025-03-05 22:15:46,197 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Entering /api/grouped_assets endpoint
+2025-03-05 22:15:46,199 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Raw assets from DB: [<backend.app.models.AssetModel object at 0x108a57c70>, <backend.app.models.AssetModel object at 0x108a56e60>, <backend.app.models.AssetModel object at 0x108a57550>, <backend.app.models.AssetModel object at 0x108a57100>, <backend.app.models.AssetModel object at 0x108a57460>, <backend.app.models.AssetModel object at 0x108a57e80>, <backend.app.models.AssetModel object at 0x108a57130>]
+2025-03-05 22:15:46,905 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.93, market_share: 12.0
+2025-03-05 22:15:47,547 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 272.04, market_share: 1.0
+2025-03-05 22:15:48,051 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 272.04, market_share: 2.0
+2025-03-05 22:15:48,056 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Final result: [Asset(id=1, asset_type='AAPL', market_value=2831.16, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=816.1200000000001, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-05 22:15:48,056 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Endpoint result: [Asset(id=1, asset_type='AAPL', market_value=2831.16, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=816.1200000000001, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-05 22:16:06,701 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.93, market_share: 12.0
+2025-03-06 21:58:44,277 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 21:58:45,345 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 21:58:46,064 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 21:58:53,130 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 21:58:53,131 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 21:58:53,131 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 21:58:53,847 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 21:58:54,567 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 21:58:55,119 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 21:59:01,731 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 21:59:01,731 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 21:59:01,731 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 21:59:02,449 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 21:59:03,165 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 21:59:03,754 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 21:59:10,233 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 21:59:10,233 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 21:59:10,233 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:01:49,219 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:01:49,841 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:01:50,402 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:01:58,307 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:01:58,307 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:01:58,307 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:01:58,980 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:01:59,592 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:02:00,165 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:02:08,208 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:02:08,209 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:02:08,209 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:02:08,837 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:02:09,451 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:02:09,997 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:02:16,417 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:02:16,417 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:02:16,417 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:02:17,033 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:02:17,666 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:02:18,214 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:02:24,739 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:02:24,739 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:02:24,739 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:02:25,420 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:02:26,054 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:02:26,601 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:02:33,798 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:02:33,798 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:02:33,798 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:02:33,801 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Entering /api/grouped_assets endpoint
+2025-03-06 22:02:33,803 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Raw assets from DB: [<backend.app.models.AssetModel object at 0x10c098f70>, <backend.app.models.AssetModel object at 0x10c098c10>, <backend.app.models.AssetModel object at 0x10c099090>, <backend.app.models.AssetModel object at 0x10c0990c0>, <backend.app.models.AssetModel object at 0x10c098d60>, <backend.app.models.AssetModel object at 0x10c0990f0>, <backend.app.models.AssetModel object at 0x10c099120>]
+2025-03-06 22:02:34,502 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:02:35,205 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:02:35,748 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:02:35,769 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Final result: [Asset(id=1, asset_type='AAPL', market_value=2828.88, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=837.3000000000001, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-06 22:02:35,769 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Endpoint result: [Asset(id=1, asset_type='AAPL', market_value=2828.88, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=837.3000000000001, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-06 22:02:35,769 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Entering /api/grouped_assets endpoint
+2025-03-06 22:02:35,770 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Raw assets from DB: [<backend.app.models.AssetModel object at 0x10c0731c0>, <backend.app.models.AssetModel object at 0x10c0715a0>, <backend.app.models.AssetModel object at 0x10c0727d0>, <backend.app.models.AssetModel object at 0x10c072b90>, <backend.app.models.AssetModel object at 0x10c072650>, <backend.app.models.AssetModel object at 0x10c0729b0>, <backend.app.models.AssetModel object at 0x10c072620>]
+2025-03-06 22:02:36,405 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:02:37,074 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:02:37,630 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:02:37,635 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Final result: [Asset(id=1, asset_type='AAPL', market_value=2828.88, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=837.3000000000001, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-06 22:02:37,635 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Endpoint result: [Asset(id=1, asset_type='AAPL', market_value=2828.88, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=837.3000000000001, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-06 22:02:37,638 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Entering /api/grouped_assets endpoint
+2025-03-06 22:02:37,640 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Raw assets from DB: [<backend.app.models.AssetModel object at 0x10c070a60>, <backend.app.models.AssetModel object at 0x10bf7d840>, <backend.app.models.AssetModel object at 0x10bf7e650>, <backend.app.models.AssetModel object at 0x10bf7d4b0>, <backend.app.models.AssetModel object at 0x10bf7de10>, <backend.app.models.AssetModel object at 0x10bf7d540>, <backend.app.models.AssetModel object at 0x10bf7db10>]
+2025-03-06 22:02:38,280 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:02:38,919 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:02:39,507 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:02:39,511 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Final result: [Asset(id=1, asset_type='AAPL', market_value=2828.88, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=837.3000000000001, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-06 22:02:39,511 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Endpoint result: [Asset(id=1, asset_type='AAPL', market_value=2828.88, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=837.3000000000001, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-06 22:07:08,252 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:07:08,944 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:07:09,761 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:07:17,088 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:07:17,089 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:07:17,089 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:07:17,756 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:07:18,428 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:07:19,020 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:07:25,237 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:07:25,237 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:07:25,237 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:07:26,361 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:07:27,024 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:07:27,679 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:07:34,759 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:07:34,759 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:07:34,759 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:07:35,418 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:07:36,236 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:07:36,829 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:07:43,645 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:07:43,646 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:07:43,647 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:07:44,338 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:07:45,004 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:07:45,611 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:07:52,844 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:07:52,844 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:07:52,845 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:07:53,514 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:07:54,172 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:07:54,798 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:08:00,798 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:08:00,798 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:08:00,798 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:09:43,520 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:09:44,279 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:09:44,867 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:09:51,449 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:09:51,449 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:09:51,449 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:09:52,123 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:09:52,982 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:09:53,699 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:10:00,358 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:10:00,359 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:10:00,359 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:10:39,574 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:10:40,310 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:10:41,007 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:10:49,715 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:10:49,715 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:10:49,715 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:10:50,531 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:10:51,350 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:10:52,168 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:10:58,516 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:10:58,516 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:10:58,516 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:11:08,935 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:11:09,593 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:11:10,195 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:11:17,367 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:11:17,367 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:11:17,367 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:11:18,039 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:11:18,696 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:11:19,279 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:11:25,126 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:11:25,127 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:11:25,127 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:14:45,429 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:14:46,053 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:14:46,600 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:14:53,420 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:14:53,420 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:14:53,420 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:14:54,073 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:14:54,824 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:14:55,373 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:15:01,526 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:15:01,528 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:15:01,528 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:15:02,159 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:15:02,839 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:15:03,383 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:15:10,077 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:15:10,077 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:15:10,077 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:17:39,890 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:17:40,507 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:17:41,044 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:17:48,030 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:17:48,031 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:17:48,031 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:17:48,671 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:17:49,378 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:17:50,029 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:17:56,801 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2828.88 → 20367.94 RMB
+- Gold RMB 100.0 → 100.0 RMB
+- Silver EUR 1000.0 → 7800.0 RMB
+- Silver CAD 10.0 → 53.0 RMB
+- TSLA USD 279.1 → 2009.52 RMB
+- Gold RMB 800.0 → 800.0 RMB
+- TSLA USD 558.2 → 4019.04 RMB
+
+Total sum in RMB = 35149.50 RMB
+2025-03-06 22:17:56,802 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-06 22:17:56,802 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 35149.5, Total credit: -1000.0
+2025-03-06 22:17:56,844 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Entering /api/grouped_assets endpoint
+2025-03-06 22:17:56,848 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Raw assets from DB: [<backend.app.models.AssetModel object at 0x10c09a980>, <backend.app.models.AssetModel object at 0x10c09b6d0>, <backend.app.models.AssetModel object at 0x10c09b9d0>, <backend.app.models.AssetModel object at 0x10c098640>, <backend.app.models.AssetModel object at 0x10c09b640>, <backend.app.models.AssetModel object at 0x10c09ae90>, <backend.app.models.AssetModel object at 0x10c099150>]
+2025-03-06 22:17:57,462 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:17:58,486 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:17:59,030 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:17:59,037 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Final result: [Asset(id=1, asset_type='AAPL', market_value=2828.88, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=837.3000000000001, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-06 22:17:59,037 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Endpoint result: [Asset(id=1, asset_type='AAPL', market_value=2828.88, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=837.3000000000001, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-06 22:17:59,038 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Entering /api/grouped_assets endpoint
+2025-03-06 22:17:59,040 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Raw assets from DB: [<backend.app.models.AssetModel object at 0x10c09bd30>, <backend.app.models.AssetModel object at 0x10c09a560>, <backend.app.models.AssetModel object at 0x10c098580>, <backend.app.models.AssetModel object at 0x10c09a650>, <backend.app.models.AssetModel object at 0x10c099b10>, <backend.app.models.AssetModel object at 0x10c09a7d0>, <backend.app.models.AssetModel object at 0x10c09b220>]
+2025-03-06 22:17:59,653 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 235.74, market_share: 12.0
+2025-03-06 22:18:00,314 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 1.0
+2025-03-06 22:18:00,899 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 279.1, market_share: 2.0
+2025-03-06 22:18:00,904 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Final result: [Asset(id=1, asset_type='AAPL', market_value=2828.88, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=837.3000000000001, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-06 22:18:00,904 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Endpoint result: [Asset(id=1, asset_type='AAPL', market_value=2828.88, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=837.3000000000001, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-11 22:10:17,304 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 222.52, market_share: 12.0
+2025-03-11 22:10:18,321 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 232.4411, market_share: 1.0
+2025-03-11 22:10:18,987 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 232.4411, market_share: 2.0
+2025-03-11 22:10:27,679 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.35 RMB
+
+Converting each value:
+1. AAPL USD 2670.24 → 19,225.73 RMB
+2. Gold RMB 100.0 → 100.00 RMB (already in RMB)
+3. Silver EUR 1000.0 → 7,800.00 RMB
+4. Silver CAD 10.0 → 53.50 RMB
+5. TSLA USD 232.4411 → 1,673.58 RMB
+6. Gold RMB 800.0 → 800.00 RMB (already in RMB)
+7. TSLA USD 464.8822 → 3,347.15 RMB
+
+Total sum in RMB = 32999.96 RMB
+2025-03-11 22:10:27,680 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-11 22:10:27,680 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 32999.96, Total credit: -1000.0
+2025-03-11 22:10:28,324 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 222.66, market_share: 12.0
+2025-03-11 22:10:28,952 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 232.34, market_share: 1.0
+2025-03-11 22:10:29,523 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 232.34, market_share: 2.0
+2025-03-11 22:10:35,725 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using approximate current exchange rates:
+
+USD to RMB: 1 USD ≈ 7.20 RMB
+EUR to RMB: 1 EUR ≈ 7.80 RMB
+CAD to RMB: 1 CAD ≈ 5.30 RMB
+
+Converting each value:
+AAPL USD 2671.92 → 19,237.82 RMB
+Gold RMB 100.0 → 100.0 RMB
+Silver EUR 1000.0 → 7,800.0 RMB
+Silver CAD 10.0 → 53.0 RMB
+TSLA USD 232.34 → 1,672.85 RMB
+Gold RMB 800.0 → 800.0 RMB
+TSLA USD 464.68 → 3,345.70 RMB
+
+Total sum in RMB = 33009.37 RMB
+2025-03-11 22:10:35,726 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-11 22:10:35,726 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 33009.37, Total credit: -1000.0
+2025-03-11 22:10:35,755 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Entering /api/grouped_assets endpoint
+2025-03-11 22:10:35,760 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Raw assets from DB: [<backend.app.models.AssetModel object at 0x10c0dd960>, <backend.app.models.AssetModel object at 0x10c0ddc60>, <backend.app.models.AssetModel object at 0x10c0ddcc0>, <backend.app.models.AssetModel object at 0x10c0ddcf0>, <backend.app.models.AssetModel object at 0x10c0ddd50>, <backend.app.models.AssetModel object at 0x10c0dde10>, <backend.app.models.AssetModel object at 0x10c0dde40>]
+2025-03-11 22:10:36,474 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 222.77, market_share: 12.0
+2025-03-11 22:10:37,105 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 233.0, market_share: 1.0
+2025-03-11 22:10:37,706 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 233.0342, market_share: 2.0
+2025-03-11 22:10:37,721 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Final result: [Asset(id=1, asset_type='AAPL', market_value=2673.2400000000002, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=699.0684, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-11 22:10:37,722 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Endpoint result: [Asset(id=1, asset_type='AAPL', market_value=2673.2400000000002, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=699.0684, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-11 22:10:37,722 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Entering /api/grouped_assets endpoint
+2025-03-11 22:10:37,723 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Raw assets from DB: [<backend.app.models.AssetModel object at 0x10c0ddea0>, <backend.app.models.AssetModel object at 0x10c0dd090>, <backend.app.models.AssetModel object at 0x10c0dd0c0>, <backend.app.models.AssetModel object at 0x10c0dd0f0>, <backend.app.models.AssetModel object at 0x10c0dd120>, <backend.app.models.AssetModel object at 0x10c0dd150>, <backend.app.models.AssetModel object at 0x10c0dd180>]
+2025-03-11 22:10:38,460 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 222.865, market_share: 12.0
+2025-03-11 22:10:39,110 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 233.0342, market_share: 1.0
+2025-03-11 22:10:39,791 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 233.08, market_share: 2.0
+2025-03-11 22:10:39,797 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Final result: [Asset(id=1, asset_type='AAPL', market_value=2674.38, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=699.1942, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-11 22:10:39,797 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Endpoint result: [Asset(id=1, asset_type='AAPL', market_value=2674.38, market_share=12.0, currency='USD', created_at='2025-02-23 22:01:52'), Asset(id=2, asset_type='Gold', market_value=900.0, market_share=None, currency='RMB', created_at='2025-02-23 22:02:37'), Asset(id=3, asset_type='Silver', market_value=1000.0, market_share=None, currency='EUR', created_at='2025-02-23 22:05:08'), Asset(id=4, asset_type='Silver', market_value=10.0, market_share=None, currency='CAD', created_at='2025-02-23 22:07:06'), Asset(id=5, asset_type='TSLA', market_value=699.1942, market_share=1.0, currency='USD', created_at='2025-02-23 22:07:40')]
+2025-03-11 22:10:48,728 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: AAPL, price: 222.8499, market_share: 12.0
+2025-03-11 22:10:49,596 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 232.8363, market_share: 1.0
+2025-03-11 22:10:50,440 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - INFO - asset_type: TSLA, price: 232.8363, market_share: 2.0
+2025-03-11 22:10:57,972 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message1: Let me help you convert and sum these values to RMB using current exchange rates.
+
+Using approximate current exchange rates:
+1 USD ≈ 7.20 RMB
+1 EUR ≈ 7.80 RMB
+1 CAD ≈ 5.30 RMB
+
+Converting each value:
+- AAPL USD 2674.1988 → 19,254.23 RMB
+- Gold RMB 100.0 → 100.00 RMB
+- Silver EUR 1000.0 → 7,800.00 RMB
+- Silver CAD 10.0 → 53.00 RMB
+- TSLA USD 232.8363 → 1,676.42 RMB
+- Gold RMB 800.0 → 800.00 RMB
+- TSLA USD 465.6726 → 3,352.84 RMB
+
+Total sum in RMB = 33036.49 RMB
+2025-03-11 22:10:57,972 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - message2: Since the input ['Credit RMB -1000.0'] already contains RMB currency, no conversion is needed.
+
+Total sum in RMB = -1000.0 RMB
+2025-03-11 22:10:57,972 - /Users/yingyao/Desktop/Code/GetHandsDirty/pfa/backend/app/main.py - DEBUG - Total assets: 33036.49, Total credit: -1000.0
