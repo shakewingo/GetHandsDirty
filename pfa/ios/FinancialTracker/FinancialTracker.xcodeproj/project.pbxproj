@@ -29,9 +29,22 @@
 		2C57CF822D8079A70076A2FD /* FinancialTrackerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FinancialTrackerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		2C57CFE32D85C0480076A2FD /* Exceptions for "FinancialTracker" folder in "FinancialTracker" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 2C57CF622D8079A60076A2FD /* FinancialTracker */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		2C57CF652D8079A60076A2FD /* FinancialTracker */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				2C57CFE32D85C0480076A2FD /* Exceptions for "FinancialTracker" folder in "FinancialTracker" target */,
+			);
 			path = FinancialTracker;
 			sourceTree = "<group>";
 		};

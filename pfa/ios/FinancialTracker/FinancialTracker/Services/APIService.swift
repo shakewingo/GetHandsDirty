@@ -26,9 +26,9 @@ enum APIError: Error {
 class APIService {
     static let shared = APIService()
     
-    private let baseURL = "http://localhost:8000/api"
+    // private let baseURL = "http://localhost:8000/api"
+    private let baseURL = "http://192.168.3.31:8000/api"
     // private let baseURL = "https://gethandsdirty.onrender.com/api"
-
     
     private init() {}
     

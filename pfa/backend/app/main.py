@@ -479,8 +479,9 @@ class FinancialParser:
 
 import os
 port = int(os.environ.get("PORT", 8000))
-# host = os.environ.get("HOST", "0.0.0.0")
-host = os.environ.get("HOST", "127.0.0.1")
+# Listen on all interfaces (0.0.0.0) to allow connections from other devices
+host = os.environ.get("HOST", "0.0.0.0")
+# host = os.environ.get("HOST", "127.0.0.1")  # This only allows connections from the same machine
 
 app = FastAPI(title="Financial Tracker API")
 parser = FinancialParser()
