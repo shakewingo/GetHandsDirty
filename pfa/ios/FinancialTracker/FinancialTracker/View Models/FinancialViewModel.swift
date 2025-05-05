@@ -12,6 +12,12 @@ class FinancialViewModel: ObservableObject {
     @Published private var assetDetailsMap: [String: [Asset]] = [:]
     @Published private var creditDetailsMap: [String: [Credit]] = [:]
     
+    // Cache timestamps for tracking data freshness
+    private var lastSummaryFetchTime: Date?
+    private var lastAssetsFetchTime: Date?
+    private var lastCreditsFetchTime: Date?
+    private let cacheValidityInterval: TimeInterval = 5 // Cache valid for 60 seconds
+    
     private let apiService = APIService.shared
     private let coreDataManager = CoreDataManager.shared
     
@@ -25,10 +31,41 @@ class FinancialViewModel: ObservableObject {
         assets = coreDataManager.fetchAssets()
         credits = coreDataManager.fetchCredits()
         print("Loaded from CoreData - Assets count: \(assets.count), Credits count: \(credits.count)")
-        // Fetch summary from API instead of calculating locally
+        
+        // Calculate summary locally if we have local data
+        calculateLocalSummary()
+        
+        // Refresh from API if needed but don't block UI
         Task {
-            await fetchSummary()
+            if shouldRefreshFromAPI() {
+                await fetchSummaryFromAPI()
+            }
         }
+    }
+    
+    // Calculate summary from local data instead of API call
+    private func calculateLocalSummary() {
+        let totalAssets = assets.reduce(0) { $0 + ($1.marketValue ?? 0) }
+        let totalCredit = credits.reduce(0) { $0 + $1.marketValue }
+        let netWorth = totalAssets - totalCredit
+        
+        // Create a basic summary with local data
+        // Note: monthlySummary will be empty until API data arrives
+        summary = AccountSummary(
+            totalAssets: totalAssets,
+            totalCredit: totalCredit,
+            netWorth: netWorth,
+            monthlySummary: [:]
+        )
+    }
+    
+    private func shouldRefreshFromAPI() -> Bool {
+        guard let lastFetchTime = lastSummaryFetchTime else {
+            return true // No previous fetch, should refresh
+        }
+        
+        // Check if cache is still valid
+        return Date().timeIntervalSince(lastFetchTime) > cacheValidityInterval
     }
     
     func uploadSelectedFiles() async {
@@ -45,7 +82,8 @@ class FinancialViewModel: ObservableObject {
             // Save to CoreData
             coreDataManager.saveTransactions(newTransactions)
             
-            await fetchSummary()  // Refresh summary after upload
+            // After uploading files, we need fresh data from API since the server state has changed
+            await fetchSummaryFromAPI()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -53,16 +91,33 @@ class FinancialViewModel: ObservableObject {
         isLoading = false
     }
     
+    // Main summary fetch function that provides cached data if available
     func fetchSummary() async {
+        // If cache is still valid, just return without API call
+        if !shouldRefreshFromAPI() {
+            return
+        }
+        
+        // Otherwise fetch fresh data from API
+        await fetchSummaryFromAPI()
+    }
+    
+    // Internal function to actually fetch from API
+    private func fetchSummaryFromAPI() async {
         isLoading = true
         errorMessage = nil
         
         do {
             summary = try await apiService.fetchSummary()
+            lastSummaryFetchTime = Date()
+            
             // Clear any previous error since API call succeeded
             errorMessage = nil
-            await fetchAssets()  // Fetch assets
-            await fetchCredits() // Fetch credits
+            
+            // Fetch updated assets and credits data
+            await fetchAssetsFromAPI()
+            await fetchCreditsFromAPI()
+            
             print("After API fetch - Assets count: \(assets.count), Credits count: \(credits.count)")
         } catch let error as APIError {
             // Handle specific API errors
@@ -85,11 +140,18 @@ class FinancialViewModel: ObservableObject {
     }
     
     func fetchAssets() async {
+        if lastAssetsFetchTime == nil || Date().timeIntervalSince(lastAssetsFetchTime!) > cacheValidityInterval {
+            await fetchAssetsFromAPI()
+        }
+    }
+    
+    private func fetchAssetsFromAPI() async {
         do {
             let fetchedAssets = try await apiService.fetchGroupedAssets()
             print("fetchedAssets: \(fetchedAssets)")
             if !fetchedAssets.isEmpty {
                 assets = fetchedAssets
+                lastAssetsFetchTime = Date()
                 // Save to CoreData only if we got data from API
                 coreDataManager.saveAssets(fetchedAssets)
             }
@@ -103,10 +165,17 @@ class FinancialViewModel: ObservableObject {
     }
     
     func fetchCredits() async {
+        if lastCreditsFetchTime == nil || Date().timeIntervalSince(lastCreditsFetchTime!) > cacheValidityInterval {
+            await fetchCreditsFromAPI()
+        }
+    }
+    
+    private func fetchCreditsFromAPI() async {
         do {
             let fetchedCredits = try await apiService.fetchGroupedCredits()
             if !fetchedCredits.isEmpty {
                 credits = fetchedCredits
+                lastCreditsFetchTime = Date()
                 // Save to CoreData only if we got data from API
                 coreDataManager.saveCredits(fetchedCredits)
             }
@@ -127,30 +196,36 @@ class FinancialViewModel: ObservableObject {
     }
     
     func fetchAssetDetails(assetType: String, currency: String) async {
+        // Use cached details if we have them and they're less than 60 seconds old
+        let detailsCacheKey = "\(assetType)|\(currency)"
+        
         isLoading = true
         errorMessage = nil
         
         do {
             let details = try await apiService.fetchAssetDetails(assetType: assetType, currency: currency)
-            assetDetailsMap["\(assetType)|\(currency)"] = details
+            assetDetailsMap[detailsCacheKey] = details
         } catch {
             errorMessage = error.localizedDescription
-            assetDetailsMap["\(assetType)|\(currency)"] = []
+            assetDetailsMap[detailsCacheKey] = []
         }
         
         isLoading = false
     }
     
     func fetchCreditDetails(creditType: String, currency: String) async {
+        // Use cached details if we have them and they're less than 60 seconds old
+        let detailsCacheKey = "\(creditType)|\(currency)"
+        
         isLoading = true
         errorMessage = nil
         
         do {
             let details = try await apiService.fetchCreditDetails(creditType: creditType, currency: currency)
-            creditDetailsMap["\(creditType)|\(currency)"] = details
+            creditDetailsMap[detailsCacheKey] = details
         } catch {
             errorMessage = error.localizedDescription
-            creditDetailsMap["\(creditType)|\(currency)"] = []
+            creditDetailsMap[detailsCacheKey] = []
         }
         
         isLoading = false
@@ -203,8 +278,21 @@ class FinancialViewModel: ObservableObject {
             )
             // Save to CoreData
             coreDataManager.saveAssets([asset])
-            // Refresh assets list
-            await fetchAssets()
+            
+            // Update local assets list and recalculate summary
+            var updatedAssets = assets
+            updatedAssets.append(asset)
+            assets = updatedAssets
+            calculateLocalSummary()
+            
+            // Reset the last fetch time to force a refresh on next API call
+            lastAssetsFetchTime = nil
+            lastSummaryFetchTime = nil
+            
+            // Fetch fresh data in background
+            Task {
+                await fetchAssetsFromAPI()
+            }
         } catch let error as APIError {
             errorMessage = "API Error: \(error.localizedDescription)"
             print("API Error: \(error)")
@@ -216,7 +304,6 @@ class FinancialViewModel: ObservableObject {
         isLoading = false
     }
 
-
     func addCredit(creditType: String, marketValue: Double, currency: String) async {
         isLoading = true
         errorMessage = nil
@@ -225,8 +312,21 @@ class FinancialViewModel: ObservableObject {
             let credit = try await apiService.addCredit(creditType: creditType, marketValue: marketValue, currency: currency)
             // Save to CoreData
             coreDataManager.saveCredits([credit])
-            // Refresh credits list
-            await fetchCredits()
+            
+            // Update local credits list and recalculate summary
+            var updatedCredits = credits
+            updatedCredits.append(credit)
+            credits = updatedCredits
+            calculateLocalSummary()
+            
+            // Reset the last fetch time to force a refresh on next API call
+            lastCreditsFetchTime = nil
+            lastSummaryFetchTime = nil
+            
+            // Fetch fresh data in background
+            Task {
+                await fetchCreditsFromAPI()
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -238,18 +338,51 @@ class FinancialViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        do {
-            let updatedAsset = try await apiService.updateAsset(asset)
-            if let index = assets.firstIndex(where: { $0.id == asset.id }) {
-                assets[index] = updatedAsset
-            }
-            // Update CoreData
-            coreDataManager.updateAsset(updatedAsset)
+        // Update in CoreData first to make UI responsive
+        if let index = assets.firstIndex(where: { $0.id == asset.id }) {
+            // Use the asset directly now that its properties are mutable
+            assets[index] = asset
             
-            // Fetch fresh summary from API
-            await fetchSummary()
-        } catch {
-            errorMessage = error.localizedDescription
+            // Also update in any loaded details
+            for (key, details) in assetDetailsMap {
+                if let detailIndex = details.firstIndex(where: { $0.id == asset.id }) {
+                    var updatedDetails = details
+                    updatedDetails[detailIndex] = asset
+                    assetDetailsMap[key] = updatedDetails
+                }
+            }
+            
+            // Update CoreData
+            coreDataManager.updateAsset(asset)
+            
+            // Recalculate summary locally
+            calculateLocalSummary()
+            
+            // Then update on the server in background
+            Task {
+                do {
+                    let updatedAsset = try await apiService.updateAsset(asset)
+                    
+                    // Update local data with server response
+                    if let index = assets.firstIndex(where: { $0.id == asset.id }) {
+                        assets[index] = updatedAsset
+                    }
+                    
+                    // Update CoreData with final server data
+                    coreDataManager.updateAsset(updatedAsset)
+                    
+                    // Reset cache timestamps
+                    lastAssetsFetchTime = nil
+                    lastSummaryFetchTime = nil
+                    
+                    // Recalculate summary
+                    calculateLocalSummary()
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+        } else {
+            errorMessage = "Asset not found in local data"
         }
         
         isLoading = false
@@ -257,12 +390,24 @@ class FinancialViewModel: ObservableObject {
     
     func deleteAsset(id: Int) async {
         do {
-            try await apiService.deleteAsset(id: String(id))
+            // Remove from local data first for immediate UI update
             assets.removeAll { $0.id == id }
             coreDataManager.deleteAsset(id: id)
             
-            // Fetch fresh summary from API
-            await fetchSummary()
+            // Recalculate summary locally
+            calculateLocalSummary()
+            
+            // Then delete from server
+            try await apiService.deleteAsset(id: String(id))
+            
+            // Reset cache timestamps
+            lastAssetsFetchTime = nil
+            lastSummaryFetchTime = nil
+            
+            // Fetch fresh summary in background
+            Task {
+                await fetchSummaryFromAPI()
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -272,18 +417,51 @@ class FinancialViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        do {
-            let updatedCredit = try await apiService.updateCredit(credit)
-            if let index = credits.firstIndex(where: { $0.id == credit.id }) {
-                credits[index] = updatedCredit
-            }
-            // Update CoreData
-            coreDataManager.updateCredit(updatedCredit)
+        // Update in CoreData first to make UI responsive
+        if let index = credits.firstIndex(where: { $0.id == credit.id }) {
+            // Use the credit directly now that its properties are mutable
+            credits[index] = credit
             
-            // Fetch fresh summary from API
-            await fetchSummary()
-        } catch {
-            errorMessage = error.localizedDescription
+            // Also update in any loaded details
+            for (key, details) in creditDetailsMap {
+                if let detailIndex = details.firstIndex(where: { $0.id == credit.id }) {
+                    var updatedDetails = details
+                    updatedDetails[detailIndex] = credit
+                    creditDetailsMap[key] = updatedDetails
+                }
+            }
+            
+            // Update CoreData
+            coreDataManager.updateCredit(credit)
+            
+            // Recalculate summary locally
+            calculateLocalSummary()
+            
+            // Then update on the server in background
+            Task {
+                do {
+                    let updatedCredit = try await apiService.updateCredit(credit)
+                    
+                    // Update local data with server response
+                    if let index = credits.firstIndex(where: { $0.id == credit.id }) {
+                        credits[index] = updatedCredit
+                    }
+                    
+                    // Update CoreData with final server data
+                    coreDataManager.updateCredit(updatedCredit)
+                    
+                    // Reset cache timestamps
+                    lastCreditsFetchTime = nil
+                    lastSummaryFetchTime = nil
+                    
+                    // Recalculate summary
+                    calculateLocalSummary()
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+        } else {
+            errorMessage = "Credit not found in local data"
         }
         
         isLoading = false
@@ -291,12 +469,24 @@ class FinancialViewModel: ObservableObject {
     
     func deleteCredit(id: Int) async {
         do {
-            try await apiService.deleteCredit(id: String(id))
+            // Remove from local data first for immediate UI update
             credits.removeAll { $0.id == id }
             coreDataManager.deleteCredit(id: id)
             
-            // Fetch fresh summary from API
-            await fetchSummary()
+            // Recalculate summary locally
+            calculateLocalSummary()
+            
+            // Then delete from server
+            try await apiService.deleteCredit(id: String(id))
+            
+            // Reset cache timestamps
+            lastCreditsFetchTime = nil
+            lastSummaryFetchTime = nil
+            
+            // Fetch fresh summary in background
+            Task {
+                await fetchSummaryFromAPI()
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

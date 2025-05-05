@@ -10,6 +10,7 @@ struct EditAssetView: View {
     @State private var marketValue: String
     @State private var marketShare: String
     @State private var currency: String
+    @State private var createdAt: String
     @State private var showAlert = false
     @State private var alertMessage = ""
     
@@ -22,6 +23,7 @@ struct EditAssetView: View {
         _marketValue = State(initialValue: asset.marketValue.map { String($0) } ?? "")
         _marketShare = State(initialValue: asset.marketShare.map { String($0) } ?? "")
         _currency = State(initialValue: asset.currency)
+        _createdAt = State(initialValue: asset.createdAt)
     }
     
     var body: some View {
@@ -43,6 +45,9 @@ struct EditAssetView: View {
                             Text(currency).tag(currency)
                         }
                     }
+                    
+                    TextField("Created Date (YYYY-MM-DD)", text: $createdAt)
+                        .keyboardType(.default)
                 }
                 
                 if !marketValue.isEmpty && !marketShare.isEmpty {
@@ -97,7 +102,7 @@ struct EditAssetView: View {
                 marketValue: marketValue.isEmpty ? nil : Double(marketValue),
                 marketShare: marketShare.isEmpty ? nil : Double(marketShare),
                 currency: currency,
-                createdAt: asset.createdAt
+                createdAt: createdAt
             )
             await viewModel.updateAsset(updatedAsset)
             dismiss()
@@ -114,7 +119,7 @@ struct EditAssetView: View {
             marketValue: 150.0,
             marketShare: nil,
             currency: "USD",
-            createdAt: ""
+            createdAt: "2023-01-01"
         )
     )
 } 

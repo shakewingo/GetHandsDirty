@@ -1,30 +1,3 @@
-
-cursor使用感受：新任务正确率很高，token长了以后后面容易越改越乱；最新3.5和hauki同样prompt差距蛮大的
-
-1. codebase太牛了, help me can all codes and debug example说一下
-2. explain structure：
-NavigationView
-└── ScrollView (main, vertical)
-    └── VStack (main container)
-        ├── VStack (summary section)
-        │   ├── HStack (Total Assets & Credits)
-        │   └── ValueItem (Net Assets)
-        │
-        ├── VStack (assets section)
-        │   └── LazyVStack (asset groups)
-        │       └── ScrollView (individual asset details when expanded)
-        │
-        └── VStack (credits section)
-            └── LazyVStack (credit groups)
-                └── ScrollView (individual credit details when expanded)
-3. checkpoint feature is great!! No need to worry about revert
-4. swipe action cannot be executed, so ask to redesign UI
-5. walkthough how LLM helps me publish app - answer product server url questions etc.
-
-
-
-
-
 # Steps to Publish Your iOS App to the Apple App Store
 
 Publishing your iOS app to the Apple App Store involves several steps. Here's a comprehensive guide to help you through the process:
@@ -166,4 +139,3 @@ TODO:
 Enter: Your privacy policy URL
 If you don't have one, you can create a simple one using a service like PrivacyPolicies.com and host it on your GitHub Pages site: "https://shakewingo.github.io/privacy-policy.html"
 5. review approval?
-6. change host/port to paras

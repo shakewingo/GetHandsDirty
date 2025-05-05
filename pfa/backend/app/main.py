@@ -160,7 +160,7 @@ class FinancialAnalyzer:
         Analyzing {assets_results} which represent its type, currency and value in the string:
         1) Based on currency e.g USD/EUR/RMB/CAD etc, converting the value to RMB based on the realtime exchange rate.
         2) Sum the converted value, and ensure your answer include the extract words: "Total sum in RMB = XXXX RMB" which XXXX is a number
-        If {assets_results} is empty, "Total sum in RMB = 0 RMB"
+        If list {assets_results} is empty, "Total sum in RMB = 0 RMB"
         """
         message1 = anthropic.messages.create(
             model=model,
@@ -176,7 +176,7 @@ class FinancialAnalyzer:
         Analyzing {credits_results} which represent its type, currency and value in the string:
         1) Based on currency e.g USD/EUR/RMB/CAD etc, converting the value to RMB based on the realtime exchange rate.
         2) Sum the converted value, and ensure your answer include the extract words: "Total sum in RMB = XXXX RMB" which XXXX is a number
-        If {credits_results} is empty, "Total sum in RMB = 0 RMB"
+        If list {credits_results} is empty, "Total sum in RMB = 0 RMB"
         """
         message2 = anthropic.messages.create(
             model=model,
@@ -187,14 +187,17 @@ class FinancialAnalyzer:
                 "content": prompt2
             }]
         )
+        logger.debug('messag1: %s', message1.content[0].text)
+        assets_value = message1.content[0].text.split('Total sum in RMB = ')[1].split(' RMB')[0]
+        logger.debug(f"assets_value: {assets_value}")
+        total_assets = float(assets_value.replace(',', ''))
 
-        match1 = re.search(r"Total sum in RMB = (-?\d+(?:\.\d+)?) RMB", message1.content[0].text)
-        total_assets = float(match1.group(1))
-        match2 = re.search(r"Total sum in RMB = (-?\d+(?:\.\d+)?) RMB", message2.content[0].text)
-        total_credit = float(match2.group(1))
-        logger.debug(f"message1: {message1.content[0].text}")
-        logger.debug(f"message2: {message2.content[0].text}")
-        logger.debug(f"Total assets: {total_assets}, Total credit: {total_credit}")
+        logger.info('messag2: %s', message2.content[0].text)
+        credits_value = message2.content[0].text.split('Total sum in RMB = ')[1].split(' RMB')[0]
+        logger.debug(f"credits_value: {credits_value}")
+        total_credit = float(credits_value.replace(',', ''))
+        logger.debug(f"total_assets: {total_assets}, total_credit: {total_credit}")
+
 
         return AccountSummary(
             total_assets=round(total_assets, 2),
@@ -206,22 +209,23 @@ class FinancialAnalyzer:
     @staticmethod
     def calculate_market_value(asset_type: str, market_share: float) -> float | None:
         """Calculate market value based on market share"""
-        try:
-            ticker = yf.Ticker(asset_type)
-            price = ticker.info.get('currentPrice')
-            if price is None:
-                price = ticker.info.get('regularMarketPrice')  # Try alternative price field
+        return 0
+        # try:
+        #     ticker = yf.Ticker(asset_type)
+        #     price = ticker.info.get('currentPrice')
+        #     if price is None:
+        #         price = ticker.info.get('regularMarketPrice')  # Try alternative price field
             
-            logger.info(f'asset_type: {asset_type}, price: {price}, market_share: {market_share}')
+        #     logger.info(f'asset_type: {asset_type}, price: {price}, market_share: {market_share}')
             
-            if price is None:
-                logger.error(f"Could not get price for {asset_type}")
-                return None
+        #     if price is None:
+        #         logger.error(f"Could not get price for {asset_type}, return 0")
+        #         return None
             
-            return price * market_share 
-        except Exception as e:
-            logger.error(f"Error calculating market value for {asset_type}: {e}")
-            return None
+        #     return price * market_share 
+        # except Exception as e:
+        #     logger.error(f"Error calculating market value for {asset_type}: {e}, return 0")
+        #     return None
 
     def get_assets(self, db: Session) -> List[Asset]:
         assets = db.query(AssetModel).all()
