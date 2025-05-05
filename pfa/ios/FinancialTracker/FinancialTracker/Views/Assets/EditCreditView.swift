@@ -7,6 +7,7 @@ struct EditCreditView: View {
     
     @State private var marketValue: String
     @State private var selectedCurrency: String
+    @State private var createdAt: String
     @State private var showingAlert = false
     @State private var alertMessage = ""
     @State private var isLoading = false
@@ -16,6 +17,7 @@ struct EditCreditView: View {
         self.credit = credit
         _marketValue = State(initialValue: String(credit.marketValue))
         _selectedCurrency = State(initialValue: credit.currency)
+        _createdAt = State(initialValue: credit.createdAt)
     }
     
     var body: some View {
@@ -37,8 +39,10 @@ struct EditCreditView: View {
                         Text("EUR").tag("EUR")
                         Text("RMB").tag("RMB")
                         Text("CAD").tag("CAD")
-
                     }
+                    
+                    TextField("Created Date (YYYY-MM-DD)", text: $createdAt)
+                        .keyboardType(.default)
                 }
             }
             .navigationTitle("Edit Credit")
@@ -81,7 +85,7 @@ struct EditCreditView: View {
                 creditType: credit.creditType,
                 marketValue: value,
                 currency: selectedCurrency,
-                createdAt: credit.createdAt
+                createdAt: createdAt
             )
             
             await viewModel.updateCredit(updatedCredit)
