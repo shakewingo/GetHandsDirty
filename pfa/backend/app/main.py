@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 import PyPDF2
 import yfinance as yf
+from curl_cffi import requests
 import pandas as pd
 from anthropic import Anthropic
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
@@ -209,23 +210,23 @@ class FinancialAnalyzer:
     @staticmethod
     def calculate_market_value(asset_type: str, market_share: float) -> float | None:
         """Calculate market value based on market share"""
-        return 0
-        # try:
-        #     ticker = yf.Ticker(asset_type)
-        #     price = ticker.info.get('currentPrice')
-        #     if price is None:
-        #         price = ticker.info.get('regularMarketPrice')  # Try alternative price field
+        try:
+            session = requests.Session(impersonate="chrome")
+            ticker = yf.Ticker(asset_type, session=session)
+            price = ticker.info.get('currentPrice')
+            if price is None:
+                price = ticker.info.get('regularMarketPrice')  # Try alternative price field
             
-        #     logger.info(f'asset_type: {asset_type}, price: {price}, market_share: {market_share}')
+            logger.info(f'asset_type: {asset_type}, price: {price}, market_share: {market_share}')
             
-        #     if price is None:
-        #         logger.error(f"Could not get price for {asset_type}, return 0")
-        #         return None
+            if price is None:
+                logger.error(f"Could not get price for {asset_type}, return 0")
+                return None
             
-        #     return price * market_share 
-        # except Exception as e:
-        #     logger.error(f"Error calculating market value for {asset_type}: {e}, return 0")
-        #     return None
+            return price * market_share 
+        except Exception as e:
+            logger.error(f"Error calculating market value for {asset_type}: {e}, return 0")
+            return 0
 
     def get_assets(self, db: Session) -> List[Asset]:
         assets = db.query(AssetModel).all()

@@ -122,17 +122,35 @@ class FinancialViewModel: ObservableObject {
         } catch let error as APIError {
             // Handle specific API errors
             switch error {
-            case .networkError(_):
-                // For network errors (like server not running), just load from CoreData silently
+            case .networkError(let underlyingError):
+                // For network errors, provide more context
+                print("Network error: \(underlyingError)")
+                
+                // Check if it's a connection error (server not running or unreachable)
+                if (underlyingError as NSError).code == NSURLErrorCannotConnectToHost ||
+                   (underlyingError as NSError).code == NSURLErrorNotConnectedToInternet ||
+                   (underlyingError as NSError).code == NSURLErrorTimedOut {
+                    errorMessage = "Cannot connect to the server. Please check your network connection and make sure the server is running."
+                    print("Server connection issue: \(underlyingError.localizedDescription)")
+                } else {
+                    // For other network errors, show a general message
+                    errorMessage = "Network error: \(underlyingError.localizedDescription)"
+                }
+                
+                // Still load from CoreData
+                loadFromCoreData()
+            case .invalidURL:
+                errorMessage = "API configuration error: Invalid URL"
                 loadFromCoreData()
             default:
                 // For other API errors, show the error message
-                errorMessage = error.localizedDescription
+                errorMessage = "API Error: \(error.localizedDescription)"
                 loadFromCoreData()
             }
         } catch {
             // For unexpected errors, show the error message
-            errorMessage = error.localizedDescription
+            errorMessage = "Unexpected error: \(error.localizedDescription)"
+            print("Unexpected fetch error: \(error)")
             loadFromCoreData()
         }
         

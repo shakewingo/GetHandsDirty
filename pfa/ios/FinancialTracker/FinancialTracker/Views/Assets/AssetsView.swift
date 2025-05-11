@@ -79,7 +79,6 @@ struct AssetsView: View {
                     HStack {
                         Button(action: {
                             Task {
-                                // Force refresh from API with explicit call
                                 await viewModel.fetchSummary()
                             }
                         }) {
@@ -114,9 +113,8 @@ struct AssetsView: View {
             .sheet(isPresented: $isShowingAddSheet, onDismiss: {
                 canPresentSheet = false
                 selectedAddType = nil
-                // No need to call fetchSummary here - the add methods already update the UI
-                // and trigger background refreshes
                 Task {
+                    await viewModel.fetchSummary()
                     try? await Task.sleep(nanoseconds: 300_000_000)
                     canPresentSheet = true
                 }
@@ -128,8 +126,7 @@ struct AssetsView: View {
                 }
             }
             .refreshable {
-                // Force refresh from API when user explicitly pulls to refresh
-                await viewModel.B()
+                await viewModel.fetchSummary()
             }
         }
         .onAppear {
@@ -313,8 +310,6 @@ struct AssetGroupRow: View {
         .sheet(isPresented: $showEditAssetSheet, onDismiss: {
             canPresentSheet = false
             selectedAsset = nil
-            // No need to call fetch methods here - the update methods 
-            // already update the UI immediately
             Task {
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 canPresentSheet = true
@@ -442,9 +437,7 @@ struct CreditGroupRow: View {
         .shadow(radius: 2)
         .fullScreenCover(item: $selectedCredit, onDismiss: {
             selectedCredit = nil
-            // We only need to refresh the credit details, no need to fetch all summary data
             Task {
-                // Use the group directly since it's already a non-optional property of the view
                 await viewModel.fetchCreditDetails(creditType: group.creditType, currency: group.currency)
             }
         }) { credit in

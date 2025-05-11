@@ -27,7 +27,7 @@ class APIService {
     static let shared = APIService()
     
     // private let baseURL = "http://localhost:8000/api"  // to test with simulator
-    // private let baseURL = "http://192.168.8.120:8000/api"   // to test with physical device using private ip address
+    // private let baseURL = "http://192.168.3.31:8000/api" // to test with physical device using private ip address
     private let baseURL = "https://gethandsdirty.onrender.com/api"  // to public
     
     private init() {}
