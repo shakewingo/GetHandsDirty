@@ -5,44 +5,50 @@ class CoreDataManager {
     static let shared = CoreDataManager()
     
     private init() {
-        // Print the database location
+        // Just print the database location for debugging, no manipulation here
         if let storeURL = persistentContainer.persistentStoreDescriptions.first?.url {
             print("CoreData database location: \(storeURL.path)")
-            
-            // If there's an existing store that needs migration, delete it
-            // This is a temporary solution for development - in production, you'd want to properly migrate data
-            if FileManager.default.fileExists(atPath: storeURL.path) {
-                do {
-                    try FileManager.default.removeItem(at: storeURL)
-                    print("Removed existing store due to model changes")
-                } catch {
-                    print("Error removing existing store: \(error)")
-                }
-            }
         }
     }
     
     lazy var persistentContainer: NSPersistentContainer = {
         let container = NSPersistentContainer(name: "FinancialTracker")
         
-        // Configure the persistent store description
+        // Configure the persistent store description for automatic migrations
         if let description = container.persistentStoreDescriptions.first {
             description.shouldMigrateStoreAutomatically = true
             description.shouldInferMappingModelAutomatically = true
+            
+            // Add options using the proper setOption method
+            description.setOption(FileProtectionType.complete as NSObject, forKey: NSPersistentStoreFileProtectionKey)
+            description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
         }
         
         container.loadPersistentStores { description, error in
             if let error = error {
                 print("Error loading persistent stores: \(error)")
-                // For development, if there's an error, we'll try to recover by deleting the store
-                if let storeURL = description.url {
+                
+                // Instead of immediately deleting, try recovery options
+                if let storeURL = description.url, FileManager.default.fileExists(atPath: storeURL.path) {
+                    // Create a backup of the problematic store
+                    let backupURL = storeURL.deletingLastPathComponent().appendingPathComponent("FinancialTracker-backup.sqlite")
                     do {
-                        try FileManager.default.removeItem(at: storeURL)
-                        print("Removed corrupted store")
-                        // Try loading again
+                        if FileManager.default.fileExists(atPath: backupURL.path) {
+                            try FileManager.default.removeItem(at: backupURL)
+                        }
+                        try FileManager.default.copyItem(at: storeURL, to: backupURL)
+                        print("Created backup of store at \(backupURL.path)")
+                        
+                        // Now attempt to remove and recreate the store
+                        try container.persistentStoreCoordinator.destroyPersistentStore(at: storeURL, ofType: description.type, options: description.options)
+                        print("Successfully destroyed corrupted store")
+                        
+                        // Try loading again with a fresh store
                         try container.persistentStoreCoordinator.addPersistentStore(ofType: description.type, configurationName: description.configuration, at: description.url, options: description.options)
+                        print("Successfully recreated store")
                     } catch {
-                        fatalError("Recovery failed: \(error)")
+                        // If all else fails, report the error but don't crash
+                        print("Recovery failed: \(error)")
                     }
                 }
             }
