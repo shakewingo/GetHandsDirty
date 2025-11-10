@@ -1,8 +1,0 @@
-/backend/.env
-/backend/venv/
-/backend/__pycache__/
-/ios/DerivedData/
-*.pyc
-.env
-*.xcuserstate
-*.log

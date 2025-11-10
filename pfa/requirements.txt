@@ -1,9 +1,0 @@
-anthropic
-pypdf2
-pandas
-python-dotenv
-fastapi
-python-multipart
-uvicorn
-sqlalchemy
-yfinance
