@@ -1,3 +1,7 @@
+"""
+Author: 
+Date: 25/11/16
+"""
 # Based on Karpathy's video "Let's build GPT"
 
 import torch
