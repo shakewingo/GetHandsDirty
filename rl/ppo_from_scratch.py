@@ -1,4 +1,7 @@
-# train generated text to be positive, if simliar to positive feedback, then should get high reward
+"""
+Author: 
+Date: 25/12/02
+"""
 from dataclasses import dataclass
 import random
 import torch
@@ -17,7 +20,7 @@ from transformers import (
 from trl.trainer import ppo_trainer
 
 
-class PromptDataset(Dataset):
+class PromptDataset(Dataset): 
     def __init__(self, prompts, tokenizer, apply_chat_template=True):
         self.prompts = prompts
         self.tokenizer = tokenizer
