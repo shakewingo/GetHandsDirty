@@ -1,4 +1,7 @@
-# %%
+"""
+Author: 
+Date: 25/12/16
+"""
 import math
 import random
 from typing import List, Optional, Tuple, Union
@@ -120,17 +123,19 @@ class Attention(nn.Module):
         self.rotary_emb = RotaryEmbedding(self.heads_dim)
         
         # multi-group transform
+        self.q_proj = nn.Linear(self.hidden_size, self.num_attention_heads * self.heads_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.heads_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.heads_dim, bias=config.attention_bias)
-
+        self.o_proj = nn.Linear(self.num_attention_heads * self.heads_dim, self.hidden_size, bias=config.attention_bias)
+    
     def forward(self, hidden_states, use_kv_cache=False):
         B, S, H = hidden_states.shape # H: heads_dim
         if use_kv_cache and self.eval(): # model.eval() is used to freeze model in inference phase only
             if self.k_cache is None:
-                q, k, v = hidden_states, self.k_proj(hidden_states), self.v_proj(hidden_states)
+                q, k, v = self.q_proj(hidden_states), self.k_proj(hidden_states), self.v_proj(hidden_states)
             else:
                 last_token = hidden_states[:, -1, :]
-                q = torch.cat((torch.zeros_like(hidden_states[:, :-1, :]), last_token), dim=1)
+                q = torch.cat((torch.zeros_like(hidden_states[:, :-1, :]), self.q_proj(last_token)), dim=1)
                 k = torch.cat((self.k_cache, self.k_proj(last_token)), dim=1)
                 v = torch.cat((self.v_cache, self.v_proj(last_token)), dim=1)
                 
@@ -139,7 +144,7 @@ class Attention(nn.Module):
                 self.register_buffer("k_cache", self.k_cache)
                 self.register_buffer("v_cache", self.v_cache)
         else:
-            q, k, v = hidden_states, self.k_proj(hidden_states), self.v_proj(hidden_states)
+            q, k, v = self.q_proj(hidden_states), self.k_proj(hidden_states), self.v_proj(hidden_states)
         q = q.view(B, S, self.num_attention_heads, self.heads_dim)
         k = k.view(B, S, self.num_key_value_heads, self.heads_dim)
         v = v.view(B, S, self.num_key_value_heads, self.heads_dim)
@@ -317,6 +322,7 @@ class LLMDataset(Dataset):
     def __getitem__(self, index: int):
         line = self.data[index]
         line = json.loads(line)
+        # text example: "<s><|im_start|>这篇文章的题目是：“旧金山公立图书馆取消罚款政策”。根据该新闻文章，旧金山市公立图书馆现在将取消罚款政策，使人们更容易获得知识并保证公平性。取消罚款政策将为学生和低收入家庭提供巨大帮助，并且不会影响图书馆的资金。旧金山市公立图书馆是美国第一个完全取消罚款的城市图书馆，赢得了全国媒体的赞誉和注意。旧金山市公立图书馆取消罚款政策的目的是什么？答案：目的是为了使人们更容易获得知识、保持公平，并帮助学生和低收入家庭。<|im_end|> <|im_start|>原始文章: 多年来，医学研究表明，过量饮酒会给健康带来危害。据调查，每年因酗酒导致死亡的人数高达数百万。研究人员表示，饮酒过量对身体器官的伤害主要包括肝脏、胰腺和大脑等。在美国，饮酒过量导致的损失和费用高达数百亿美元。因此，为了保持身体健康，建议避免酗酒。医学研究表明，过量饮酒对身体器官的伤害包括肝脏、胰腺和大脑等，而每年因酗酒导致死亡的人数高达数百万。为了避免饮酒过量造成的健康危害和经济损失，建议避免酗酒。<|im_end|></s>"
         text = self.tokenizer.bos_token + line['text'] + self.tokenizer.eos_token
         input_ids = self.tokenizer.encode(text)
         text_len = len(input_ids)
@@ -337,9 +343,11 @@ def count_parameters(model):
                 
 if __name__ == '__main__':
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
     tokenizer = AutoTokenizer.from_pretrained("./tokenizer")
-    tokenizer.bos_token = '<|im_start|>' # based on original pretrain data
-    tokenizer.eos_token = '<|im_end|>'
+    # tokenizer.bos_token = '<|im_start|>' # based on original pretrain data
+    # tokenizer.eos_token = '<|im_end|>'
 
     dataset = LLMDataset("./dataset/pretrain_hq.jsonl", tokenizer, max_seq_len=512)
     # print('Pretrain data sample: ')
@@ -355,9 +363,9 @@ if __name__ == '__main__':
     args = TrainingArguments(output_dir='./result', 
                         num_train_epochs=10, 
                         do_train=True, 
-                        per_device_train_batch_size=128,
+                        per_device_train_batch_size=128,#128
                         gradient_accumulation_steps=8,
-                        # max_steps=5,
+                        # max_steps=10,
                         logging_steps=100,
                         report_to='tensorboard',
                         save_total_limit=5,
@@ -378,10 +386,8 @@ if __name__ == '__main__':
     # eval result
     AutoConfig.register("custom_gpt", Config)
     AutoModelForCausalLM.register(Config, LLM)
-    reload_model = AutoModelForCausalLM.from_pretrained('./model')
+    reload_model = AutoModelForCausalLM.from_pretrained('./model').to(device)
     input_ids = [tokenizer.bos_token_id] + tokenizer.encode("1+1等于几?")
-    input_data = {'input_ids': torch.tensor(input_ids).unsqueeze(0), "labels":None} # unsqueeze(0) to insert a dim at index 0 for batch
-    input_data
-
+    input_data = {'input_ids': torch.tensor(input_ids, device=device).unsqueeze(0), "labels":None} # unsqueeze(0) to insert a dim at index 0 for batch
     for token in reload_model.generate(inputs=input_data, eos=tokenizer.eos_token_id, max_new_tokens=100, stream=False):
-        print(tokenizer.decode(token[0]))
+        print(tokenizer.decode(token[0])) 
