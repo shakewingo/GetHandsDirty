@@ -73,26 +73,26 @@ if __name__ == '__main__':
 
     AutoConfig.register("custom_gpt", Config)
     AutoModelForCausalLM.register(Config, LLM)
-    reload_model = AutoModelForCausalLM.from_pretrained('./model').to(device)
+    reload_model = AutoModelForCausalLM.from_pretrained('./sft/model').to(device)
     print(f"Loading model in device: {device}")
 
-    tokenizer = AutoTokenizer.from_pretrained("./tokenizer", use_fast=True)
+    tokenizer = AutoTokenizer.from_pretrained("./sft/tokenizer", use_fast=True)
     # tokenizer.bos_token = '<|im_start|>' # based on original pretrain data
     # tokenizer.eos_token = '<|im_end|>'
 
     # sample: {"conversations": [{"role": "user", "content": "请告诉我在中国古代的“四大发明”是什么？"}, {"role": "assistant", "content": "中国古代的“四大发明”是指造纸术、印刷术、火药和指南针。这四项发明对世界文明的发展产生了深远的影响：\n\n1. **造纸术**：据史书记载，东汉时期的蔡伦改进了造纸工艺，使得纸张的生产更加便捷、成本更低，质量也更加优良。这一发明极大地促进了文化的传播和保存。\n\n2. **印刷术**：中国古代的印刷术最早可以追溯到唐代的雕版印刷，到了宋代发展出了活字印刷技术。印刷术的发明极大地促进了知识的传播，降低了书籍的成本，对教育和文化的发展起到了重要的推动作用。\n\n3. **火药**：火药最初是在唐代被发现的，最初可能用于医疗或炼金术。到了宋代，人们开始将火药用于军事目的，发明了各种火器。火药的发明改变了战争的面貌，对世界军事技术的发展产生了重大影响。\n\n4. **指南针**：指南针最初在中国被用于风水测量，后来逐渐发展成为航海导航的重要工具。这一发明极大地促进了海上航行技术的发展，对于新航路的开辟和世界地理大发现起到了关键作用。\n\n这四项发明不仅在中国历史上占有重要地位，而且对全世界的科技进步和文明发展都产生了深远的影响。"}]}
-    sft_dataset = SFTDataset('./dataset/sft_mini_512_sub.jsonl', tokenizer=tokenizer, max_seq_len=512)
+    sft_dataset = SFTDataset('./sft/dataset/sft_mini_512_sub.jsonl', tokenizer=tokenizer, max_seq_len=512)
     # print('SFT data sample: ')
     # print(tokenizer.decode(sft_dataset[1]['input_ids']))
     # print(tokenizer.decode(sft_dataset[1]['labels']))
 
     data_collator = DefaultDataCollator()
-    args = TrainingArguments(output_dir='./result/sft', 
+    args = TrainingArguments(output_dir='./sft/esult/sft', 
                             num_train_epochs=3,
                             do_train=True, 
-                            per_device_train_batch_size=64,#64
+                            per_device_train_batch_size=2,#64
                             gradient_accumulation_steps=8,
-                            # max_steps=100,
+                            max_steps=100,
                             logging_steps=100, #100
                             report_to='tensorboard',
                             save_total_limit=5,
@@ -105,13 +105,13 @@ if __name__ == '__main__':
     print(f"Trainer will use device: {args.device}")   
     trainer = Trainer (model=reload_model, args=args, train_dataset=sft_dataset, processing_class=tokenizer, data_collator=data_collator)
     trainer.train(resume_from_checkpoint=False)  # resume_from_checkpoint=True meanings same training process, if you interrupt last time you can continue on the last checkpoint, but not for a new traninig like SFT
-    trainer.save_model('./model/sft')
+    trainer.save_model('./sft/model/sft')
     trainer.save_state()
 
     # eval result
     AutoConfig.register("custom_gpt", Config)
     AutoModelForCausalLM.register(Config, LLM)
-    reload_model = AutoModelForCausalLM.from_pretrained('./model/sft').to(device)
+    reload_model = AutoModelForCausalLM.from_pretrained('./sft/model/sft').to(device)
     query = "1+1等于多少？"
     input = f'<s>user\n{query}</s>\n<s>assistant\n'
     input_ids = tokenizer.encode(input)

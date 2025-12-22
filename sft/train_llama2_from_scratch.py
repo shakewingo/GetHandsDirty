@@ -222,6 +222,7 @@ class DecoderLayer(nn.Module):
 
 class LLM(PreTrainedModel):
     config_class = Config  # for later on: AutoModelForCausalLM.register(Config, LLM)
+    
     def __init__(self, config):
         super().__init__(config)
         self.vocat_size = self.config.vocab_size
@@ -234,7 +235,6 @@ class LLM(PreTrainedModel):
         self.layernorm = RMSNorm(self.config.hidden_size)
         self.output = nn.Linear(self.config.hidden_size, self.config.vocab_size, bias=False) # each token generated's shape is (hidden_size, vocab_size)
         self.apply(self._init_weights) 
-        self.loss = None 
 
         # TODO: have no idea why it looks like this, looks so hacky - explained by GPT: 
         # the loop over self.named_parameters() looks for tensor names ending with w3.weight (the MLP’s down-projection in a SwiGLU block) 
@@ -259,15 +259,22 @@ class LLM(PreTrainedModel):
             hidden_states = layer(hidden_states, use_kv_cache=use_kv_cache)  
         hidden_states = self.layernorm(hidden_states) 
 
-        if labels is not None:
-            logits = self.output(hidden_states)  
-            self.loss = F.cross_entropy(logits.view(-1, logits.size(-1)), labels.view(-1), ignore_index=0) 
+        if labels is None:
+            logits = self.output(hidden_states[:, [-1], :])  # [B, 1, V]
+            loss = None
         else:
-            # for inference
-            logits = self.output(hidden_states[:, [-1], :])    
-            self.loss = None  
+            # During training, compute full sequence logits
+            logits = self.output(hidden_states)  # [B, S, V]
+            # Shift logits and labels for next-token prediction
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            loss = F.cross_entropy(
+                shift_logits.reshape(-1, shift_logits.size(-1)),
+                shift_labels.reshape(-1),
+                ignore_index=0
+            )
         
-        return CausalLMOutputWithPast(self.loss, logits) # meaning can call LLM().loss, LLM.logits directly
+        return CausalLMOutputWithPast(loss, logits)
     
     @torch.inference_mode
     def generate(self, inputs, eos, max_new_tokens, temperature=0.7, top_k=None, stream=True, repetition_penalty=1.,
@@ -345,11 +352,11 @@ if __name__ == '__main__':
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    tokenizer = AutoTokenizer.from_pretrained("./tokenizer")
+    tokenizer = AutoTokenizer.from_pretrained("./sft/tokenizer")
     # tokenizer.bos_token = '<|im_start|>' # based on original pretrain data
     # tokenizer.eos_token = '<|im_end|>'
 
-    dataset = LLMDataset("./dataset/pretrain_hq.jsonl", tokenizer, max_seq_len=512)
+    dataset = LLMDataset("./sft/dataset/pretrain_hq.jsonl", tokenizer, max_seq_len=512)
     # print('Pretrain data sample: ')
     # print(tokenizer.decode(dataset[1]['input_ids']))
     # print(tokenizer.decode(dataset[1]['labels']))
@@ -360,7 +367,7 @@ if __name__ == '__main__':
     params_num = count_parameters(model)
     print(f'params_num: {params_num}')
 
-    args = TrainingArguments(output_dir='./result', 
+    args = TrainingArguments(output_dir='./sft/result', 
                         num_train_epochs=10, 
                         do_train=True, 
                         per_device_train_batch_size=128,#128
@@ -380,13 +387,13 @@ if __name__ == '__main__':
     trainer = Trainer(model=model, args=args, train_dataset=dataset, processing_class=tokenizer, data_collator=data_collator)
     trainer.train(resume_from_checkpoint=False)
 
-    trainer.save_model('./model')
+    trainer.save_model('./sft/model')
     trainer.save_state()
 
     # eval result
     AutoConfig.register("custom_gpt", Config)
     AutoModelForCausalLM.register(Config, LLM)
-    reload_model = AutoModelForCausalLM.from_pretrained('./model').to(device)
+    reload_model = AutoModelForCausalLM.from_pretrained('./sft/model').to(device)
     input_ids = [tokenizer.bos_token_id] + tokenizer.encode("1+1等于几?")
     input_data = {'input_ids': torch.tensor(input_ids, device=device).unsqueeze(0), "labels":None} # unsqueeze(0) to insert a dim at index 0 for batch
     for token in reload_model.generate(inputs=input_data, eos=tokenizer.eos_token_id, max_new_tokens=100, stream=False):
