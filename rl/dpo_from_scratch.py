@@ -23,85 +23,110 @@ from transformers import Trainer, TrainingArguments, AutoModelForCausalLM, AutoT
 from sft.train_llama2_from_scratch import Config, LLM
 
 class DPODataset(Dataset):
-    def __init__(self, data_path, tokenizer, max_seq_len):
+    def __init__(self, data_path, tokenizer):
         super().__init__()
         self.data_path = data_path
         self.tokenizer = tokenizer
         self.tokenizer.pad_token = '<pad>'
         self.bos_id = tokenizer(f'{tokenizer.bos_token}assistant', add_special_tokens=False).input_ids
         self.eos_id = tokenizer(f'{tokenizer.eos_token}', add_special_tokens=False).input_ids
-        self.max_seq_len = max_seq_len
         
         with open(self.data_path, 'r', encoding='utf-8') as f:
-            self.datas= []
-            for line in f:
-                line = line.strip()
-                obj = json.loads(line)
-                self.datas.append(obj)
-        
+            self.datas = [json.loads(line) for line in f]
+
     def __getitem__(self, index):
-        item = self.datas[index]
-        chosen = item['chosen']  
-        rejected = item['rejected']
-
-        chosen_prompt = self.tokenizer.apply_chat_template(
-            chosen, tokenize=False, add_generation_prompt=False
-        ) # {"content":"continue","role":"user"},
-
-        rejected_prompt = self.tokenizer.apply_chat_template(
-            rejected, tokenize=False, add_generation_prompt=False
-        ) # {"content":"continue","role":"user"},
-        chosen_encoding = self.tokenizer(
-            chosen_prompt, truncation=True, max_length=self.max_seq_len, padding='max_length'
-        ) # encoded: {"content":"As Recharge Retreats grows, we plan to expand our team with additional event coordinators and marketing specialists. 
-        rejected_encoding = self.tokenizer(
-            rejected_prompt, truncation=True, max_length=self.max_seq_len, padding='max_length'
-        ) # encoded: {"content":"With Recharge Retreats grows, 
-
-        chosen_input_ids = chosen_encoding['input_ids']
-        chosen_loss_mask = self._generate_loss_mask(chosen_input_ids)
-        rejected_input_ids = rejected_encoding['input_ids']
-        rejected_loss_mask = self._generate_loss_mask(rejected_input_ids)
-
-        x_chosen = torch.tensor(chosen_input_ids[:-1], dtype=torch.long)
-        y_chosen = torch.tensor(chosen_input_ids[1:], dtype=torch.long)
-        mask_chosen = torch.tensor(chosen_loss_mask[1:], dtype=torch.long)
-        y_chosen = y_chosen * mask_chosen
-
-        x_rejected = torch.tensor(rejected_input_ids[:-1], dtype=torch.long)
-        y_rejected = torch.tensor(rejected_input_ids[1:], dtype=torch.long)
-        mask_rejected = torch.tensor(rejected_loss_mask[1:], dtype=torch.long)
-        y_rejected = y_rejected * mask_rejected
-
-        input_ids = torch.cat([x_chosen, x_rejected], dim=0) # concentrate chosen and reject to be one single tensor
-        labels = torch.cat([y_chosen, y_rejected], dim=0)
-        
-        return {
-            'input_ids': input_ids,
-            'labels': labels,
-        }
-        
-
-    def _generate_loss_mask(self, input_ids):
-        loss_mask = [0] * len(input_ids)
-        i = 0
-        while i < len(input_ids):
-            if input_ids[i:i + len(self.bos_id)] == self.bos_id:
-                start = i + len(self.bos_id)
-                end = start
-                while end < len(input_ids):
-                    if input_ids[end:end + len(self.eos_id)] == self.eos_id:
-                        break
-                    end += 1
-                for j in range(start + 1, min(end + len(self.eos_id) + 1, self.max_seq_len)):
-                    loss_mask[j] = 1
-                i = end + len(self.eos_id) if end < len(input_ids) else len(input_ids)
-            else:
-                i += 1
-        return loss_mask
-
+        sample = self.datas[index]
+        prompt = sample['chosen'][0]['content']
+        chosen = sample['chosen'][1]['content']
+        rejected = sample['rejected'][1]['content']
+        messages = [
+            {"role": "user", "content": prompt}
+        ]
+        text = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+        prompt_inputs = self.tokenizer(text=text)['input_ids']
+        rejected_inputs = self.tokenizer(text=rejected)['input_ids'] + [self.tokenizer.eos_token_id]
+        chosen_inputs = self.tokenizer(text=chosen)['input_ids'] + [self.tokenizer.eos_token_id]
+        return [prompt_inputs, chosen_inputs, rejected_inputs]
+    
     def __len__(self):
         return len(self.datas)
+    
+
+class DPODataCollator:
+    def __init__(self, tokenizer, max_seq_len):
+        self.tokenizer = tokenizer
+        self.max_seq_len = max_seq_len
+    def __call__(self, features):
+        inputs_ids = []
+        labels = []
+        
+        for feature in features:
+            inputs_ids.append(feature[0] + feature[1])
+            labels.append([0]*len(feature[0]) + feature[1])
+        for feature in features:
+            inputs_ids.append(feature[0] + feature[2])
+            labels.append([0]*len(feature[0]) + feature[2])
+
+        # input_ids: List[[chose_complete_1], [chose_complete_1], [reject_complete_1], [reject_complete_2]]   
+        def process(inputs_ids, labels):
+            inputs_ids = [input_ids[:self.max_seq_len] for input_ids in inputs_ids]
+            labels = [label[:self.max_seq_len] for label in labels]
+            max_len = max([len(input_ids) for input_ids in inputs_ids])
+            batch_input_ids = []
+            batch_labels = []
+            
+            for input_ids, label in zip(inputs_ids, labels):
+                if len(input_ids) <= max_len:
+                    input_ids = input_ids+[0]*(max_len-len(input_ids))
+                    label = label+[0]*(max_len-len(label))
+                    batch_input_ids.append(input_ids[:-1])
+                    batch_labels.append(label[1:])
+            return batch_input_ids, batch_labels
+        
+        inputs_ids, labels = process(inputs_ids, labels)
+        
+        return {
+            "input_ids": torch.tensor(inputs_ids),
+            "labels": torch.tensor(labels)
+            }
+        
+
+def logits_to_probs(logits, labels):
+    # logits shape: (batch_size, seq_len, vocab_size)
+    # labels shape: (batch_size, seq_len)
+    # probs shape: (batch_size, seq_len)
+    log_probs = F.log_softmax(logits, dim=2)
+    probs = torch.gather(log_probs, dim=2, index=labels.unsqueeze(2)).squeeze(-1)
+    return probs
+
+def mask_logits(logits, labels):
+    # logits shape: (batch_size, seq_len, vocab_size)
+    # labels_masks shape: (batch_size, seq_len)
+    new_logits = []
+    for logit, label in zip(logits, labels):
+        new_logits.append(logit[label != 0].sum().unsqueeze(0))
+    
+    return new_logits
+
+
+def dpo_loss(ref_probs, probs, beta):
+    def split_probs(probs):
+        len_chosen = int(len(probs) // 2)
+        chosen_data = probs[:len_chosen]
+        reject_data = probs[len_chosen:]
+        return torch.cat(chosen_data), torch.cat(reject_data)
+    
+    ref_chosen_probs, ref_reject_probs = split_probs(ref_probs)
+    chosen_probs, reject_probs = split_probs(probs)
+    pi_logratios = chosen_probs - reject_probs
+    ref_logratios = ref_chosen_probs - ref_reject_probs
+    logits = pi_logratios - ref_logratios
+    loss = -F.logsigmoid(beta*logits)
+    return loss.mean()
     
 
 class DPOTrainer(Trainer):
@@ -110,24 +135,33 @@ class DPOTrainer(Trainer):
         self.ref_model = ref_model.to(model.device).eval() if ref_model is not None else model.to(model.device).eval()
         super().__init__(model, args, **kwargs)
 
+    # def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+    #     input_ids = inputs['input_ids']
+    #     labels = inputs['labels']
+    #     with torch.no_grad():
+    #         ref_logits = ref_model(input_ids=input_ids, labels = labels).logits
+    #     ref_probs = logits_to_probs(ref_logits, labels)
+    #     ref_probs = mask_logits(ref_probs, labels)
+    #     logits = model(input_ids=input_ids, labels = labels).logits
+    #     probs = logits_to_probs(logits, labels)
+    #     probs = mask_logits(probs, labels)
+    #     loss = dpo_loss(ref_probs, probs, 0.1)
+    #     return loss
+
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         input_ids = inputs['input_ids'] # (B, S)
         labels = inputs['labels']
-        len_chosen = int(input_ids.shape[-1] // 2)
-        chosen_input_ids = input_ids[:, :len_chosen]
-        reject_input_ids = input_ids[:, len_chosen:]
-        chosen_labels = labels[:, :len_chosen]
-        reject_labels = labels[:, len_chosen:]
+        probs, ref_probs = DPOTrainer.calculate_logprobs(model, self.ref_model, input_ids, labels)
 
-        chosen_probs, chosen_ref_probs = self.calculate_logprobs(model, self.ref_model, chosen_input_ids, chosen_labels)
-        reject_probs, reject_ref_probs = self.calculate_logprobs(model, self.ref_model, reject_input_ids, reject_labels)
+        len_chosen = int(len(probs) // 2)
+        chosen_probs = torch.cat(probs[:len_chosen])
+        reject_probs = torch.cat(probs[len_chosen:])
+        chosen_ref_probs = torch.cat(ref_probs[:len_chosen])
+        reject_ref_probs = torch.cat(ref_probs[len_chosen:])
 
         chosen_logratios = chosen_probs - chosen_ref_probs
         reject_logratios = reject_probs - reject_ref_probs
         logits = chosen_logratios - reject_logratios
-
-        #  Add numerical stability
-        # logits = torch.clamp(logits, min=-10.0, max=10.0)
 
         loss = -F.logsigmoid(self.beta * logits)
         # print(f'loss: {loss.mean()}')
@@ -139,7 +173,7 @@ class DPOTrainer(Trainer):
         new_logits = []
         for logit, label in zip(logits, labels):
             new_logits.append(logit[label != 0].sum().unsqueeze(0)) # sum() is because each token's prob is log prob, so multiple of prob => sum of log prob
-        return torch.concat(new_logits, dim=0) # (B)
+        return new_logits # (B)
     
     @staticmethod
     def calculate_logprobs(model, ref_model, input_ids, labels):
@@ -150,7 +184,8 @@ class DPOTrainer(Trainer):
         
         with torch.no_grad():
             ref_logits = ref_model.forward(input_ids=input_ids, labels=labels).logits
-        ref_probs = F.log_softmax(ref_logits, dim=-1)
+        ref_probs = F.log_softmax(ref_logits, dim=-1) # (B, S, V)
+        ref_probs = torch.gather(ref_probs, dim=-1, index=labels.unsqueeze(-1)).squeeze(-1)
         ref_probs = DPOTrainer.mask_logits(ref_probs, labels)
         return probs, ref_probs
     
@@ -170,10 +205,10 @@ if __name__ == "__main__":
     args = TrainingArguments(output_dir='./sft/result/dpo', 
                             num_train_epochs=1,
                             do_train=True, 
-                            per_device_train_batch_size=16, # 16
+                            per_device_train_batch_size=4, # 16
                             gradient_accumulation_steps=4,
-                            # max_steps=100,
-                            logging_steps=50, # 50
+                            max_steps=10,
+                            logging_steps=5, # 50
                             report_to='tensorboard',
                             save_total_limit=3,
                             bf16=True,
@@ -183,9 +218,8 @@ if __name__ == "__main__":
                             dataloader_pin_memory=True,
                             save_safetensors=False,
                             save_steps=100)          
-    dpo_dataset = DPODataset('./sft/dataset/dpo.jsonl', tokenizer=tokenizer, max_seq_len=1024)
-    dpo_dataset[0]
-    data_collator = DefaultDataCollator()
+    dpo_dataset = DPODataset('./sft/dataset/dpo.jsonl', tokenizer=tokenizer)
+    data_collator = DPODataCollator(tokenizer=tokenizer, max_seq_len=1024)
     trainer = DPOTrainer(model=model, args=args, train_dataset=dpo_dataset, processing_class=tokenizer, data_collator=data_collator, beta=0.1, ref_model=ref_model)
     # trainer = DPOTrainer(model=model, args=args, train_dataset=dpo_dataset, tokenizer=tokenizer, data_collator=data_collator, ref_model=ref_model)
     trainer.train(resume_from_checkpoint=False)
