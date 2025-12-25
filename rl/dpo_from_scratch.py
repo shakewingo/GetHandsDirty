@@ -206,7 +206,7 @@ if __name__ == "__main__":
                             num_train_epochs=1,
                             do_train=True, 
                             per_device_train_batch_size=4, # 16
-                            gradient_accumulation_steps=4,
+                            gradient_accumulation_steps=4, # $$\text{Effective Batch Size} = \text{Batch Size per GPU} \times \text{Gradient Accumulation Steps} \times \text{Number of GPUs}$$
                             max_steps=10,
                             logging_steps=5, # 50
                             report_to='tensorboard',
