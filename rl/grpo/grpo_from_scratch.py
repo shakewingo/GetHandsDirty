@@ -52,7 +52,9 @@ class GSM8KDataset(Dataset):
 # %%
 args = TrainingArguments()
 writer = SummaryWriter("./grpo/result/runs")
-tokenizer = AutoTokenizer.from_pretrained('Qwen/Qwen2.5-1.5B-Instruct', fix_mistral_regex=True) # Added leading slash
+
+# found that 0.5B really can't learn.. anything not even like format, so changed to 1.5B
+tokenizer = AutoTokenizer.from_pretrained('Qwen/Qwen2.5-1.5B-Instruct', fix_mistral_regex=True)
 policy_model = AutoModelForCausalLM.from_pretrained('Qwen/Qwen2.5-1.5B-Instruct', fix_mistral_regex=True)
 
 # %%
