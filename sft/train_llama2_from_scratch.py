@@ -236,7 +236,7 @@ class LLM(PreTrainedModel):
         self.output = nn.Linear(self.config.hidden_size, self.config.vocab_size, bias=False) # each token generated's shape is (hidden_size, vocab_size)
         self.apply(self._init_weights) 
 
-        # TODO: have no idea why it looks like this, looks so hacky - explained by GPT: 
+        # TODO: Have no idea why it looks like this, looks so hacky - explained by GPT: 
         # the loop over self.named_parameters() looks for tensor names ending with w3.weight (the MLP’s down-projection in a SwiGLU block) 
         # or wo.weight (the attention output projection) and rescales them with a smaller std, 0.02 / sqrt(2 * n_layers), to match the RMSNorm-residual scaling used in LLaMA-style models.
         for pn, p in self.named_parameters():
