@@ -105,8 +105,6 @@ def compute_approx_kl(
 
 
 def compute_reward(kl, r, action_mask, kl_ctl, clip_reward_value):
-    # TODO: Don't understand the reason behind?
-
     kl_divergence_estimate = -kl_ctl * kl
     reward = kl_divergence_estimate
 
