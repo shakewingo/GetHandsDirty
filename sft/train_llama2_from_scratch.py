@@ -164,7 +164,7 @@ class Attention(nn.Module):
             # q*k/sqrt(self.head_dim)*v  （b, self.num_heads, s, s）* (b, self.num_heads, s, self.head_dim) = b, self.num_heads, s, self.head_dim
             output = F.scaled_dot_product_attention(q, k, v, attn_mask=None, 
                                                     dropout_p=self.dropout_prob if self.training else 0.0, 
-                                                    is_causal=self.is_causal) 
+                                                    is_causal=self.is_causal)  # TODO: not using attn_mask may cause some issue
         else:
             # Create causal mask on the SAME device as q/k (fixes mps:0 vs cpu)
             # Shape: (1, 1, S, S) so it broadcasts over (B, NUM_H, S, S)
@@ -336,7 +336,7 @@ class LLMDataset(Dataset):
         if text_len > self.max_seq_len:
             input_ids = input_ids[:self.max_seq_len]
         else:
-            input_ids = input_ids + [0] * (self.max_seq_len - text_len)
+            input_ids = input_ids + [self.tokenizer.pad_token_id] * (self.max_seq_len - text_len)
         input_ids = np.array(input_ids)
         X = np.array(input_ids[:-1]).astype(np.int64)
         Y = np.array(input_ids[1:]).astype(np.int64)

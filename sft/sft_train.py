@@ -18,14 +18,15 @@ from transformers import PreTrainedModel
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers import PretrainedConfig
 from transformers import Trainer, TrainingArguments, AutoModelForCausalLM, AutoTokenizer, DefaultDataCollator, DataCollatorForTokenClassification, AutoConfig
-from train_llama2_from_scratch import Config, LLM
+from sft.train_llama2_from_scratch import Config, LLM
 
 class SFTDataset(Dataset):
-    def __init__(self, data_path, tokenizer, max_seq_len):
+    def __init__(self, data_path, tokenizer, max_seq_len, include_attention_mask=False):
         super().__init__()
         self.data_path = data_path
         self.tokenizer = tokenizer
         self.max_seq_len = max_seq_len
+        self.include_attention_mask = include_attention_mask
         
         with open(self.data_path, 'r', encoding='utf-8') as f:
             self.data = f.readlines() # 几千万条数据
@@ -54,18 +55,21 @@ class SFTDataset(Dataset):
         prompt_input_ids = self.tokenizer.encode(prompt)
         answer_input_ids = self.tokenizer.encode(answer)
         input_ids = prompt_input_ids + answer_input_ids
-        labels = [0] * len(prompt_input_ids) + answer_input_ids # the easiest way to not compute loss for prompts
+        labels = [-100] * len(prompt_input_ids) + answer_input_ids # -100 is because CrossEntropyLoss's default ignore_index is -100
+        attention_mask = [1] * len(input_ids)
         text_len = len(input_ids)
         if text_len > self.max_seq_len:
             input_ids = input_ids[:self.max_seq_len]
             labels = labels[:self.max_seq_len]
+            attention_mask = attention_mask[:self.max_seq_len]
         else:
-            input_ids = input_ids + [0] * (self.max_seq_len - text_len)
-            labels = labels + [0] * (self.max_seq_len - text_len)
-        
-        input_ids = input_ids[:-1]
-        labels = labels[1:]
-        return {'input_ids': torch.tensor(input_ids), 'labels': torch.tensor(labels)}
+            input_ids = input_ids + [self.tokenizer.pad_token_id] * (self.max_seq_len - text_len)
+            labels = labels + [-100] * (self.max_seq_len - text_len)
+            attention_mask = attention_mask + [0] * (self.max_seq_len - text_len)
+        if self.include_attention_mask:
+            return {'input_ids': torch.tensor(input_ids), 'labels': torch.tensor(labels), 'attention_mask': torch.tensor(attention_mask)}
+        else:
+            return {'input_ids': torch.tensor(input_ids), 'labels': torch.tensor(labels)}
     
 if __name__ == '__main__':
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -81,7 +85,7 @@ if __name__ == '__main__':
     # tokenizer.eos_token = '<|im_end|>'
 
     # sample: {"conversations": [{"role": "user", "content": "请告诉我在中国古代的“四大发明”是什么？"}, {"role": "assistant", "content": "中国古代的“四大发明”是指造纸术、印刷术、火药和指南针。这四项发明对世界文明的发展产生了深远的影响：\n\n1. **造纸术**：据史书记载，东汉时期的蔡伦改进了造纸工艺，使得纸张的生产更加便捷、成本更低，质量也更加优良。这一发明极大地促进了文化的传播和保存。\n\n2. **印刷术**：中国古代的印刷术最早可以追溯到唐代的雕版印刷，到了宋代发展出了活字印刷技术。印刷术的发明极大地促进了知识的传播，降低了书籍的成本，对教育和文化的发展起到了重要的推动作用。\n\n3. **火药**：火药最初是在唐代被发现的，最初可能用于医疗或炼金术。到了宋代，人们开始将火药用于军事目的，发明了各种火器。火药的发明改变了战争的面貌，对世界军事技术的发展产生了重大影响。\n\n4. **指南针**：指南针最初在中国被用于风水测量，后来逐渐发展成为航海导航的重要工具。这一发明极大地促进了海上航行技术的发展，对于新航路的开辟和世界地理大发现起到了关键作用。\n\n这四项发明不仅在中国历史上占有重要地位，而且对全世界的科技进步和文明发展都产生了深远的影响。"}]}
-    sft_dataset = SFTDataset('./sft/dataset/sft_mini_512_sub.jsonl', tokenizer=tokenizer, max_seq_len=512)
+    sft_dataset = SFTDataset('./sft/dataset/sft_mini_512_sub.jsonl', tokenizer=tokenizer, max_seq_len=512, include_attention_mask=False)
     # print('SFT data sample: ')
     # print(tokenizer.decode(sft_dataset[1]['input_ids']))
     # print(tokenizer.decode(sft_dataset[1]['labels']))
@@ -103,7 +107,7 @@ if __name__ == '__main__':
                             dataloader_pin_memory=True,
                             save_safetensors=False)       
     print(f"Trainer will use device: {args.device}")   
-    trainer = Trainer (model=reload_model, args=args, train_dataset=sft_dataset, processing_class=tokenizer, data_collator=data_collator)
+    trainer = Trainer(model=reload_model, args=args, train_dataset=sft_dataset, processing_class=tokenizer, data_collator=data_collator)
     trainer.train(resume_from_checkpoint=False)  # resume_from_checkpoint=True meanings same training process, if you interrupt last time you can continue on the last checkpoint, but not for a new traninig like SFT
     trainer.save_model('./sft/model/sft')
     trainer.save_state()
