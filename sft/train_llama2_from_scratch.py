@@ -353,6 +353,7 @@ if __name__ == '__main__':
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     tokenizer = AutoTokenizer.from_pretrained("./sft/tokenizer")
+    tokenizer.pad_token_id = 0
     # tokenizer.bos_token = '<|im_start|>' # based on original pretrain data
     # tokenizer.eos_token = '<|im_end|>'
 
@@ -370,7 +371,7 @@ if __name__ == '__main__':
     args = TrainingArguments(output_dir='./sft/result', 
                         num_train_epochs=10, 
                         do_train=True, 
-                        per_device_train_batch_size=128,#128
+                        per_device_train_batch_size=128,
                         gradient_accumulation_steps=8,
                         # max_steps=10,
                         logging_steps=100,
