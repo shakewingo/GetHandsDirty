@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import Trainer, TrainingArguments
 from sft.sft_train import SFTDataset
-from knowledge_distillation.llm_output.utils import (
+from knowledge_distillation.same_tokenizer.utils import (
     compute_fkl,
     compute_rkl,
     compute_skewed_fkl,
@@ -118,9 +118,8 @@ if __name__ == "__main__":
         dataloader_pin_memory=True,
         max_steps=5,
     )
-    data_collator = DefaultDataCollator()
     dataset = SFTDataset(SFT_DATASET_PATH, tokenizer=tokenizer, max_seq_len=512, include_attention_mask=True)
-    dataset_collator = DefaultDataCollator()
+    data_collator = DefaultDataCollator()
     trainer = KDTrainer(
         model=model,
         teacher_model=teacher_model,
