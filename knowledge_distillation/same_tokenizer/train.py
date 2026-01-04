@@ -1,3 +1,5 @@
+# I suppose this script belongs to off-policy distillization
+
 import os
 from transformers import AutoModelForCausalLM, AutoTokenizer, DefaultDataCollator
 from peft import LoraConfig, get_peft_model, TaskType
