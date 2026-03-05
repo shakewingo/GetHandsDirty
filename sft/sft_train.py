@@ -91,7 +91,7 @@ if __name__ == '__main__':
     # print(tokenizer.decode(sft_dataset[1]['labels']))
 
     data_collator = DefaultDataCollator()
-    args = TrainingArguments(output_dir='./sft/esult/sft', 
+    args = TrainingArguments(output_dir='./sft/result/sft', 
                             num_train_epochs=3,
                             do_train=True, 
                             per_device_train_batch_size=2,#64
