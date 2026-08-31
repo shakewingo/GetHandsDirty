@@ -174,14 +174,14 @@ def generate_llm_fqn_per_model_part(
     output_weight: int = 1,
 ) -> list[list[str]]:
     # Return of list of list that contains the full qualifed names of the modules per stage, 
-    # e.g. [[tok_embeddings, layers.0, layers.1, norm, output], [layers.2, layers.3, norm, output], ...]
+    # e.g. [[token_embeddings, layers.0, layers.1, layernorm, output], [layers.2, layers.3, layernorm, output], ...]
 
     assert num_stages >= 1, num_stages
 
     if num_stages == 1:
         # Single stage gets everything
         layer_names = [f"layers.{i}" for i in range(num_layers)]
-        return [["tok_embeddings"] + layer_names + ["norm", "output"]]
+        return [["token_embeddings"] + layer_names + ["layernorm", "output"]]
 
     # Calculate effective layers including weights
     num_effective_layers = num_layers + input_weight + output_weight
@@ -214,7 +214,7 @@ def generate_llm_fqn_per_model_part(
 
         stage_modules = []
         if stage_idx == 0:
-            stage_modules.append("tok_embeddings")
+            stage_modules.append("token_embeddings")
 
         for _ in range(num_transformer_layers):
             if current_layer < num_layers:
@@ -222,7 +222,7 @@ def generate_llm_fqn_per_model_part(
                 current_layer += 1
 
         if stage_idx == num_stages - 1:
-            stage_modules.extend(["norm", "output"])
+            stage_modules.extend(["layernorm", "output"])
 
         module_names_per_stage.append(stage_modules)
 
