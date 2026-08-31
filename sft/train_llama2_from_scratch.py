@@ -135,7 +135,7 @@ class Attention(nn.Module):
                 q, k, v = self.q_proj(hidden_states), self.k_proj(hidden_states), self.v_proj(hidden_states)
             else:
                 last_token = hidden_states[:, -1, :]
-                q = torch.cat((torch.zeros_like(hidden_states[:, :-1, :]), self.q_proj(last_token)), dim=1)
+                q = torch.cat((torch.zeros_like(last_token), self.q_proj(last_token)), dim=1)
                 k = torch.cat((self.k_cache, self.k_proj(last_token)), dim=1)
                 v = torch.cat((self.v_cache, self.v_proj(last_token)), dim=1)
                 
@@ -150,7 +150,7 @@ class Attention(nn.Module):
         v = v.view(B, S, self.num_key_value_heads, self.heads_dim)
         # use RoPOE
         q, k = self.rotary_emb(q, k)
-        # use repetitive k and v for multi-grouped q
+        # use repetitive k and v for MQA
         k = repeat_kv(k, self.num_key_value_groups)
         v = repeat_kv(v, self.num_key_value_groups)
 
