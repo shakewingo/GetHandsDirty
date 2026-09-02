@@ -11,8 +11,16 @@ from torchfeather.model.attention import (
 from torchfeather.model.model_args import DeepSeekV3ModelArgs
 # from torchfeather.model.moe import FeedForward, MoE
 from torchfeather.model.rope import RotaryEmbedding
-from transformers.modeling_outputs import CausalLMOutputWithPast
 from torch.distributed.tensor import DTensor, Replicate, Shard
+
+
+def _is_last_dim_shard(placement, ndim: int) -> bool:
+    """Whether `placement` shards the trailing dim of an `ndim`-dimensional tensor.
+
+    `redistribute` normalizes a negative shard dim to its positive index, while
+    `from_local` keeps whatever it was given, so both spellings show up in practice.
+    """
+    return isinstance(placement, Shard) and placement.dim in (ndim - 1, -1)
 
 
 def _flatten_heads(x: torch.Tensor) -> torch.Tensor:
@@ -21,11 +29,14 @@ def _flatten_heads(x: torch.Tensor) -> torch.Tensor:
     Under TP, x is a DTensor sharded on dim 2 (heads). Eager DTensor disallows
     flatten/reshape across a sharded dim, but the merge is data-movement-free:
     each rank owns a contiguous block of heads, so its local (n_h/tp) x d_h
-    chunk is exactly its Shard(-1) slice of the merged dim. Reinterpret the
-    placement directly instead of redistributing."""
+    chunk is exactly its slice of the merged dim, which lands on dim 2 as well.
+    Reinterpret the placement directly instead of redistributing."""
     if isinstance(x, DTensor):
         local = x.to_local().flatten(2)
-        return DTensor.from_local(local, x.device_mesh, (Shard(-1),), run_check=False)
+        placements = tuple(
+            Shard(2) if isinstance(p, Shard) and p.dim == 2 else p for p in x.placements
+        )
+        return DTensor.from_local(local, x.device_mesh, placements, run_check=False)
     return x.flatten(2)
 
 
@@ -35,13 +46,17 @@ def _split_heads(x: torch.Tensor, n_heads: int, head_dim: int) -> torch.Tensor:
     Under TP, x is a DTensor sharded on the last dim (the merged n_h*d_h),
     which eager DTensor cannot .view() across -- but the split is purely local
     (head boundaries never cross the last-dim shard), so do it on the local
-    tensor and re-wrap with placements derived by splitting Shard(-1)."""
+    tensor and re-wrap with the trailing shard moved onto the new head dim.
+
+    The local head count is read off the shard we actually hold rather than
+    derived from the mesh size, so this stays correct for a replicated input and
+    does not assume the mesh is exactly the TP dim."""
     if isinstance(x, DTensor):
         local = x.to_local()
-        local_heads = n_heads // x.device_mesh.size() if x.placements[-1] == Shard(-1) else n_heads
+        local_heads = local.shape[-1] // head_dim
         out = local.view(*local.shape[:-1], local_heads, head_dim)
         placements = tuple(
-            Shard(2) if p == Shard(-1) else p for p in x.placements
+            Shard(2) if _is_last_dim_shard(p, x.ndim) else p for p in x.placements
         )
         return DTensor.from_local(out, x.device_mesh, placements, run_check=False)
     return x.view(*x.shape[:-1], n_heads, head_dim)
@@ -54,7 +69,6 @@ class DeepSeekV3Model(nn.Module):
         self.dim = args.dim
         self.n_layers = args.n_layers
         self.token_embeddings = nn.Embedding(args.vocab_size, args.dim)
-        self.rotary_emb = RotaryEmbedding(args)
 
         self.layers = torch.nn.ModuleList()
         for _ in range(self.n_layers):
@@ -62,24 +76,47 @@ class DeepSeekV3Model(nn.Module):
 
         self.layernorm = nn.RMSNorm(args.dim)
         self.output = nn.Linear(args.dim, args.vocab_size, bias=False)
-        self.apply(self._init_weights) 
+
+        # A meta-device build has no storage to write into; the trainer calls
+        # `init_weights` again once `to_empty()` has materialized the parameters.
+        if not self.token_embeddings.weight.is_meta:
+            self.init_weights()
+
+    def init_weights(self, buffer_device: torch.device | None = None) -> None:
+        """Initialize every parameter and re-materialize every buffer.
+
+        Args:
+            buffer_device (torch.device | None): Device for buffers rebuilt from
+                scratch (the RoPE tables). Defaults to their current device.
+
+        Must cover buffers as well as parameters: the trainer builds on the meta
+        device and calls `to_empty()` first, which leaves every buffer holding
+        uninitialized memory.
+        """
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                # weights variance may boost D times for linear projection
+                nn.init.normal_(module.weight, mean=0.0, std=0.02 / math.sqrt(self.dim))
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.Embedding):
+                nn.init.normal_(module.weight, mean=0.0, std=0.02 / math.sqrt(self.dim))
+            elif isinstance(module, nn.RMSNorm):
+                nn.init.ones_(module.weight)
 
         for pn, p in self.named_parameters():
             if pn.endswith('wo.weight') or pn.endswith('down_proj.weight'):
                 # weights variance may boost 2L times after L layers transformer blocks (each block contains both attention and FFN so it boots 2 times)
                 # so we scale down the final output weights in transformer block
-                torch.nn.init.normal_(p, mean=0.0, std=0.02 / math.sqrt(2 * self.n_layers)) 
+                nn.init.normal_(p, mean=0.0, std=0.02 / math.sqrt(2 * self.n_layers))
 
-    def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
-            # weights variance may boost D times for linear projection
-            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02 / math.sqrt(self.dim))
-            if module.bias is not None:
-                torch.nn.init.zeros_(module.bias)  
-        elif isinstance(module, nn.Embedding):
-            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02 / math.sqrt(self.dim)) 
+        for module in self.modules():
+            if isinstance(module, RotaryEmbedding):
+                module.init_weights(buffer_device)
+            elif isinstance(module, Attention):
+                module.init_kv_cache()
 
-    def forward(self, x, labels, use_kv_cache=False, start_pos=0):
+    def forward(self, x, use_kv_cache=False, start_pos=0, last_token_only=False):
         # Non-first PP stages receive (B, S, D) hidden states; the first stage gets (B, S) token ids.
         B, S = x.shape[0], x.shape[1]
         end_pos = start_pos + S  # to track the entire seq length
@@ -114,19 +151,13 @@ class DeepSeekV3Model(nn.Module):
 
         if self.output is None:
             # Pipeline-parallel non-final stage: pass hidden states to the next stage.
-            self.loss = None
-            return CausalLMOutputWithPast(self.loss, x)
+            return x
 
-        if labels is not None:
-            logits = self.output(x)
-            # Under TP `output` (ColwiseParallel) yields a local tensor; under FSDP it
-            # may be a seq-sharded DTensor, so .reshape() instead of .view().
-            self.loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), labels.reshape(-1), ignore_index=0)
-        else:
-            # for inference
-            logits = self.output(x[:, [-1], :])
-            self.loss = None
-        return CausalLMOutputWithPast(self.loss, logits) # meaning can call LLM().loss, LLM.logits directly
+        # `last_token_only` keeps a decode step from projecting the whole prefill
+        # window through the vocab matrix; training always wants every position.
+        if last_token_only:
+            x = x[:, [-1], :]
+        return self.output(x)
 
     def absorb_weights(self) -> None:
         """Fuse MLA's W^UK/W^UV into every layer's attention, once, before running `generate`."""
@@ -150,9 +181,8 @@ class DeepSeekV3Model(nn.Module):
         start_pos = 0
         while input_ids.shape[1] - s < max_new_tokens - 1:
             tokens_in = input_ids[:, start_pos:] if use_kv_cache else input_ids
-            inference_res = self.forward(tokens_in, labels=None,
-                                            use_kv_cache=use_kv_cache, start_pos=start_pos)
-            logits = inference_res.logits
+            logits = self.forward(tokens_in, use_kv_cache=use_kv_cache,
+                                     start_pos=start_pos, last_token_only=True)
             logits = logits[:, -1, :]
 
             # apply penalty for repetitive tokens, per batch row
@@ -200,7 +230,7 @@ class FeedForward(nn.Module):
         down_proj = self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
 
-class Attenti (nn.Module):
+class Attention (nn.Module):
     """MLA attention"""
     def __init__(self, args: DeepSeekV3ModelArgs):
         super().__init__()
@@ -249,6 +279,13 @@ class Attenti (nn.Module):
 
         # True once `absorb_weights()` has fused W^UK/W^UV into wq*/wo for frozen-weight inference.
         self._absorbed = False
+
+    def init_kv_cache(self) -> None:
+        """Zero the KV cache buffers, which `to_empty()` leaves uninitialized."""
+        for name in ('k_cache', 'v_cache', 'kv_cache', 'pe_cache'):
+            buf = getattr(self, name, None)
+            if buf is not None:
+                buf.zero_()
 
     @torch.no_grad()
     def absorb_weights(self) -> None:
@@ -372,26 +409,23 @@ class Attenti (nn.Module):
             # consider weights absortion to avoid calculating k distinctly, i.e. via changing multiply order i.e. A*(B*C) -> (A*B) * C to reduce computation cost
             if not self._absorbed:
                 wkv_b = self.wkv_b.weight # if self.wkv_b.scale is None else weight_dequant(self.wkv_b.weight, self.wkv_b.scale, block_size) , (d_h*n_h, d_c)
-                # wkv_b is head-sharded on dim 0 (merged n_h*(d_h+d_h)) under TP;
-                # eager DTensor can't .view() across a sharded dim, so view locally
-                # and remap Shard(0) -> Shard(0) on the split n_h dim.
+                # wkv_b is head-sharded on dim 0 (merged n_h*(d_h+v_h)) under TP, and
+                # every use below is a per-head contraction against a head-sharded
+                # activation, so stay on the local shard throughout. The local head
+                # count comes from the shard itself rather than the mesh size, which is
+                # only the TP degree while the plan is applied on the 1-D `tp` mesh.
                 if isinstance(wkv_b, DTensor):
-                    local_w = wkv_b.to_local()
-                    local_heads = self.n_heads // wkv_b.device_mesh.size()
-                    wkv_b = DTensor.from_local(
-                        local_w.view(local_heads, -1, self.kv_lora_rank),
-                        wkv_b.device_mesh, (Shard(0),), run_check=False
-                    )
-                else:
-                    wkv_b = wkv_b.view(self.n_heads, -1, self.kv_lora_rank) # (n_h, d_h, d_c)
+                    wkv_b = wkv_b.to_local()
+                local_heads = wkv_b.shape[0] // (self.qk_nope_head_dim + self.v_head_dim)
+                wkv_b = wkv_b.view(local_heads, -1, self.kv_lora_rank) # (n_h, d_h + v_h, d_c)
                 # q_{nope} = q_{nope} \times W^{UK}
                 # Per-head contraction with a head-sharded weight; DTensor matmul can't
                 # handle a sharded *batch* dim, so run it on the local tensors and
-                # re-wrap as head-sharded (Shard(2)).
+                # re-wrap with the head sharding it came in with.
                 # (B,S,H,d_h) x (H,d_h,d_c) -> (B,S,H,d_c)
                 if isinstance(q_nope, DTensor):
-                    qn_local = torch.einsum("bshd,hdc->bshc", q_nope.to_local(), wkv_b.to_local()[:, :self.qk_nope_head_dim])
-                    q_nope = DTensor.from_local(qn_local, q_nope.device_mesh, (Shard(2),), run_check=False)
+                    qn_local = torch.einsum("bshd,hdc->bshc", q_nope.to_local(), wkv_b[:, :self.qk_nope_head_dim])
+                    q_nope = DTensor.from_local(qn_local, q_nope.device_mesh, q_nope.placements, run_check=False)
                 else:
                     q_nope = torch.einsum("bshd,hdc->bshc", q_nope, wkv_b[:, :self.qk_nope_head_dim])
             # else: q_nope was already absorbed via wq_abs/wq_b_abs above, via absorb_weights().
@@ -412,6 +446,7 @@ class Attenti (nn.Module):
             # anyway (each rank owns a slice of heads). q_nope/q_pe are Shard(2) (heads);
             # kv_nope/k_pe_2d are head-shared, so their local tensors are already full.
             tp_sharded = isinstance(q_nope, DTensor)
+            head_mesh = q_nope.device_mesh if tp_sharded else None
             if tp_sharded:
                 q_nope_l = q_nope.to_local()
                 q_pe_l = q_pe.to_local()
@@ -442,7 +477,7 @@ class Attenti (nn.Module):
             # (B,S,H,T)->(B,H,S,T) @ (B,1,T,d_c) -> (B,H,S,d_c) -> (B,S,H,d_c)
             x = torch.matmul(scores.permute(0, 2, 1, 3), kv_nope_l.unsqueeze(1)).permute(0, 2, 1, 3)
             if tp_sharded:
-                x = DTensor.from_local(x, q_nope.device_mesh, (Shard(2),), run_check=False)
+                x = DTensor.from_local(x, head_mesh, (Shard(2),), run_check=False)
             x = self.wo_abs(_flatten_heads(x))  # W^UV already fused in here, no decompression step needed
         else:
             # `kv_nope` is the cache slice during decode and the live latent during training.
@@ -450,12 +485,9 @@ class Attenti (nn.Module):
             x = torch.matmul(scores.permute(0, 2, 1, 3), kv_nope_l.unsqueeze(1)).permute(0, 2, 1, 3)
             # Per-head W^UV decompression: local einsum on the head slice.
             # (B,S,H,d_c) x (H,d_h,d_c) -> (B,S,H,d_h)
+            x = torch.einsum("bshc,hdc->bshd", x, wkv_b[:, -self.v_head_dim:])
             if tp_sharded:
-                wkv_b_l = wkv_b.to_local() if isinstance(wkv_b, DTensor) else wkv_b
-                x = torch.einsum("bshc,hdc->bshd", x, wkv_b_l[:, -self.v_head_dim:])
-                x = DTensor.from_local(x, q_nope.device_mesh, (Shard(2),), run_check=False)
-            else:
-                x = torch.einsum("bshc,hdc->bshd", x, wkv_b[:, -self.v_head_dim:])
+                x = DTensor.from_local(x, head_mesh, (Shard(2),), run_check=False)
             x = self.wo(_flatten_heads(x))
         return x
     
@@ -496,5 +528,6 @@ if __name__ == "__main__":
     labels = torch.randint(0, args.vocab_size, (B, S))
     # for pn, p in model.named_parameters():
     #     print(pn, p.shape)
-    output = model(input_ids, labels=labels)
-    logger.info(f"Output shape: {output.logits.shape}, loss: {output.loss}")
+    logits = model(input_ids)
+    loss = F.cross_entropy(logits.flatten(0, 1), labels.flatten(0, 1))
+    logger.info(f"Output shape: {logits.shape}, loss: {loss}")
