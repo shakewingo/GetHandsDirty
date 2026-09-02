@@ -394,9 +394,9 @@ def apply_moe_ep_tp(
     if ep_mesh is not None and etp_enabled:
         assert ep_etp_mesh is not None
 
-    layers = cast(nn.ModuleDict, model.layers)
+    layers = cast(nn.ModuleList, model.layers)
 
-    for transformer_block in layers.values():
+    for transformer_block in layers:
         if not transformer_block.moe_enabled:
             continue
 

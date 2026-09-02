@@ -124,8 +124,8 @@ def create_context_parallel_ctx(
     cp_buffers: list[torch.Tensor],
     cp_seq_dims: list[int],
     cp_no_restore_buffers: set[torch.Tensor],
-    cp_rotate_method: str,
-    cp_load_balance: bool = True,
+    cp_rotate_method: str, # whether to do rotate of k,v from other ranks or do all-gather k,v with current rank's q block
+    cp_load_balance: bool = True, # because each rank only do their local mask based on the length of local q block so the computation cost is different, can ask rank 1 do q block 1, 3; rank 2 do q block 2 etc. for load balancing
 ):
     set_rotate_method(cp_rotate_method)
     _cp_options.enable_load_balance = cp_load_balance

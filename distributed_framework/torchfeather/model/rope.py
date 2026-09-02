@@ -5,6 +5,7 @@ from loguru import logger
 from typing import List, Optional, Tuple, Union
 import torch
 from torch import nn
+from torch.distributed.tensor import DTensor
 from torchfeather.model.model_args import DeepSeekV3ModelArgs
 
 class RotaryEmbedding(nn.Module):
@@ -12,29 +13,44 @@ class RotaryEmbedding(nn.Module):
         super(RotaryEmbedding, self).__init__()
         self.dim = args.qk_rope_head_dim
         self.seqlen = args.max_seq_len
-        beta_fast = args.beta_fast
-        beta_slow = args.beta_slow
-        base = args.rope_theta
-        factor = args.rope_factor
+        self.beta_fast = args.beta_fast
+        self.beta_slow = args.beta_slow
+        self.base = args.rope_theta
+        self.factor = args.rope_factor
+        self.original_seq_len = args.original_seq_len
 
-        self.inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2, dtype=torch.float32) / self.dim)) # (D/2,)
-        self.t = torch.arange(self.seqlen, dtype=torch.float32)  # (S,)
-        self.freqs = torch.outer(self.t, self.inv_freq) # (S, D/2)
-        logger.debug(f"freqs shape: {self.freqs.shape}")
+        cos, sin = self._build_tables()
+        # Non-persistent: the tables are a deterministic function of position, so they
+        # are rebuilt by `init_weights` rather than restored from a checkpoint.
+        self.register_buffer("cos_cached", cos, persistent=False) # (S, D)
+        self.register_buffer("sin_cached", sin, persistent=False) # (S, D)
+
+    def _build_tables(self, device: torch.device | None = None) -> tuple[torch.Tensor, torch.Tensor]:
+        """Build the (max_seq_len, qk_rope_head_dim) cos/sin tables, YaRN-scaled."""
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float32, device=device) / self.dim)) # (D/2,)
+        t = torch.arange(self.seqlen, dtype=torch.float32, device=device)  # (S,)
+        freqs = torch.outer(t, inv_freq) # (S, D/2)
 
         # YaRN scaling for extended context. YaRN is used to extend the context length after pre-training.
-        if self.seqlen > args.original_seq_len:
+        if self.seqlen > self.original_seq_len:
             low, high = self.find_correction_range(
-                beta_fast, beta_slow, self.dim, base, args.original_seq_len
+                self.beta_fast, self.beta_slow, self.dim, self.base, self.original_seq_len
             )
-            smooth = 1 - self.linear_ramp_factor(low, high, self.dim // 2)
-            self.freqs = self.freqs / factor * (1 - smooth) + self.freqs * smooth
-            logger.debug(f"freqs shape after YaRN: {self.freqs.shape}")
-        # Interleave to match adjacent pairs: [f0, f0, f1, f1, ...]
-        self.freqs = torch.repeat_interleave(self.freqs, 2, dim=-1) # (S, D)
+            smooth = 1 - self.linear_ramp_factor(low, high, self.dim // 2).to(freqs.device)
+            freqs = freqs / self.factor * (1 - smooth) + freqs * smooth
 
-        self.register_buffer("cos_cached", self.freqs.cos()) # (S, D)
-        self.register_buffer("sin_cached", self.freqs.sin()) # (S, D)
+        # Interleave to match adjacent pairs: [f0, f0, f1, f1, ...]
+        freqs = torch.repeat_interleave(freqs, 2, dim=-1) # (S, D)
+        return freqs.cos(), freqs.sin()
+
+    def init_weights(self, buffer_device: torch.device | None = None) -> None:
+        """Rebuild the cos/sin tables on a real device after a meta-device build.
+
+        `to_empty()` allocates the buffers without writing them, so the tables must be
+        recomputed here rather than carried over from `__init__`.
+        """
+        device = buffer_device if buffer_device is not None else self.cos_cached.device
+        self.cos_cached, self.sin_cached = self._build_tables(device=device)
 
     @staticmethod
     def find_correction_dim(
@@ -70,6 +86,15 @@ class RotaryEmbedding(nn.Module):
         return torch.stack((-x_odd, x_even), dim=-1).flatten(-2)
 
     def apply_rotary_emb(self, x: torch.Tensor, start_pos=0) -> torch.Tensor:
+        # Under TP `x` is head-sharded while the tables are plain tensors, and DTensor
+        # refuses to mix the two in a binary op. The rotation is per-position and
+        # identical on every rank, so run it on the local shard and re-wrap.
+        if isinstance(x, DTensor):
+            local = self._rotate(x.to_local(), start_pos)
+            return DTensor.from_local(local, x.device_mesh, x.placements, run_check=False)
+        return self._rotate(x, start_pos)
+
+    def _rotate(self, x: torch.Tensor, start_pos: int) -> torch.Tensor:
         seqlen = x.size(1)
         cos = self.cos_cached[start_pos:start_pos+seqlen, :].view(1, seqlen, 1, self.dim)  # (1, seqlen, 1, dim)
         sin = self.sin_cached[start_pos:start_pos+seqlen, :].view(1, seqlen, 1, self.dim)  # (1, seqlen, 1, dim)

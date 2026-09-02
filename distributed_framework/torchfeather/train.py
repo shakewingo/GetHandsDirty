@@ -23,7 +23,7 @@ from torchfeather.components.lr_scheduler import (
     build_lr_schedulers,
 )
 from torchfeather.components.metrics import (
-    MetricsProcessor,
+    MetricsProcessor, 
     collect_parameter_norm_metrics,
 )
 from torchfeather.components.optimizer import (
@@ -87,7 +87,7 @@ class Trainer(Stateful):
         device_module.set_device(self.device)
 
         # init distributed and build meshes
-        # allow you to make multi GPUs to communicate w each other. Note that torchrun ingests the global os.environ["RANK"] in order to further coordinate it dp_rank etc.
+        # allow you to make multi GPUs to communicate w each other, define timeout etc.. Note that torchrun ingests the global os.environ["RANK"] in order to further coordinate it dp_rank etc.
         torch.distributed.init_process_group(
             backend="nccl",
             timeout=timedelta(seconds=job_config.comm.init_timeout_seconds),
@@ -129,8 +129,11 @@ class Trainer(Stateful):
 
         model_args = job_config.model.args
         model_args.max_seq_len = job_config.training.seq_len # replace max_seq_len by using the job config's
-        # Build on the meta device
+
+        # below is built on the meta device
         with (
+            # a frictional device that does not materialize the tensor which will record shapes, strides etc. 
+            #  without materializing it and will only materialize once it transfers to the actual device
             torch.device("meta"),
             device_utils.set_default_dtype(TORCH_DTYPE_MAP[job_config.training.dtype]),
         ):
@@ -142,7 +145,7 @@ class Trainer(Stateful):
         (
             model_param_count,
             self.metrics_processor.num_flops_per_token,
-        ) = model_args.get_nparams_and_flops(model, job_config.training.seq_len)
+        ) = model_args.get_params_and_flops(model, job_config.training.seq_len)
 
         logger.info(f"Model total parameters: {model_param_count:,}")
 
@@ -182,12 +185,13 @@ class Trainer(Stateful):
                 job_config,
                 self.device,
                 model_args.n_layers,
-                parallelize_deepseekv3, # inside each stage, further parallelize the model by using tp, ep etc.
-                self.loss_fn,
+                parallelize_deepseekv3, # inside each stage, further parallelize the model by using ddp/fsdp, tp, ep etc.
+                self.loss_fn, 
             ) # gives the certain PP group's schedule and corresponding model parts by passing pp_mesh and device
             # when PP is enabled, `model` obj is no longer used after this point, model_parts is used instead
             del model
- 
+            
+            # below is where it actually materializes and moves to the actual device
             for m in self.model_parts:
                 m.to_empty(device=init_device)
                 with torch.no_grad():
@@ -196,7 +200,7 @@ class Trainer(Stateful):
         else:
             # consider the entire model as one single stage, and apply other parallelisms to it
             model = parallelize_deepseekv3(model, parallel_dims, job_config)
-
+            
             model.to_empty(device=init_device)
             with torch.no_grad():
                 model.init_weights(buffer_device=buffer_device)
@@ -340,16 +344,21 @@ class Trainer(Stateful):
             if parallel_dims.cp_enabled
             else None
         )
-
+        
+        # Below's input part has been sharded based on cp with context manager
         if parallel_dims.pp_enabled:
             # Pipeline Parallel forward / backward inside step() call
+            # with context manager here, the input batch already be splitted by cp further
             with self.train_context(optional_context_parallel_ctx):
                 targets, losses = (
                     (labels, []) if self.pp_has_last_stage else (None, None)
                 )
-                # if it has embedding layer, it needs inputs as well, otherwise it doesn't
+
+                # !!! Note that pytorch's pp schedule did the loss computation automatilly but in a local way, so we need to further recalculate the accurate one
+                # Refer line 435-442. This part could be quite confusing if you don't know what's under the hood by pytorch 
                 # TODO: need to check if my customized model arch adapt to this
                 if self.pp_has_first_stage:
+                    # if it has embedding layer, it needs inputs as well, otherwise it doesn't
                     self.pp_schedule.step(
                         inputs,
                         **extra_inputs,
@@ -380,7 +389,7 @@ class Trainer(Stateful):
                 with self.maybe_enable_amp:
                     pred = model_parts[0](inputs, **extra_inputs, **extra_kwargs)
                     loss_sum = self.loss_fn(pred, labels)
-                    # Normalize by global valid token count before backward
+                    # Get weighted avg loss based on global valid tokens across CPs
                     loss = loss_sum / global_valid_tokens
                 # need to free pred before bwd to avoid peaking memory
                 del pred
@@ -414,7 +423,7 @@ class Trainer(Stateful):
         # All-reduce to get global valid token count across DP/CP ranks
         if parallel_dims.dp_cp_enabled:
             global_valid_tokens = dist_utils.dist_sum(
-                local_valid_tokens, parallel_dims.get_mesh("loss")
+                local_valid_tokens, parallel_dims.get_mesh("loss") # i.e. batch(dp_replicates * dp_shard) * cp
             )
         else:
             global_valid_tokens = local_valid_tokens.float()

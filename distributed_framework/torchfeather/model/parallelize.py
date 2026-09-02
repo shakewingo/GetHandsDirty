@@ -128,7 +128,7 @@ def parallelize_deepseekv3(
                 )
             else:
                 dp_replicate_efsdp_mesh = parallel_dims.get_mesh("efsdp")
-        else:
+        else: 
             dp_replicate_efsdp_mesh = None
 
         apply_fsdp(
@@ -228,10 +228,10 @@ def apply_non_moe_tp(
         layer_plan: dict[str, ParallelStyle] = {
             "input_layernorm": SequenceParallel(),
             "attention": PrepareModuleInput(
-                input_layouts=(Shard(1), Replicate()),
-                desired_input_layouts=(Replicate(), Replicate()), # Replicate() is to ensure to get the entire input via all-gather
+                input_layouts=(Shard(1), None),
+                desired_input_layouts=(Replicate(), None), # Replicate() is to ensure to get the entire input via all-gather
             ),
-            "attention.wk v_a": NoParallel(
+            "attention.wkv_a": NoParallel(
                 use_local_output=False
             ),  # No need to shard because it's not per-head
             "attention.wkv_b": ColwiseParallel(
