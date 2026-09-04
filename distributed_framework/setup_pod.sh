@@ -2,7 +2,17 @@
 # One-shot setup for a fresh RunPod pod. Run from distributed_framework/.
 set -euo pipefail
 
-pip install --no-cache-dir -r requirements.txt
+# Verified on a RunPod RTX 4090 (sm89, driver 570.169) 2026-09-04:
+#  - the image's python is PEP 668 externally-managed, so pip needs
+#    --break-system-packages. Fine here: the container is disposable.
+#  - torch 2.13.0 does NOT exist for CUDA 12.8; that index stops at 2.11.0, and
+#    2.13 ships only as cu130, which needs driver >= 580. 2.11 carries both APIs
+#    this repo actually needs (DeviceMesh._unflatten, torch._grouped_mm); 2.8
+#    does NOT have _unflatten, so 2.9 is the real floor.
+CUDA_TAG="${CUDA_TAG:-cu128}"
+pip install --break-system-packages --no-cache-dir \
+  torch --index-url "https://download.pytorch.org/whl/${CUDA_TAG}"
+pip install --break-system-packages --no-cache-dir -r requirements.txt
 
 # Tokenizer assets. hf_assets_path in the configs points here.
 hf download deepseek-ai/deepseek-moe-16b-base \

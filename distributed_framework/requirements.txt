@@ -1,4 +1,6 @@
-torch==2.13.0
+# 2.9 is the floor: 2.8 lacks DeviceMesh._unflatten, which parallel_dims needs.
+# Pinning 2.13 was wrong -- it only ships cu130 (driver >= 580).
+torch>=2.11,<3
 torchdata>=0.11
 datasets>=3.5
 tokenizers>=0.20
