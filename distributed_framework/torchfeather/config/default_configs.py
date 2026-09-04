@@ -111,6 +111,11 @@ def get_torchfeather_1b_base_config() -> JobConfig:
     config.checkpoint.interval = 150
     config.checkpoint.keep_latest_k = 3         # ~16.6 GiB each -- 10 would be 166 GiB
     config.checkpoint.async_mode = "async"
+    # F7: an async save killed mid-write leaves step-N without .metadata, so the loader
+    # skips it. keep_latest_k >= 2 makes that survivable by falling back to the previous
+    # complete checkpoint -- but before the first one exists there is nothing to fall back
+    # to, and a kill in that window restarts from zero. Saving at step 1 closes it.
+    config.checkpoint.enable_first_step_checkpoint = True
 
     config.activation_checkpoint.mode = "selective"
     config.activation_checkpoint.selective_ac_option = "op"
