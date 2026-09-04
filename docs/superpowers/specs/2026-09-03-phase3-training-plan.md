@@ -620,6 +620,74 @@ bug — but if you want to see what NVLink does, run configs 4–6 once on 4x A1
 
 Set on the pod: `NCCL_P2P_DISABLE=1 NCCL_IB_DISABLE=1` if NCCL hangs during init on 4090s.
 
+### Stage 2 results — RUN 2026-09-04, 7/7 pass
+
+Hardware substitution: **no 8x RTX 4090 existed on RunPod at any tier**, so this ran on
+**8x A40 48GB, secure, EU-SE-1, $3.92/h** -- cheaper per hour than the 8x 4090 secure this
+plan budgeted, with double the VRAM. sm86, so FlashAttention still qualifies, and the same
+cu128 / torch 2.11 path Stage 1 validated. No NVLink: GPUs 0-3 and 4-7 sit on separate NUMA
+nodes over `SYS`.
+
+| cfg | dp | tp | ep | etp | pp | loss@50 | mem GiB | tps/GPU | MFU |
+|---|---|---|---|---|---|---|---|---|---|
+| m1 | 8 | 1 | 1 | 1 | 1 | 7.3367 | 27.93 | 6,079 | 16.97% |
+| m2 | 8 | 1 | 2 | 1 | 1 | 7.3984 | 30.88 | 5,062 | 14.13% |
+| **m3** | 8 | 1 | 8 | 1 | 1 | **7.3503** | 32.94 | 4,062 | 11.34% |
+| m4 | 4 | 2 | 1 | 1 | 1 | 7.6146 | 19.35 | 2,685 | 7.50% |
+| m5 | 4 | 2 | 4 | 1 | 1 | 7.5041 | 23.79 | 2,580 | 7.20% |
+| m6 | 4 | 2 | 2 | 2 | 1 | 7.4126 | 25.58 | 2,009 | 5.61% |
+| m7 | 2 | 2 | 2 | 1 | 2 | 7.5011 | 7.79 | 1,169 | 3.26% |
+
+Every parallelism path in the repo now has evidence it runs on GPUs: `ExpertParallel`,
+`ExpertTensorParallel`, `ReordererSequenceParallel`, `TensorParallel`, PP, and the `Shard(1)`
+fallback in `apply_fsdp` that only m3 reaches.
+
+**Two things this settles that were previously assumption.** Naive attention *does* compose
+with TP -- m4/m5/m6 all pass with `attn_impl="naive"`, so §M1's "use absorb for the TP rows"
+is unnecessary; the `local_head_count` fix is sufficient. And the H3 `ModuleDict` change holds
+under a real PP run.
+
+**Reading the loss column honestly.** The dp=8 and dp=4 groups are *not* comparable:
+`split_dataset_by_node` shards by dp world size, so they stream different documents. Compare
+within a group:
+
+- dp=8 (m1/m2/m3, EP the only variable): 7.3367 / 7.3984 / 7.3503 -- **spread 0.06**. EP is
+  not corrupting the math, which is the check §15 called for.
+- dp=4 (m4/m5/m6): 7.6146 / 7.5041 / 7.4126 -- spread 0.20, TP-only worst. At 50 steps this
+  is not separable from reduction-order noise; worth a longer A/B if TP is ever used in anger.
+
+Stage 3 is exactly m3, which sits 0.014 from the m1 baseline.
+
+**The throughput ladder is the lesson**: 6,079 -> 5,062 -> 4,062 tok/s/GPU as EP goes 1 -> 2 -> 8,
+then 2,685 -> 2,009 once TP and ETP are added. On a box with no NVLink and P2P disabled, each
+added communication dimension costs roughly a third. Cheap $/hr is not cheap $/token.
+
+### F9 — NCCL cannot establish P2P on this topology; `NCCL_P2P_DISABLE=1` is required
+
+Every 8-GPU run hung on the *first* collective and died to the 300 s watchdog:
+
+```
+Watchdog caught collective operation timeout:
+WorkNCCL(SeqNum=1, OpType=BROADCAST, NumelIn=16, Timeout(ms)=300000) ran for 300043 ms
+```
+
+Zero training steps. Isolated with a 20-line pure-NCCL script (no torchfeather at all), then
+bisected:
+
+| option | result |
+|---|---|
+| baseline | hang (rc=137) |
+| **`NCCL_P2P_DISABLE=1`** | **works (rc=0)** |
+| `NCCL_SHM_DISABLE=1` | hang |
+| `NCCL_P2P_LEVEL=PXB` | hang |
+
+**Stage 3 must export `NCCL_P2P_DISABLE=1`.** This is a property of the machine topology, not
+of this code, so re-check it on any new pod rather than assuming.
+
+Diagnostic note: the first hypothesis was that streaming FineWeb-Edu was too slow to produce a
+first batch inside the timeout. Measured instead -- dataloader build 6.9 s, first batch 2.6 s,
+next four 0.2 s. Wrong hypothesis, discarded in two minutes. Measure before fixing.
+
 ### Stage 2b — two nodes, optional. 2x 1x RTX 3090. ~2 h. **~$0.90**
 
 Purely to internalize the launch mechanics your notes call out. Two separate pods, connected over
