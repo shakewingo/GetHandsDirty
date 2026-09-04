@@ -1,6 +1,8 @@
-# 2.9 is the floor: 2.8 lacks DeviceMesh._unflatten, which parallel_dims needs.
-# Pinning 2.13 was wrong -- it only ships cu130 (driver >= 580).
-torch>=2.11,<3
+# torch is deliberately NOT listed here. It must come from the CUDA-matched PyTorch
+# index, which setup_pod.sh does. Listing it makes pip re-resolve against default
+# PyPI and silently upgrade to a cu130 build the driver cannot run -- observed
+# 2026-09-04: torch 2.14.0+cu130 landed on a driver-570 box and gave cuda False.
+# Floor is 2.9: 2.8 lacks DeviceMesh._unflatten, which parallel_dims needs.
 torchdata>=0.11
 datasets>=3.5
 tokenizers>=0.20

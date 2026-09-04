@@ -12,7 +12,12 @@ set -euo pipefail
 CUDA_TAG="${CUDA_TAG:-cu128}"
 pip install --break-system-packages --no-cache-dir \
   torch --index-url "https://download.pytorch.org/whl/${CUDA_TAG}"
-pip install --break-system-packages --no-cache-dir -r requirements.txt
+pip install --break-system-packages --no-cache-dir --upgrade-strategy only-if-needed \
+  -r requirements.txt
+
+# Fail fast: a mismatched torch build reports cuda False and every later gate
+# silently degrades to CPU instead of erroring.
+python -c "import torch,sys; ok=torch.cuda.is_available(); print(f'torch {torch.__version__} | cuda {ok}'); sys.exit(0 if ok else 1)"
 
 # Tokenizer assets. hf_assets_path in the configs points here.
 hf download deepseek-ai/deepseek-moe-16b-base \
