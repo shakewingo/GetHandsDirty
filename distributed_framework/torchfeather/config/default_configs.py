@@ -16,8 +16,8 @@ def get_deepseek_v3_model_args() -> DeepSeekV3ModelArgs:
             num_experts=64,
             num_shared_experts=2,
             top_k=6,
-            score_func="softmax",
-            route_norm=False,
+            score_func="sigmoid",
+            route_norm=True,
             score_before_experts=False,
         ),
         q_lora_rank=0,
@@ -26,7 +26,119 @@ def get_deepseek_v3_model_args() -> DeepSeekV3ModelArgs:
         qk_rope_head_dim=64,
         v_head_dim=128,
         mscale=0.70,
+        moe_enabled=True
     )
+
+
+def get_torchfeather_1b_model_args() -> DeepSeekV3ModelArgs:
+    """1.38B total / 0.41B active MoE -- the model Phase 3 actually trains.
+
+    Sized so the whole thing fits comfortably on 8x24GB with room for activations, while still
+    exercising every parallelism dimension: 32 experts divide by ep in {2,4,8}, 8 heads divide
+    by tp=2, and `dim` / `moe_inter_dim` are multiples of 8 so `torch._grouped_mm` gets the
+    16-byte-aligned strides it requires.
+    """
+    return DeepSeekV3ModelArgs(
+        vocab_size=102400,
+        dim=1024,
+        inter_dim=2816,
+        moe_inter_dim=704,
+        n_layers=16,
+        n_dense_layers=1,
+        n_heads=8,
+        moe_args=MoEArgs(
+            num_experts=32,
+            num_shared_experts=1,
+            top_k=4,
+            score_func="sigmoid",
+            route_norm=True,
+            score_before_experts=False,
+            load_balance_coeff=1e-3,
+        ),
+        q_lora_rank=0,
+        kv_lora_rank=256,
+        qk_nope_head_dim=64,
+        qk_rope_head_dim=32,
+        v_head_dim=64,
+        max_seq_len=2048,
+        original_seq_len=4096,
+        mscale=1.0,
+        max_batch_size=1,      # the KV cache is unused in training; do not allocate it
+        attn_impl="naive",     # 3-4x cheaper attention than absorb, and the only SDPA path
+        moe_enabled=True,
+    )
+
+
+def get_torchfeather_1b_base_config() -> JobConfig:
+    """Shared base for the Phase 3 runs. Parallelism degrees are set by the callers below."""
+    config = JobConfig()
+
+    config.job.dump_folder = "./outputs"
+
+    config.profiling.enable_profiling = False
+    config.profiling.profile_freq = 100
+
+    config.metrics.log_freq = 10
+
+    config.model.hf_assets_path = "./assets/hf/deepseek-moe-16b-base"
+    config.model.args = get_torchfeather_1b_model_args()
+
+    config.optimizer.name = "AdamW"
+    config.optimizer.lr = 4e-4
+    config.optimizer.eps = 1e-8
+
+    config.lr_scheduler.warmup_steps = 300
+    config.lr_scheduler.decay_ratio = None
+    config.lr_scheduler.decay_type = "cosine"
+    config.lr_scheduler.min_lr_factor = 0.1
+
+    config.training.dataset = "fineweb_edu"
+    config.training.seq_len = 2048
+    config.training.local_batch_size = 8
+    config.training.global_batch_size = 64      # 64 * 2048 = 131,072 tokens per optimizer step
+    config.training.max_norm = 1.0
+    config.training.steps = 10000
+    config.training.dataloader_num_workers = 2
+
+    config.parallelism.data_parallel_replicate_degree = 1
+    config.parallelism.data_parallel_shard_degree = 8
+    config.parallelism.tensor_parallel_degree = 1
+    config.parallelism.pipeline_parallel_degree = 1
+    config.parallelism.expert_parallel_degree = 8
+    config.parallelism.expert_tensor_parallel_degree = 1
+
+    config.checkpoint.enable = True
+    config.checkpoint.interval = 150
+    config.checkpoint.keep_latest_k = 3         # ~16.6 GiB each -- 10 would be 166 GiB
+    config.checkpoint.async_mode = "async"
+
+    config.activation_checkpoint.mode = "selective"
+    config.activation_checkpoint.selective_ac_option = "op"
+
+    # Data-dependent shapes in the MoE make this expensive to compile and cheap to get wrong.
+    # Turn it on as a measured experiment (Stage 2), not as a default.
+    config.compile.enable = False
+
+    return config
+
+
+def get_torchfeather_1b_smoke_config() -> JobConfig:
+    """Stage 1: one GPU, 100 steps. Everything here exists to be measured, not trained."""
+    config = get_torchfeather_1b_base_config()
+    config.model.args.n_layers = 4
+    config.training.local_batch_size = 2
+    config.training.global_batch_size = 2
+    config.training.steps = 100
+    config.metrics.log_freq = 1
+    config.checkpoint.interval = 50
+    config.parallelism.data_parallel_shard_degree = 1
+    config.parallelism.expert_parallel_degree = 1
+    return config
+
+
+def get_torchfeather_1b_run_config() -> JobConfig:
+    """Stage 3: the real run. 8 GPUs, FSDP + EP, tp=1 so `attn_impl="naive"` is safe."""
+    return get_torchfeather_1b_base_config()
 
 
 def get_deepseek_v3_base_config() -> JobConfig:
@@ -188,6 +300,8 @@ def get_deepseek_v3_fsdp_ep_etp_config() -> JobConfig:
 
 
 config_map = {
+    "tf1b_smoke": get_torchfeather_1b_smoke_config,
+    "tf1b_run": get_torchfeather_1b_run_config,
     "hsdp": get_deepseek_v3_hsdp_config,
     "ddp": get_deepseek_v3_ddp_config,
     "fsdp": get_deepseek_v3_fsdp_config,

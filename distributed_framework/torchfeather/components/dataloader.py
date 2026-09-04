@@ -8,16 +8,6 @@ from torch.distributed.checkpoint.stateful import Stateful
 from torch.utils.data import IterableDataset
 from torchdata.stateful_dataloader import StatefulDataLoader
 
-import pickle
-from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator
-from typing import Any
-
-from loguru import logger
-from torch.distributed.checkpoint.stateful import Stateful
-from torch.utils.data import IterableDataset
-from torchdata.stateful_dataloader import StatefulDataLoader
-
 
 class DataloaderExhaustedError(Exception):
     pass
@@ -41,11 +31,14 @@ class ParallelAwareDataloader(StatefulDataLoader, BaseDataLoader):
         dp_world_size: int,
         batch_size: int,
         collate_fn: Callable | None = None,
+        num_workers: int = 0,
     ):
         self.dp_world_size = dp_world_size
         self.dp_rank = dp_rank
         self.batch_size = batch_size
-        super().__init__(dataset, batch_size, collate_fn=collate_fn)
+        # Tokenization runs inside the iterator, so with num_workers=0 it competes with the
+        # training step. Watch `time_metrics/data_loading(%)` and raise this if it climbs.
+        super().__init__(dataset, batch_size, collate_fn=collate_fn, num_workers=num_workers)
         self._rank_id = f"dp_rank_{dp_rank}"
 
     def state_dict(self) -> dict[str, Any]:

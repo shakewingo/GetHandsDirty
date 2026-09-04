@@ -112,6 +112,12 @@ class Training:
 
     gc_freq: int = 50
 
+    dataloader_num_workers: int = 0
+    """
+    Worker processes for the dataloader. Tokenization runs inside the dataset iterator, so at
+    0 it competes with the training step. Raise it if `time_metrics/data_loading(%)` climbs.
+    """
+
     seed: int | None = None
 
     deterministic: bool = False

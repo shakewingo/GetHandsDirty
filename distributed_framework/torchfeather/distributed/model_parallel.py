@@ -60,7 +60,7 @@ def apply_fsdp(
             )
 
     tok_embeddings: Any = model.token_embeddings
-    layers: list[Any] = list(model.layers)
+    layers: list[Any] = list(model.layers.values())
     norm: Any = model.layernorm
     output: Any = model.output
 

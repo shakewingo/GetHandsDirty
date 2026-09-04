@@ -83,13 +83,16 @@ class Trainer(Stateful):
             device_utils.device_module,
             device_utils.device_type,
         )
-        self.device = torch.device(f"{device_type}:{int(os.environ['LOCAL_RANK'])}") # what device I am inside of current node, LOCAL_RANK is a def versus GLOBAL RANK
+        # what device I am inside of current node, LOCAL_RANK is a def versus GLOBAL RANK
+        local_rank = int(os.environ["LOCAL_RANK"])
+        self.device = torch.device(device_type if device_type == "cpu" else f"{device_type}:{local_rank}")
         device_module.set_device(self.device)
 
         # init distributed and build meshes
         # allow you to make multi GPUs to communicate w each other, define timeout etc.. Note that torchrun ingests the global os.environ["RANK"] in order to further coordinate it dp_rank etc.
+        # "nccl" is a communication engine short from NVIDIA Collective Communications Library
         torch.distributed.init_process_group(
-            backend="nccl",
+            backend="nccl" if device_type == "cuda" else "gloo",
             timeout=timedelta(seconds=job_config.comm.init_timeout_seconds),
         )
         world_size = int(os.environ["WORLD_SIZE"])
@@ -327,6 +330,7 @@ class Trainer(Stateful):
         # For arguments, like attention_masks, we have to put them in a separate dict as extra_inputs are not forwarded to other stages in PP, but extra_kwargs are.
         extra_kwargs = {}
 
+        # TODO: CP is NOT SUPPORTED YET cuz currently the rope part is inside of the model and may provide wrong info ith CP sharded
         # apply context parallelism if cp is enabled
         # ensure CP handles the separate freqs_cis buffer for each pp stage
         optional_context_parallel_ctx = (
