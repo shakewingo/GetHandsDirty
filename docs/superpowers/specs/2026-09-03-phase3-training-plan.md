@@ -515,6 +515,76 @@ Measure and record:
 **Gate:** 100 steps, loss down, resume works, tok/s recorded. Everything after this is sized off
 that number.
 
+### Stage 1 results — RUN 2026-09-04, gates passed, one bug found
+
+Hardware: 1x RTX 4090 (sm89, 24 GiB, driver 570.169), RunPod secure, `$0.74/h`.
+Config `tf1b_smoke`: 4 layers, 440M total / 258M active, seq 2048, local batch 2, 100 steps.
+Total RunPod spend for the stage: **~$0.27** (16 min live plus two dead pods).
+
+**Both gates pass.**
+
+| gate | result |
+|---|---|
+| `torch._grouped_mm` on sm89 | **OK**, and bit-matches the reference loop. The Hopper-only worry was unfounded; the commented loop in `moe.py` stays commented |
+| FlashAttention actually selected | **PASS** under forced `sdpa_kernel([FLASH_ATTENTION])` |
+| flash vs math peak memory | 15.42 MiB vs 27.25 MiB on the probe shapes |
+| absorb path rejected by flash | confirmed, with the kernel's own reason: `requires q,k,v ... less than or equal to 256. Got Query.size(-1): 288` |
+| bf16 numerics on CUDA | maxdiff 7.81e-03, inside the 5e-2 bf16 budget |
+
+**Measured throughput and memory.**
+
+| metric | value |
+|---|---|
+| throughput | 25,000-28,500 tok/s steady state (1 GPU) |
+| achieved | ~27 TFLOPS |
+| MFU | **30-34%**, against a correct 82.6 TFLOPS 4090 basis (the M3 fix) |
+| peak memory | 12.60 GiB of 23.5 (53.6%) |
+| OOMs / alloc retries | 0 / 0 |
+| loss over 100 steps | 11.5366 -> 7.3791 |
+| checkpoint size | 5.0 GB for the 440M smoke model |
+| checkpoint save | 3.51 s |
+| checkpoint load | 4.56 s |
+
+MFU of 30-34% is far above the 12-15% this plan projected. Note it is a *single-GPU*
+number with no collectives; the 8-GPU figure is what Stage 2 config 1 exists to measure,
+and on 4090s without NVLink it will be lower.
+
+**Sizing implication for Stage 3.** At 2.09 GFLOP/token and ~27 TFLOPS/GPU the
+compute-bound ceiling is ~12,900 tok/s/GPU, so ~103k tok/s across eight cards --
+about 4x this plan's 26k assumption. If even half of that survives the collectives,
+Stage 3 buys 2B+ tokens rather than 1.3B in the same 12 hours. **Do not raise `steps`
+off this number** -- take it from Stage 2 config 1, which has the real communication cost.
+`local_batch_size=8` at 16 layers is still untested and may need the documented fallback.
+
+### F7 — a killed async checkpoint silently restarts training from step 1
+
+Found by the Stage 1 resume test, and it is the exact Stage 3 failure mode.
+
+Resume from a *complete* checkpoint works:
+
+```
+Loading the checkpoint from ./outputs/tf1b_smoke/checkpoint/step-50.
+Finished loading the checkpoint in 4.56 seconds.
+Training starts at step 51
+step: 51  loss:  8.0491        <- continuing, not a fresh 11.5
+```
+
+But when the process is killed while an async save is still writing (5.0 GB takes
+~3.5 s; the kill landed ~2 s after the save began), the `step-N` folder is left with no
+`.metadata`. `_find_load_step` only accepts folders that have one, so it skips the torn
+checkpoint -- correct -- and returns -1. `load()` then returns `False` **with no message**,
+and the next line in the log is `Training starts at step 1`. Observed: a run killed at
+step 64 restarted at step 1 with loss back at 11.5369.
+
+On a 12-hour run this reads as a mysteriously reset loss curve hours later.
+
+**Fix applied:** `CheckpointManager.load` now distinguishes "nothing saved yet" from
+"everything saved is unusable" and logs a loud warning naming the orphaned folders.
+
+**Operational consequence:** `keep_latest_k >= 2` is not optional, it is the thing that
+makes a torn latest checkpoint survivable -- the loader falls back to the previous
+complete one. The Stage 3 config already sets 3. Keep it.
+
 ### Stage 2 — the parallelism matrix. 8x RTX 4090. ~3 h. **~$8.20**
 
 This is the part that teaches the mechanisms, and it is the cheapest part. `world_size = 8`,
