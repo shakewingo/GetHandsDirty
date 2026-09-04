@@ -112,7 +112,7 @@ class ParallelDims:
         sparse_mesh = unflatten_mesh(
             self._world_mesh,
             # !!! Note that this basically means "EP" can borrow from dp_shard, cp and TP. It is not adding extra devices
-            # dp_shard * cp * tp / fsdp * fp = efsdp * ep * etp
+            # dp_shard * cp * tp / fsdp * tp = efsdp * ep * etp
             ("pp", "dp_replicate", "efsdp", "ep", "etp"),
             (self.pp, self.dp_replicate, efsdp, self.ep, self.etp),
         )
