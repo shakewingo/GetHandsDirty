@@ -87,6 +87,8 @@ class DeviceMemoryMonitor:
         return memory_in_gib
 
     def _to_pct(self, memory):
+        if not self.device_capacity:
+            return 0.0
         return 100 * memory / self.device_capacity
 
     def get_peak_stats(self):
@@ -222,8 +224,13 @@ def _build_metric_logger(
             base_log_dir, f"rank_{torch.distributed.get_rank()}"
         )
 
-    wandb_logger = WandBLogger(base_log_dir, job_config, tag)
-    return wandb_logger
+    try:
+        return WandBLogger(base_log_dir, job_config, tag)
+    except Exception as e:
+        # A rented pod without wandb installed or authenticated should still be able to train;
+        # the console line in MetricsProcessor.log carries the same numbers.
+        logger.warning(f"WandB unavailable ({type(e).__name__}: {e}); logging to console only")
+        return BaseLogger()
 
 
 class MetricsProcessor:

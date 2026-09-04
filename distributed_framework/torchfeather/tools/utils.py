@@ -64,6 +64,18 @@ def get_peak_flops(device_name: str) -> int:
         # Standard EU mode (i.e. 448 max compute units): 298.2 TFLOPS (BF16)
         max_comp_units = torch.xpu.get_device_properties("xpu").max_compute_units
         return 512 * max_comp_units * 1300 * 10**6
+    elif "RTX 4090" in device_name:
+        # Ada consumer, bf16 with fp32 accumulate (what PyTorch matmul uses); the marketed
+        # 165 TFLOPS figure is fp16-accumulate and is not reachable here.
+        return int(82.6e12)
+    elif "RTX 5090" in device_name:
+        return int(104.8e12)
+    elif "RTX 3090" in device_name:
+        return int(35.6e12)
+    elif "A6000" in device_name or "A40" in device_name:
+        return int(74.8e12)
+    elif "A5000" in device_name:
+        return int(54.2e12)
     elif "l40s" in device_name:
         # data from: "https://resources.nvidia.com/en-us-l40s/l40s-datasheet-28413"
         return int(362e12)

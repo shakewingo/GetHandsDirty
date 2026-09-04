@@ -7,10 +7,11 @@ import torch.nn.functional as F
 
 from torchfeather.model.attention import (
     ScaledDotProductAttentionWrapper,
+    local_head_count,
 )
 from torchfeather.model.model_args import DeepSeekV3ModelArgs
-# from torchfeather.model.moe import FeedForward, MoE
 from torchfeather.model.rope import RotaryEmbedding
+from torchfeather.model.moe import FeedForward, MoE, GroupedExperts
 from torch.distributed.tensor import DTensor, Replicate, Shard
 
 
@@ -70,9 +71,9 @@ class DeepSeekV3Model(nn.Module):
         self.n_layers = args.n_layers
         self.token_embeddings = nn.Embedding(args.vocab_size, args.dim)
 
-        self.layers = torch.nn.ModuleList()
-        for _ in range(self.n_layers):
-            self.layers.append(DecoderLayer(args))
+        self.layers = torch.nn.ModuleDict()
+        for layer_id in range(self.n_layers):
+            self.layers[str(layer_id)] = DecoderLayer(layer_id, args)
 
         self.layernorm = nn.RMSNorm(args.dim)
         self.output = nn.Linear(args.dim, args.vocab_size, bias=False)
@@ -103,9 +104,12 @@ class DeepSeekV3Model(nn.Module):
                 nn.init.normal_(module.weight, mean=0.0, std=0.02 / math.sqrt(self.dim))
             elif isinstance(module, nn.RMSNorm):
                 nn.init.ones_(module.weight)
+            elif isinstance(module, GroupedExperts):
+                for p in (module.gate_proj, module.up_proj, module.down_proj):
+                    nn.init.normal_(p, mean=0.0, std=0.02 / math.sqrt(self.dim))
 
         for pn, p in self.named_parameters():
-            if pn.endswith('wo.weight') or pn.endswith('down_proj.weight'):
+            if pn.endswith('wo.weight') or pn.endswith('down_proj.weight') or pn.endswith('experts.down_proj'):
                 # weights variance may boost 2L times after L layers transformer blocks (each block contains both attention and FFN so it boots 2 times)
                 # so we scale down the final output weights in transformer block
                 nn.init.normal_(p, mean=0.0, std=0.02 / math.sqrt(2 * self.n_layers))
@@ -115,6 +119,11 @@ class DeepSeekV3Model(nn.Module):
                 module.init_weights(buffer_device)
             elif isinstance(module, Attention):
                 module.init_kv_cache()
+            elif isinstance(module, MoE):
+                module.tokens_per_expert.zero_()
+                if module.expert_bias is not None:
+                    module.expert_bias.zero_()
+
 
     def forward(self, x, use_kv_cache=False, start_pos=0, last_token_only=False):
         # Non-first PP stages receive (B, S, D) hidden states; the first stage gets (B, S) token ids.
@@ -143,7 +152,7 @@ class DeepSeekV3Model(nn.Module):
                     mask, x.device_mesh, (Replicate(),), run_check=False
                 )
 
-        for layer in self.layers:
+        for layer in self.layers.values():
             x = layer(x, mask=mask, use_kv_cache=use_kv_cache, start_pos=start_pos)
 
         if self.layernorm is not None:
@@ -163,7 +172,7 @@ class DeepSeekV3Model(nn.Module):
         """Fuse MLA's W^UK/W^UV into every layer's attention, once, before running `generate`."""
         if self.args.attn_impl == 'naive':
             return  # nothing to absorb: 'naive' never compresses K/V in the first place
-        for layer in self.layers:
+        for layer in self.layers.values():
             layer.attention.absorb_weights()
 
     @torch.inference_mode
@@ -216,19 +225,6 @@ class DeepSeekV3Model(nn.Module):
         if not stream:
             yield input_ids[:, s:] 
 
-class FeedForward(nn.Module):
-    def __init__(self, args: DeepSeekV3ModelArgs):
-        super().__init__()
-        self.args = args
-        self.inter_dim = args.inter_dim
-        self.dim = args.dim
-        self.gate_proj = nn.Linear(self.dim, self.inter_dim, bias=False)
-        self.up_proj = nn.Linear(self.dim, self.inter_dim, bias=False)
-        self.down_proj = nn.Linear(self.inter_dim, self.dim, bias=False)
-
-    def forward(self, x):
-        down_proj = self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
 
 class Attention (nn.Module):
     """MLA attention"""
@@ -385,15 +381,39 @@ class Attention (nn.Module):
         q_pe = self.rotary_emb.apply_rotary_emb(q_pe, start_pos=start_pos)
         k_pe = self.rotary_emb.apply_rotary_emb(k_pe, start_pos=start_pos)
         if self.args.attn_impl == 'naive':
+            # Standard per-head MLA: decompress the latent into per-head K/V and run SDPA.
+            # This is the training path -- it contracts scores over qk_head_dim (96) rather
+            # than the absorbed path's kv_lora_rank + qk_rope_head_dim (288), and it is the
+            # only path `context_parallel` can shard, because that works by replacing the
+            # global `F.scaled_dot_product_attention`.
             q = torch.cat([q_nope, q_pe], dim=-1) # (B, S, n_h, d_h+d^R_h)
             kv_nope = self.kv_norm(kv_nope)
             kv_nope = self.wkv_b(kv_nope) # (B, S, 2*n_h*d_h))
             kv_nope = _split_heads(kv_nope, self.n_heads, self.qk_nope_head_dim + self.v_head_dim)
             k_nope, v_new = torch.split(kv_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
 
-            k_new = torch.cat([k_nope, k_pe.expand(-1,-1,self.n_heads,-1)], dim=-1) # (B, S, n_h, d_h+d^R_h)
+            # k_pe is head-shared and arrives Replicate() under TP, while k_nope is Shard(2).
+            # Expanding to the *global* head count and concatenating would force DTensor to
+            # reconcile the two placements. Expand to the local head count and re-wrap instead.
+            n_h_local = local_head_count(k_nope)
+            if isinstance(k_nope, DTensor):
+                k_pe_local = k_pe.to_local() if isinstance(k_pe, DTensor) else k_pe
+                k_new = DTensor.from_local(
+                    torch.cat(
+                        [k_nope.to_local(), k_pe_local.expand(-1, -1, n_h_local, -1)], dim=-1
+                    ),
+                    k_nope.device_mesh, k_nope.placements, run_check=False,
+                )
+            else:
+                k_new = torch.cat([k_nope, k_pe.expand(-1, -1, n_h_local, -1)], dim=-1)
 
             if use_kv_cache:
+                if isinstance(k_new, DTensor):
+                    raise NotImplementedError(
+                        "naive attn_impl with a KV cache is not supported under tensor "
+                        "parallelism: the cache buffers are sized for the global head count. "
+                        "Use attn_impl='absorb' for inference."
+                    )
                 self.k_cache[:B, start_pos:end_pos, :, :] = k_new
                 self.v_cache[:B, start_pos:end_pos, :, :] = v_new
                 k = self.k_cache[:B, :end_pos]  # (B, end_pos, n_h, qk_head_dim) -- full prefix incl. k_new
@@ -401,11 +421,43 @@ class Attention (nn.Module):
             else:
                 k, v = k_new, v_new              # (B, S, n_h, qk_head_dim) / (B, S, n_h, v_head_dim)
 
-            # NOTE: einsum is avoided under TP -- aten.einsum's sharding rule flattens
-            # batch dims including the head-sharded dim; matmul propagates cleanly.
-            # (B,S,H,Dq) @ (B,H,Dk,T) -> (B,H,S,T) -> (B,S,H,T)
-            scores = torch.matmul(q.permute(0, 2, 1, 3), k.permute(0, 2, 3, 1)).permute(0, 2, 1, 3) / math.sqrt(self.qk_head_dim)
+            # Attention is per-head, so under TP every rank can run its own head slice
+            # independently -- unwrap to locals, attend, re-wrap with the same head sharding.
+            tp_sharded = isinstance(q, DTensor)
+            if tp_sharded:
+                head_mesh, head_placements = q.device_mesh, q.placements
+                q_l, k_l, v_l = q.to_local(), k.to_local(), v.to_local()
+            else:
+                q_l, k_l, v_l = q, k, v
+
+            # A square q/k means every query is at its own absolute position, so `is_causal`
+            # is exact and is the only form `context_parallel` load-balances correctly. The
+            # rectangular case is decode against a cache, where the caller already built the
+            # right mask (or None, when a single query attends to the whole prefix).
+            square = q_l.shape[1] == k_l.shape[1]
+            attn_mask = None
+            if not square and mask is not None:
+                attn_mask = mask.unsqueeze(1)
+                if isinstance(attn_mask, DTensor):
+                    attn_mask = attn_mask.to_local()
+
+            # (B,S,H,D) -> (B,H,S,D) for SDPA, and back.
+            # NOTE: 1/sqrt(qk_head_dim), matching the absorbed path. `self.softmax_scale`
+            # carries a YaRN mscale correction that neither path has ever applied; changing
+            # that here would silently alter training math, so it stays out of scope.
+            x = self.inner_attention(
+                q_l.transpose(1, 2), k_l.transpose(1, 2), v_l.transpose(1, 2),
+                scale=1.0 / math.sqrt(self.qk_head_dim),
+                is_causal=square,
+                attn_mask=attn_mask,
+            ).transpose(1, 2)
+
+            if tp_sharded:
+                x = DTensor.from_local(x, head_mesh, head_placements, run_check=False)
+            return self.wo(_flatten_heads(x))
         else:
+            # TODO: Note that currently use plain matrix operation instead of FlashAttention, also the kv cache may have some problems under "absorb" mode to support paralellism. 
+            # But this only impact inference for now.
             # consider weights absortion to avoid calculating k distinctly, i.e. via changing multiply order i.e. A*(B*C) -> (A*B) * C to reduce computation cost
             if not self._absorbed:
                 wkv_b = self.wkv_b.weight # if self.wkv_b.scale is None else weight_dequant(self.wkv_b.weight, self.wkv_b.scale, block_size) , (d_h*n_h, d_c)
@@ -468,11 +520,7 @@ class Attention (nn.Module):
             scores += mask.unsqueeze(1) 
         scores = scores.softmax(dim=-1)
 
-        if self.args.attn_impl == 'naive':
-            # (B,S,H,T)->(B,H,S,T) @ (B,T,H,d_h)->(B,H,T,d_h) -> (B,H,S,d_h) -> (B,S,H,d_h)
-            x = torch.matmul(scores.permute(0, 2, 1, 3), v.permute(0, 2, 1, 3)).permute(0, 2, 1, 3)
-            x = self.wo(_flatten_heads(x))
-        elif self._absorbed:
+        if self._absorbed:
             # `kv_nope` is the cache slice during decode and the live latent during training.
             # (B,S,H,T)->(B,H,S,T) @ (B,1,T,d_c) -> (B,H,S,d_c) -> (B,S,H,d_c)
             x = torch.matmul(scores.permute(0, 2, 1, 3), kv_nope_l.unsqueeze(1)).permute(0, 2, 1, 3)
@@ -492,18 +540,21 @@ class Attention (nn.Module):
         return x
     
 class DecoderLayer(nn.Module):
-    def __init__(self, args: DeepSeekV3ModelArgs):
+    def __init__(self, layer_id: int, args: DeepSeekV3ModelArgs):
         super().__init__()
         self.args = args
         self.dim = args.dim
-        # Dense-only for now; MoE support lands later. Downstream parallelism
-        # code (TP/FSDP/compile) checks this flag to pick plans.
-        self.moe_enabled = False
-
         self.input_layernorm = nn.RMSNorm(self.dim)     
         self.attention = Attention(args)
         self.post_attention_layernorm = nn.RMSNorm(self.dim)
-        self.ffn = FeedForward(args)
+        # DeepSeek-V3 keeps the first `n_dense_layers` blocks dense and routes the rest.
+        # Downstream parallelism code (TP/FSDP/compile/optimizer) branches on this flag to
+        # pick plans, so it has to be per-layer rather than a single global switch.
+        self.moe_enabled = args.moe_enabled and layer_id >= args.n_dense_layers
+        if self.moe_enabled:
+            self.moe = MoE(args.moe_args, dim=args.dim, hidden_dim=args.moe_inter_dim)
+        else:
+            self.ffn = FeedForward(dim=args.dim, hidden_dim=args.inter_dim)
 
     def forward(self, x, mask=None, use_kv_cache=False, start_pos=0):
         residual = x
@@ -514,7 +565,7 @@ class DecoderLayer(nn.Module):
         x = residual + x
         residual = x
         x = self.post_attention_layernorm(x)
-        x = self.ffn(x)
+        x = self.moe(x) if self.moe_enabled else self.ffn(x)
         x = residual + x
         return x
 

@@ -11,13 +11,14 @@ class DeepSeekV3ModelArgs:
     vocab_size: int = 4096 # 102400
     dim: int = 512 # 2048
     inter_dim: int = 2048 # 10944
-    moe_inter_dim: int = 1408
     n_layers: int = 3 # 27
     n_dense_layers: int = 1
     n_heads: int = 8 # 16
     norm_eps: float = 1e-5  # eps used for RMSNorm
 
     # MoE
+    moe_inter_dim: int = 1408
+    moe_enabled: bool = True
     moe_args: MoEArgs = field(default_factory=MoEArgs)
 
     # MLA

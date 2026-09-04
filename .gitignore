@@ -1,4 +1,14 @@
-*dataset*
-*model*
+__pycache__/
+*.py[cod]
+*.ipynb_checkpoints/
+
+# Model weights / tokenizer assets and downloaded datasets, not source under model/
+*.safetensors
+*.bin
+*.pt
+*.pth
+assets/
+outputs/
+**/dataset/
+**/datasets_cache/
 *result*
-*__pycache__*

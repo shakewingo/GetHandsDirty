@@ -15,12 +15,20 @@ from torchfeather.components.tokenizer import DeepSeekV3Tokenizer
 from torchfeather.config import JobConfig
 from torchfeather.datasets import DatasetConfig
 
-def _load_fineweb_dataset(dataset_path: str, split: str):
+def _load_fineweb_dataset(dataset_path: str, split: str, name: str = "sample-10BT"):
+    """Stream a FineWeb-family dataset.
+
+    Args:
+        dataset_path (str): HF repo id, e.g. "HuggingFaceFW/fineweb-edu".
+        split (str): Dataset split to stream.
+        name (str): Config to stream. "default" is the full 15T-token corpus; the
+            "sample-*BT" configs are pre-cut subsets and are what a run of this size wants.
+    """
     huggingface_hub.constants.DEFAULT_REQUEST_TIMEOUT = 300  # ty: ignore[invalid-assignment]
     huggingface_hub.constants.DEFAULT_DOWNLOAD_TIMEOUT = 300  # ty: ignore[invalid-assignment]
     return load_dataset(
         dataset_path,
-        name="default",
+        name=name,
         split=split,
         streaming=True,
         download_config=DownloadConfig(max_retries=40),
@@ -33,7 +41,17 @@ def _process_pretrain_record(sample: dict[str, Any]) -> str:
 DATASETS = {
     "fineweb": DatasetConfig(
         path="HuggingFaceFW/fineweb",
-        loader=partial(_load_fineweb_dataset, split="train"),
+        loader=partial(_load_fineweb_dataset, split="train", name="sample-10BT"),
+        sample_processor=_process_pretrain_record,
+    ),
+    "fineweb_edu": DatasetConfig(
+        path="HuggingFaceFW/fineweb-edu",
+        loader=partial(_load_fineweb_dataset, split="train", name="sample-10BT"),
+        sample_processor=_process_pretrain_record,
+    ),
+    "fineweb_full": DatasetConfig(
+        path="HuggingFaceFW/fineweb",
+        loader=partial(_load_fineweb_dataset, split="train", name="default"),
         sample_processor=_process_pretrain_record,
     ),
 }
@@ -76,73 +94,73 @@ class HuggingFaceDataset(IterableDataset, Stateful):
         self._sample_idx: int = 0
         self._token_buffer: list[int] = []
 
-        def _get_data_iter(self):
-            # For map-style datasets, resume by skipping to the correct index
-            # For iterable-style datasets, the underlying iterator already points to the correct index
-            if isinstance(self._data, Dataset):
-                if self._sample_idx == len(self._data):
-                    return iter([])
-                else:
-                    return iter(self._data.skip(self._sample_idx))
-
-            return iter(self._data)
-
-        def __iter__(self):
-            max_buffer_token_len = 1 + self.seq_len
-
-            while True:
-                for sample in self._get_data_iter():
-                    # Use the dataset-specific text processor
-                    sample_text = self._text_processor(sample)
-                    sample_tokens = self._tokenizer.encode(
-                        sample_text, add_bos=True, add_eos=True
-                    )
-                    self._token_buffer.extend(sample_tokens)
-                    self._sample_idx += 1
-
-                    while len(self._token_buffer) >= max_buffer_token_len:
-                        x = torch.LongTensor(self._token_buffer[:max_buffer_token_len])
-                        # update tokens to the remaining tokens
-                        self._token_buffer = self._token_buffer[max_buffer_token_len:]
-                        input = x[:-1]
-                        label = x[1:]
-                        yield {"input": input}, label
-
-                if not self.infinite:
-                    logger.warning(f"Dataset {self.dataset_name} has run out of data")
-                    break
-                else:
-                    # Reset offset for the next iteration
-                    self._sample_idx = 0
-                    logger.warning(f"Dataset {self.dataset_name} is being re-looped")
-                    # Ensures re-looping a dataset loaded from a checkpoint works correctly
-                    if (
-                        not isinstance(self._data, Dataset)
-                        and hasattr(self._data, "set_epoch")
-                        and hasattr(self._data, "epoch")
-                    ):
-                        self._data.set_epoch(self._data.epoch + 1)
-
-        def state_dict(self):
-            _state_dict: dict[str, Any] = {"token_buffer": self._token_buffer}
-
-            if isinstance(self._data, Dataset):
-                _state_dict["sample_idx"] = self._sample_idx
+    def _get_data_iter(self):
+        # For map-style datasets, resume by skipping to the correct index
+        # For iterable-style datasets, the underlying iterator already points to the correct index
+        if isinstance(self._data, Dataset):
+            if self._sample_idx == len(self._data):
+                return iter([])
             else:
-                # Save the iterable dataset's state to later efficiently resume from it
-                # https://huggingface.co/docs/datasets/v3.5.0/en/stream#save-a-dataset-checkpoint-and-resume-iteration
-                _state_dict["data"] = self._data.state_dict()
+                return iter(self._data.skip(self._sample_idx))
 
-            return _state_dict
+        return iter(self._data)
 
-        def load_state_dict(self, state_dict):
-            self._token_buffer = state_dict["token_buffer"]
+    def __iter__(self):
+        max_buffer_token_len = 1 + self.seq_len
 
-            if isinstance(self._data, Dataset):
-                self._sample_idx = state_dict["sample_idx"]
+        while True:
+            for sample in self._get_data_iter():
+                # Use the dataset-specific text processor
+                sample_text = self._text_processor(sample)
+                sample_tokens = self._tokenizer.encode(
+                    sample_text, add_bos=True, add_eos=True
+                )
+                self._token_buffer.extend(sample_tokens)
+                self._sample_idx += 1
+
+                while len(self._token_buffer) >= max_buffer_token_len:
+                    x = torch.LongTensor(self._token_buffer[:max_buffer_token_len])
+                    # update tokens to the remaining tokens
+                    self._token_buffer = self._token_buffer[max_buffer_token_len:]
+                    input = x[:-1]
+                    label = x[1:]
+                    yield {"input": input}, label
+
+            if not self.infinite:
+                logger.warning(f"Dataset {self.dataset_name} has run out of data")
+                break
             else:
-                assert "data" in state_dict
-                self._data.load_state_dict(state_dict["data"])
+                # Reset offset for the next iteration
+                self._sample_idx = 0
+                logger.warning(f"Dataset {self.dataset_name} is being re-looped")
+                # Ensures re-looping a dataset loaded from a checkpoint works correctly
+                if (
+                    not isinstance(self._data, Dataset)
+                    and hasattr(self._data, "set_epoch")
+                    and hasattr(self._data, "epoch")
+                ):
+                    self._data.set_epoch(self._data.epoch + 1)
+
+    def state_dict(self):
+        _state_dict: dict[str, Any] = {"token_buffer": self._token_buffer}
+
+        if isinstance(self._data, Dataset):
+            _state_dict["sample_idx"] = self._sample_idx
+        else:
+            # Save the iterable dataset's state to later efficiently resume from it
+            # https://huggingface.co/docs/datasets/v3.5.0/en/stream#save-a-dataset-checkpoint-and-resume-iteration
+            _state_dict["data"] = self._data.state_dict()
+
+        return _state_dict
+
+    def load_state_dict(self, state_dict):
+        self._token_buffer = state_dict["token_buffer"]
+
+        if isinstance(self._data, Dataset):
+            self._sample_idx = state_dict["sample_idx"]
+        else:
+            assert "data" in state_dict
+            self._data.load_state_dict(state_dict["data"])
 
 
 def build_hf_dataloader(
@@ -172,4 +190,5 @@ def build_hf_dataloader(
         dp_rank=dp_rank,
         dp_world_size=dp_world_size,
         batch_size=batch_size,
+        num_workers=job_config.training.dataloader_num_workers,
     )

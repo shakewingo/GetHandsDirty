@@ -224,7 +224,7 @@ def apply_non_moe_tp(
         },
     )
 
-    for transformer_block in model.layers:
+    for transformer_block in model.layers.values():  # ty:ignore[unresolved-attribute]
         layer_plan: dict[str, ParallelStyle] = {
             "input_layernorm": SequenceParallel(),
             "attention": PrepareModuleInput(
