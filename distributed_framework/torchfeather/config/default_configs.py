@@ -144,8 +144,16 @@ def get_torchfeather_1b_smoke_config() -> JobConfig:
 
 
 def get_torchfeather_1b_run_config() -> JobConfig:
-    """Stage 3: the real run. 8 GPUs, FSDP + EP, tp=1 so `attn_impl="naive"` is safe."""
-    return get_torchfeather_1b_base_config()
+    """Stage 3: the real run. 8 GPUs, FSDP + EP, tp=1 so `attn_impl="naive"` is safe.
+
+    `steps` is env-overridable because it is a budget decision, not a model decision: it is
+    set from measured throughput and the dollars available, and the cosine schedule must land
+    on the last step or the run finishes parked at a high LR. Default 16000 = 2.10B tokens,
+    sized from the Stage 2 m3 measurement of 4.03 s/step on 8x A40.
+    """
+    config = get_torchfeather_1b_base_config()
+    config.training.steps = int(os.environ.get("TF_RUN_STEPS", "16000"))
+    return config
 
 
 def get_deepseek_v3_base_config() -> JobConfig:
