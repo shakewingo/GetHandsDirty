@@ -10,7 +10,7 @@ set -euo pipefail
 #    this repo actually needs (DeviceMesh._unflatten, torch._grouped_mm); 2.8
 #    does NOT have _unflatten, so 2.9 is the real floor.
 CUDA_TAG="${CUDA_TAG:-cu128}"
-pip install --break-system-packages --no-cache-dir \
+pip install --break-system-packages --no-cache-dir --upgrade \
   torch --index-url "https://download.pytorch.org/whl/${CUDA_TAG}"
 pip install --break-system-packages --no-cache-dir --upgrade-strategy only-if-needed \
   -r requirements.txt

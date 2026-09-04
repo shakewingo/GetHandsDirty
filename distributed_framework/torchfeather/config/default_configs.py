@@ -299,8 +299,57 @@ def get_deepseek_v3_fsdp_ep_etp_config() -> JobConfig:
     return config
 
 
+
+# Stage 2 parallelism matrix. Seven world_size=8 configs, same seed and same global
+# batch, so their loss curves are directly comparable against config 1. Each is 50
+# steps with checkpointing off -- these exist to exercise the plans, not to train.
+_STAGE2_MATRIX = {
+    #        dp_shard, tp, ep, etp, pp   exercises
+    "m1": (8, 1, 1, 1, 1),   # FSDP baseline, no expert plan
+    "m2": (8, 1, 2, 1, 1),   # ExpertParallel + EFSDP wrapping
+    "m3": (8, 1, 8, 1, 1),   # ep == world; the Shard(1) branch in apply_fsdp
+    "m4": (4, 2, 1, 1, 1),   # TensorParallel expert plan, no EP
+    "m5": (4, 2, 4, 1, 1),   # EP borrows TP -> ReordererSequenceParallel
+    "m6": (4, 2, 2, 2, 1),   # ExpertTensorParallel
+    "m7": (2, 2, 2, 1, 2),   # PP + EP
+}
+
+
+def _make_stage2_config(key: str):
+    dp_shard, tp, ep, etp, pp = _STAGE2_MATRIX[key]
+
+    def _build() -> JobConfig:
+        config = get_torchfeather_1b_base_config()
+        config.training.steps = 50
+        config.training.seed = 1234
+        config.training.deterministic = False
+        config.metrics.log_freq = 5
+        # Same global batch on every row, so the curves are comparable. local_batch_size
+        # is chosen per dp degree; gradient accumulation absorbs the difference.
+        config.training.global_batch_size = 64
+        config.training.local_batch_size = 8
+        config.checkpoint.enable = False
+
+        config.parallelism.data_parallel_replicate_degree = 1
+        config.parallelism.data_parallel_shard_degree = dp_shard
+        config.parallelism.tensor_parallel_degree = tp
+        config.parallelism.expert_parallel_degree = ep
+        config.parallelism.expert_tensor_parallel_degree = etp
+        config.parallelism.pipeline_parallel_degree = pp
+        return config
+
+    return _build
+
+
 config_map = {
     "tf1b_smoke": get_torchfeather_1b_smoke_config,
+    "tf1b_m1": _make_stage2_config("m1"),
+    "tf1b_m2": _make_stage2_config("m2"),
+    "tf1b_m3": _make_stage2_config("m3"),
+    "tf1b_m4": _make_stage2_config("m4"),
+    "tf1b_m5": _make_stage2_config("m5"),
+    "tf1b_m6": _make_stage2_config("m6"),
+    "tf1b_m7": _make_stage2_config("m7"),
     "tf1b_run": get_torchfeather_1b_run_config,
     "hsdp": get_deepseek_v3_hsdp_config,
     "ddp": get_deepseek_v3_ddp_config,
