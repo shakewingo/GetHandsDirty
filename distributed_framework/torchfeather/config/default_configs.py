@@ -1,3 +1,5 @@
+import os
+
 from torchfeather.config.job_config import JobConfig
 from torchfeather.model.model_args import DeepSeekV3ModelArgs
 from torchfeather.model.moe.moe import MoEArgs
@@ -305,6 +307,25 @@ def get_deepseek_v3_fsdp_ep_etp_config() -> JobConfig:
 
 
 
+
+def get_torchfeather_1b_reshard_config() -> JobConfig:
+    """Checkpoint-resharding probe. One config name, so both runs share a dump folder.
+
+    EP degree comes from TF_RESHARD_EP so the same checkpoint can be written at one
+    expert-parallel degree and read back at another -- the check that catches a shard
+    dim declared wrong, which DCP otherwise resolves silently and wrongly.
+    """
+    config = get_torchfeather_1b_base_config()
+    config.training.steps = int(os.environ.get("TF_RESHARD_STEPS", "10"))
+    config.training.seed = 1234
+    config.metrics.log_freq = 1
+    config.checkpoint.enable = True
+    config.checkpoint.interval = 5
+    config.checkpoint.enable_first_step_checkpoint = False
+    config.parallelism.data_parallel_shard_degree = 8
+    config.parallelism.expert_parallel_degree = int(os.environ.get("TF_RESHARD_EP", "2"))
+    return config
+
 # Stage 2 parallelism matrix. Seven world_size=8 configs, same seed and same global
 # batch, so their loss curves are directly comparable against config 1. Each is 50
 # steps with checkpointing off -- these exist to exercise the plans, not to train.
@@ -348,6 +369,7 @@ def _make_stage2_config(key: str):
 
 config_map = {
     "tf1b_smoke": get_torchfeather_1b_smoke_config,
+    "tf1b_reshard": get_torchfeather_1b_reshard_config,
     "tf1b_m1": _make_stage2_config("m1"),
     "tf1b_m2": _make_stage2_config("m2"),
     "tf1b_m3": _make_stage2_config("m3"),
