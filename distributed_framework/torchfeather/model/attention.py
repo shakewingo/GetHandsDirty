@@ -55,6 +55,17 @@ class ScaledDotProductAttentionWrapper(torch.nn.Module):
         Returns:
             torch.Tensor: Attention output, ``(B, H, S, Dv)``.
         """
+        # RoPE is computed in fp32 by design, so q and k come back wider than v, which
+        # carries the parameter dtype. SDPA requires all three to agree. Narrow q/k to v
+        # rather than promoting v: flash only accepts fp16/bf16, so promoting would
+        # silently drop us onto the math backend and re-materialize the score matrix.
+        # Under torch.autocast this never showed up -- autocast casts SDPA's inputs for
+        # us -- which is why it survived the single-GPU stage and only failed under FSDP,
+        # where mixed precision comes from fully_shard and there is no autocast context.
+        if q.dtype != v.dtype or k.dtype != v.dtype:
+            q = q.to(v.dtype)
+            k = k.to(v.dtype)
+
         head_dim_qk, head_dim_v = q.shape[-1], v.shape[-1]
 
         if head_dim_v < head_dim_qk:
