@@ -44,21 +44,21 @@ class TensorParallel(ParallelStyle):
     def _partition_fn(self, _name, module, device_mesh):
         # NOTE: they are DTensors but will be converted into local tensors when using GroupedExperts.forward
 
-        # w1 shape = (experts, out_dim, in_dim)
+        # gate_proj shape = (experts, out_dim, in_dim)
         module.register_parameter(
-            "w1", nn.Parameter(distribute_tensor(module.w1, device_mesh, [Shard(1)]))
+            "gate_proj", nn.Parameter(distribute_tensor(module.gate_proj, device_mesh, [Shard(1)]))
         )  # Column-wise sharding
 
-        # w2 shape = (experts, in_dim, out_dim)
+        # down_proj shape = (experts, in_dim, out_dim)
         module.register_parameter(
-            "w2",
-            nn.Parameter(distribute_tensor(module.w2, device_mesh, [Shard(2)])),
+            "down_proj",
+            nn.Parameter(distribute_tensor(module.down_proj, device_mesh, [Shard(2)])),
         )  # Row-wise sharding
 
-        # w3 shape = (experts, out_dim, in_dim)
+        # up_proj shape = (experts, out_dim, in_dim)
         module.register_parameter(
-            "w3",
-            nn.Parameter(distribute_tensor(module.w3, device_mesh, [Shard(1)])),
+            "up_proj",
+            nn.Parameter(distribute_tensor(module.up_proj, device_mesh, [Shard(1)])),
         )  # Column-wise sharding
 
     def _apply(self, module: nn.Module, device_mesh: DeviceMesh) -> nn.Module:
@@ -287,9 +287,9 @@ class ExpertTensorParallel(ExpertParallel):
     @staticmethod
     def _partition_fn(_name, mod, device_mesh):
         for name, param in mod.named_parameters(recurse=False):
-            # colwise TP: shard out_dim (dim 1) for w1/w3;
-            # rowwise TP: shard out_dim (dim 2) for w2
-            _tp_shard_dims = {"w1": 1, "w2": 2, "w3": 1}
+            # colwise TP: shard out_dim (dim 1) for gate_proj/up_proj
+            # rowwise TP: shard out_dim (dim 2) for down_proj
+            _tp_shard_dims = {"gate_proj": 1, "up_proj": 1, "down_proj": 2}
             shard_dim = _tp_shard_dims.get(name)
             placements = (
                 (Shard(0), Shard(shard_dim))
@@ -394,9 +394,9 @@ def apply_moe_ep_tp(
     if ep_mesh is not None and etp_enabled:
         assert ep_etp_mesh is not None
 
-    layers = cast(nn.ModuleList, model.layers)
+    layers = cast(nn.ModuleDict, model.layers)
 
-    for transformer_block in layers:
+    for transformer_block in layers.values():
         if not transformer_block.moe_enabled:
             continue
 
@@ -425,7 +425,7 @@ def apply_moe_ep_tp(
                     ),  # partial because at the exit of a TP region you still need to do all-reduce
                     desired_output_layouts=(
                         Shard(1),
-                    ),  # sharded because going to another SP region
+                    ),  # sharded because going to another SP region, meaning that it will be triggerred via scatter (maybe the 2 steps = reduce-scatter?)   to fit for further block's first module, e.g. RMSNorm
                 ),
                 "moe.router.gate": NoParallel(
                     output_grad_placements=gate_grad_placements,
@@ -439,11 +439,11 @@ def apply_moe_ep_tp(
                 # input Replicate, output Partial
                 moe_layer_plan.update(
                     {
-                        "moe.shared_experts.w1": ColwiseParallel(),
-                        "moe.shared_experts.w2": RowwiseParallel(
+                        "moe.shared_experts.gate_proj": ColwiseParallel(),
+                        "moe.shared_experts.down_proj": RowwiseParallel(
                             output_layouts=Partial()
                         ),
-                        "moe.shared_experts.w3": ColwiseParallel(),
+                        "moe.shared_experts.up_proj": ColwiseParallel(),
                     }
                 )
             parallelize_module(

@@ -1,0 +1,11 @@
+# torch is deliberately NOT listed here. It must come from the CUDA-matched PyTorch
+# index, which setup_pod.sh does. Listing it makes pip re-resolve against default
+# PyPI and silently upgrade to a cu130 build the driver cannot run -- observed
+# 2026-09-04: torch 2.14.0+cu130 landed on a driver-570 box and gave cuda False.
+# Floor is 2.9: 2.8 lacks DeviceMesh._unflatten, which parallel_dims needs.
+torchdata>=0.11
+datasets>=3.5
+tokenizers>=0.20
+huggingface_hub>=0.30
+loguru>=0.7
+wandb>=0.18          # optional at runtime: metrics.py falls back to console logging
