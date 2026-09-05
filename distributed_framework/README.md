@@ -7,13 +7,18 @@ Everything here is built rather than imported: MLA attention with weight absorpt
 auxiliary-loss-free MoE routing, and the full parallelism stack — FSDP, tensor, pipeline,
 expert and expert-tensor parallelism — over PyTorch's `DTensor` / `DeviceMesh` primitives.
 
+The full engineering record — the audit that found ten defects, the staged plan, and every
+measurement behind the numbers below — is written up as a runbook:
+[TorchFeather Phase 3 Runbook](https://claude.ai/code/artifact/391c0bac-d9f2-48e9-a1dc-b644a0d27a28).
+*(Private link — visible to the repo owner unless explicitly shared.)*
+
 ---
 
 ## The trained model
 
 | | |
 |---|---|
-| parameters | 1,319,310,336 total · 410,981,376 active per token |
+| parameters | 1.3B total · 411M active per token |
 | architecture | 16 layers (1 dense + 15 MoE), dim 1024, 8 heads, MLA with `kv_lora_rank=256` |
 | MoE | 32 experts, top-4, 1 shared expert, auxiliary-loss-free balancing |
 | tokenizer | DeepSeek-MoE-16B, 102,400 vocab |
