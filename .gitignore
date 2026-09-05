@@ -12,3 +12,6 @@ outputs/
 **/dataset/
 **/datasets_cache/
 *result*
+
+# Trained weights and run artifacts -- multi-GB, not source
+artifacts/
