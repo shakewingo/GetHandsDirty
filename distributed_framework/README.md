@@ -1,7 +1,7 @@
 # torchfeather
 
 A from-scratch distributed training framework for a DeepSeek-V3-style Mixture-of-Experts
-model, and the 1.3B model trained with it.
+model, and the 1.3B model trained with it. Original repo forked from [here](https://github.com/hkproj/torchfeather/tree/main) with some model architecture customized.
 
 Everything here is built rather than imported: MLA attention with weight absorption,
 auxiliary-loss-free MoE routing, and the full parallelism stack — FSDP, tensor, pipeline,
@@ -19,17 +19,17 @@ expert and expert-tensor parallelism — over PyTorch's `DTensor` / `DeviceMesh`
 | tokenizer | DeepSeek-MoE-16B, 102,400 vocab |
 | training data | FineWeb-Edu `sample-10BT`, streamed |
 | tokens seen | **2.10B** (16,000 steps × 131,072) |
-| final loss | **2.920** (200-step average); best single step 2.7661 |
-| perplexity | ≈ 18.5 |
+| final loss | **2.920** · perplexity ≈ 18.5 |
+| trained on | 8× A40, 17.9 h, **≈ $78** |
 
 At ~5 tokens per active parameter this is deliberately undertrained against the
 Chinchilla-optimal ~20. It produces fluent, grammatical English with real but unreliable
-factual recall — `The capital of France is Paris.` is correct; `Water boils at 212°C`
-has the right number and the wrong unit. The loss was still falling when the budget ran out.
+factual recall — `The capital of France is Paris.` is correct; `Water boils at 212°C` has
+the right number and the wrong unit. The loss was still falling when the budget ran out.
 
 ---
 
-## Running inference
+## Inference
 
 ```bash
 cd distributed_framework
@@ -39,194 +39,127 @@ python -m torchfeather.generate --interactive --device cuda
 
 Weights default to `./artifacts/torchfeather-1b-16000.pt` (2.64 GB, bf16).
 
-**On a low-memory machine.** An MoE saves compute, not weights: all 1.3B parameters must be
-resident even though only 0.41B are active per token. `generate.py` builds the model on the
-meta device and loads with `assign=True` + `mmap=True`, so parameters *become* the
-checkpoint's file-backed tensors instead of copies of them. Measured on a 3.9 GB box with
-2 CPUs: loads in ~1.7 s, 1.2 GB resident, weights in evictable page cache, **1.3 tok/s**.
+**Low-memory machines work.** An MoE saves compute, not weights — all 1.3B parameters must
+be resident even though only 0.41B are active per token. `generate.py` loads with
+`assign=True` + `mmap=True`, so parameters become the checkpoint's file-backed tensors
+rather than copies. Runs on a 3.9 GB box at 1.3 tok/s with 1.2 GB resident.
 
 Inference uses `attn_impl="absorb"`, which folds `W^UK`/`W^UV` into the q and o projections
 so the KV cache stores the latent rather than per-head keys and values. Training uses
-`attn_impl="naive"` instead — absorb contracts scores over 288 dims against naive's 96, which
-is 3–4× the attention FLOPs for a saving that only exists when there is a cache to reuse.
+`attn_impl="naive"`: absorb contracts scores over 288 dims against naive's 96, which only
+pays off when there is a cache to reuse.
 
 ---
 
-## Deployment: how the model was trained
+## Training
 
-### Hardware
+### 1. Provision
 
-| stage | hardware | rate | duration | cost |
-|---|---|---|---|---|
-| 0 — local fixes + CPU gate | this box | — | ~1 day | $0 |
-| 1 — single-GPU smoke | 1× RTX 4090, secure | $0.74/h | 16 min | $0.27 |
-| 2 — parallelism matrix | 8× A40 48 GB, secure | $3.92/h | ~1.5 h | $6 |
-| 3 — the training run | 8× A40 48 GB, secure | $3.92/h | 17.9 h | $70 |
-| 4 — export + sampling | same pod | $3.92/h | 20 min | $1.3 |
-| | | | **total** | **≈ $78** |
+8 GPUs with **≥ 40 GB each** — peak memory is 31–37 GiB per GPU. This model was trained on
+8× A40 48 GB on RunPod at $3.92/h.
 
-RunPod, EU-SE-1. **No 8× RTX 4090 was available at any tier**, and it would not have fit
-regardless: peak memory reached 37 GiB/GPU against a 4090's 23.5 GiB usable. The A40 at
-$3.92/h for 8 cards was both cheaper than 8× 4090 secure and the only 48 GB option under $8/h.
-
-### Machine-specific settings that are not optional
-
-```bash
-export NCCL_P2P_DISABLE=1     # see F9 below
-export WANDB_MODE=offline     # or set WANDB_API_KEY
-```
-
-Without `NCCL_P2P_DISABLE=1` every multi-GPU run hangs on its *first* collective and dies to
-the 300 s watchdog with zero training steps. This machine has no NVLink and splits GPUs 0–3 /
-4–7 across NUMA nodes over `SYS`. **Re-check this on any new pod** — it is a property of the
-topology, not of this code. A 20-line pure-NCCL script is the fastest way to bisect it.
-
-### Pod setup
+### 2. Set up
 
 ```bash
 git clone -b <branch> <repo> && cd GetHandsDirty/distributed_framework
 bash setup_pod.sh
 ```
 
-`setup_pod.sh` installs torch from the CUDA-matched index, installs the rest, asserts
-`torch.cuda.is_available()`, downloads the tokenizer, and runs both hardware gates
-(`torch._grouped_mm` on this SM, and that FlashAttention is genuinely selected rather than
-silently degraded to the math backend).
+Installs dependencies against the CUDA version the machine actually has, downloads the
+tokenizer, and runs two hardware gates: that `torch._grouped_mm` works on this SM, and that
+FlashAttention is genuinely selected rather than silently degraded to the math backend.
+**If either gate fails, stop** — training will run, just far slower than it should.
 
-Two environment traps it encodes:
+Requires torch ≥ 2.9 (2.8 lacks `DeviceMesh._unflatten`). `setup_pod.sh` picks the right
+build; don't install torch by hand.
 
-- The image's Python is PEP 668 externally-managed; pip needs `--break-system-packages`.
-- **`torch==2.13` does not exist for CUDA 12.8** — that index stops at 2.11.0, and 2.13 ships
-  only as `cu130`, which needs driver ≥ 580. Listing torch in `requirements.txt` made pip
-  re-resolve it against default PyPI and silently install a `cu130` build that reported
-  `cuda False`, so every GPU gate ran on CPU without failing. `requirements.txt` therefore
-  does not name torch. The real floor is **2.9** (2.8 lacks `DeviceMesh._unflatten`).
-
-### Launch
+### 3. Launch
 
 ```bash
 export TORCHFEATHER_CONFIG=tf1b_run
-export TF_RUN_STEPS=16000            # sized from measured throughput, not guessed
+export TF_RUN_STEPS=16000
+export NCCL_P2P_DISABLE=1        # required on machines without NVLink
+export WANDB_MODE=offline        # or set WANDB_API_KEY
+
 until torchrun --standalone --nproc_per_node=8 --max-restarts=3 -m torchfeather.train; do
   echo "trainer exited $?; resuming in 30s"; sleep 30
 done
 ```
 
-`--max-restarts` covers one rank dying; the outer loop covers the whole job dying. Resume is
-automatic — `CheckpointManager.load(step=-1)` takes the highest `step-N` carrying a
-`.metadata` file. Over 17.9 hours this fired exactly once, on the final teardown.
+`NCCL_P2P_DISABLE=1` is not optional on a machine without NVLink: without it every run
+hangs on its first collective and dies to the watchdog with zero steps. Check your topology
+with `nvidia-smi topo -m` — if you see `SYS` between GPUs, you need it.
 
----
+The `until` loop plus `--max-restarts` makes the run survive crashes. Resume is automatic:
+the trainer loads the newest complete checkpoint and continues.
 
-## Performance
+### Sizing the run
 
-Measured on 8× A40, `tf1b_run` (dp_shard=8, ep=8):
+Set `TF_RUN_STEPS` from measured throughput, not from a guess:
+
+```
+steps = budget_hours × 3600 × aggregate_tokens_per_sec / 131072
+```
+
+Run `TORCHFEATHER_CONFIG=tf1b_smoke` on one GPU first to get that number. The LR schedule
+is a cosine defined over `steps`, so decide the final count before starting — a truncated
+run ends parked at a high learning rate.
+
+### Measured throughput
 
 | | |
 |---|---|
-| throughput | ~36,000 tok/s aggregate (~4,500/GPU) |
+| throughput | ~36,000 tok/s aggregate (~4,500/GPU on A40) |
 | step time | ~3.6 s for 131,072 tokens |
-| MFU | ~12.6% against 74.8 TFLOPS bf16 |
-| peak memory | 31–37 GiB/GPU of 44.4 available |
-| checkpoint | 15 GB, 1.5 s blocking (async), ~107 saves ≈ 2.7 min total |
-
-### The cost of each parallelism dimension
-
-From the Stage 2 matrix, 50 steps each, same seed and global batch:
-
-| config | dp | tp | ep | etp | pp | tps/GPU | MFU |
-|---|---|---|---|---|---|---|---|
-| FSDP baseline | 8 | 1 | 1 | 1 | 1 | 6,079 | 16.97% |
-| + EP 2 | 8 | 1 | 2 | 1 | 1 | 5,062 | 14.13% |
-| + EP 8 | 8 | 1 | 8 | 1 | 1 | 4,062 | 11.34% |
-| TP only | 4 | 2 | 1 | 1 | 1 | 2,685 | 7.50% |
-| EP borrows TP | 4 | 2 | 4 | 1 | 1 | 2,580 | 7.20% |
-| ETP | 4 | 2 | 2 | 2 | 1 | 2,009 | 5.61% |
-| PP + EP | 2 | 2 | 2 | 1 | 2 | 1,169 | 3.26% |
-
-On a box with no NVLink, **each added communication dimension costs roughly a third of
-throughput**. Cheap $/hour is not cheap $/token. Single-GPU MFU was 30–34%; the drop to
-11–17% at 8 GPUs is entirely collectives.
-
-Note the loss column is only comparable *within* a dp degree — `split_dataset_by_node`
-shards by dp world size, so dp=8 and dp=4 runs stream different documents.
+| MFU | ~12.6% |
+| checkpoint | 15 GB, 1.5 s blocking (async) |
 
 ---
 
 ## Continuing from a checkpoint
 
-The full DCP checkpoint (`artifacts/step-16000/`, 15 GB) carries model, optimizer, LR
-schedule, dataloader position and step count.
+The DCP checkpoint carries model, optimizer, LR schedule, dataloader position and step count.
 
 ```bash
-# Put it back where the trainer looks, then raise the step budget and relaunch.
 mkdir -p outputs/tf1b_run/checkpoint
 cp -r artifacts/step-16000 outputs/tf1b_run/checkpoint/
 TF_RUN_STEPS=32000 TORCHFEATHER_CONFIG=tf1b_run \
   torchrun --standalone --nproc_per_node=8 -m torchfeather.train
 ```
 
-Three constraints:
-
-- **The GPU count cannot change.** `ParallelAwareDataloader.load_state_dict` asserts
-  `dp_world_size == state_dict["world_size"]`. To resume on a different world size, load with
-  `checkpoint.load_step=0` (model-only) and accept losing optimizer state and data position.
-- **The expert-parallel degree *can* change.** Verified: written at `ep=2`, read back at
-  `ep=4`, loss continued 9.6944 → 9.4042 rather than resetting. DCP reshards through DTensor
-  metadata.
-- **The LR schedule is defined over `training.steps`.** Raising it mid-run restarts the
-  cosine from wherever the schedule now says, which is not the same as extending the original
-  curve. For a genuine continuation, decide the final step count up front.
-
-### Checkpoint integrity
-
-`_find_load_step` only accepts a `step-N` directory carrying a `.metadata` file, so an async
-save killed mid-write is correctly skipped. **`keep_latest_k >= 2` is load-bearing**: it is
-what provides a complete older checkpoint to fall back to. With only one checkpoint and that
-one torn, training silently restarts from step 1 — `load()` now logs a loud warning naming
-the orphaned folders (F7). `enable_first_step_checkpoint=True` closes the same window at the
-start of a run.
+- **The GPU count cannot change.** The dataloader asserts it. To resume on a different world
+  size, set `checkpoint.load_step=0` for a model-only load and accept losing optimizer state
+  and data position.
+- **The expert-parallel degree can change.** DCP reshards through DTensor metadata — verified
+  by writing at `ep=2` and reading back at `ep=4`.
+- **Keep `keep_latest_k >= 2`.** A checkpoint interrupted mid-write is unloadable; the second
+  one is what the trainer falls back to.
 
 ---
 
 ## Configs
 
-`TORCHFEATHER_CONFIG` selects from `config/default_configs.py`:
+Select with `TORCHFEATHER_CONFIG`:
 
 | name | purpose |
 |---|---|
-| `tf1b_run` | the real run — 8 GPUs, FSDP + EP 8, 16,000 steps |
-| `tf1b_smoke` | single GPU, 4 layers, 100 steps — measure before you spend |
-| `tf1b_m1` … `tf1b_m7` | the Stage 2 parallelism matrix |
+| `tf1b_run` | the full run — 8 GPUs, FSDP + EP 8 |
+| `tf1b_smoke` | one GPU, 4 layers, 100 steps — measure before you spend |
+| `tf1b_m1` … `tf1b_m7` | parallelism matrix: FSDP / EP / TP / ETP / PP combinations |
 | `tf1b_reshard` | write a checkpoint at one EP degree, read it at another |
 
----
-
-## Verification
-
-Run these after any change to the model or the parallelism code:
-
-```bash
-python -m torchfeather.minimal_examples.verify_flash_attention   # asserts flash is selected
-python -m torchfeather.minimal_examples.verify_ep_gloo           # EP on CPU/gloo, 8 assertions
-python -m torchfeather.model.moe.moe                             # MoE self-checks
-python -m torchfeather.model.model                               # forward/backward smoke
-```
-
-`verify_flash_attention` matters more than it looks: SDPA degrades to the math backend
-*silently* when a constraint fails, restoring the `(B,H,S,T)` score tensor the wrapper exists
-to avoid. It forces `sdpa_kernel([FLASH_ATTENTION])` so a rejected constraint raises instead.
+Model and training hyperparameters live in `config/default_configs.py`.
 
 ---
 
-## Notes on what does not work
+## Known limitations
 
-- **Context parallelism is not usable.** `train.py` passes a `freqs_cis` buffer that does not
-  exist in this repo, and `RotaryEmbedding._rotate` indexes by absolute position, which CP's
-  load-balanced round-robin sharding breaks. Roughly half a day in `rope.py` to fix.
-- **`torch.compile` is off by default.** The MoE has data-dependent shapes and the line that
-  makes that tolerable (`capture_scalar_outputs`) is commented out. Turn it on as a measured
-  experiment.
-- **Vocabulary is oversized for the corpus.** 102,400 × 1024 × 2 = 210M parameters, 15% of the
-  model, on a Chinese-and-English tokenizer training on English-only text. A 32k–50k tokenizer
-  would buy back ~12% throughput and 100M parameters.
+- **Context parallelism does not work.** `train.py` references a `freqs_cis` buffer that does
+  not exist here, and RoPE indexes by absolute position, which CP's load-balanced sharding
+  breaks. Leave `context_parallel_degree=1`.
+- **`torch.compile` is off by default.** The MoE has data-dependent shapes; enable it as a
+  measured experiment, not a default.
+- **No validation loop.** There is no held-out split or eval during training — every reported
+  number is training loss.
+- **The vocabulary is oversized for English-only data.** 102,400 tokens costs 210M parameters,
+  15% of the model. A 32k–50k tokenizer would buy back throughput and parameters.
