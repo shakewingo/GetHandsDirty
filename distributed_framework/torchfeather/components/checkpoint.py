@@ -270,7 +270,25 @@ class CheckpointManager:
         else:
             step = self._find_load_step() if step == -1 else step
             if step == -1:
-                # No checkpoint to load.
+                # Distinguish "nothing saved yet" from "everything saved is unusable".
+                # `_find_load_step` only accepts a step-N directory that carries a
+                # `.metadata` file, so an async save killed mid-write is skipped here --
+                # correct, but it silently restarts from step 1, which on a long run
+                # reads as a mysteriously reset loss curve hours later.
+                orphans = sorted(
+                    d
+                    for d in os.listdir(self.folder)
+                    if re.search(CHECKPOINT_FOLDER_FORMAT, d)
+                    and not os.path.isfile(os.path.join(self.folder, d, ".metadata"))
+                )
+                if orphans:
+                    logger.warning(
+                        "Found {} checkpoint folder(s) with no .metadata -- {} -- most "
+                        "likely an async save that was killed mid-write. They cannot be "
+                        "loaded, so TRAINING RESTARTS FROM STEP 1.",
+                        len(orphans),
+                        ", ".join(orphans),
+                    )
                 return False
             model_only = step == 0
             checkpoint_id = self._create_checkpoint_id(step)

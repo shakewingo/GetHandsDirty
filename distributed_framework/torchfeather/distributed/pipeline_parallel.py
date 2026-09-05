@@ -295,7 +295,7 @@ def pipeline_module_split(
     module_names_per_stage: list[list[str]],
 ) -> tuple[list[PipelineStage], list[nn.Module]]:
     pp_rank = pp_mesh.get_local_rank() # which PP group I am inside the specific sub-mesh dim?
-
+    pp_degree = pp_mesh.size()
     num_stages = len(module_names_per_stage)
     stages = []
     models = []

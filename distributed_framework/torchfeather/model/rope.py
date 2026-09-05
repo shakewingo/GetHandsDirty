@@ -98,7 +98,11 @@ class RotaryEmbedding(nn.Module):
         seqlen = x.size(1)
         cos = self.cos_cached[start_pos:start_pos+seqlen, :].view(1, seqlen, 1, self.dim)  # (1, seqlen, 1, dim)
         sin = self.sin_cached[start_pos:start_pos+seqlen, :].view(1, seqlen, 1, self.dim)  # (1, seqlen, 1, dim)
-        return x * cos + self.rotate_adjacent(x) * sin
+        # The tables are fp32 -- the angles need that precision -- so this expression
+        # promotes a bf16 `x`. Return in x's dtype: everything downstream (the SDPA call
+        # on the naive path, the raw matmuls on the absorb path) requires q, k and v to
+        # agree, and a silently widened q is what breaks them.
+        return (x * cos + self.rotate_adjacent(x) * sin).to(x.dtype)
 
 if __name__ == "__main__":
     torch.manual_seed(123)
