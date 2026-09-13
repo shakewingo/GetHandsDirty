@@ -182,6 +182,9 @@ class Agent:
                         result.error_message = checked.feedback
                         return
                     if checked.status == "pending":
+                        # Raw candidate is already saved; don't teach the next request
+                        # to repeat an answer that failed the task's evidence check.
+                        messages.pop()
                         rejected_candidates += 1
                         if rejected_candidates >= self.max_rejected_candidates:
                             result.stop_reason = RunStopReason.CHECK_FAILED

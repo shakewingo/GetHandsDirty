@@ -105,6 +105,18 @@ class VerificationTests(unittest.TestCase):
         self.assertEqual(len(result.model_requests), 5)
         self.assertTrue(any("offset=4" in m.get("content", "") for m in result.messages))
 
+    def test_rejected_candidate_stays_in_raw_trace_but_not_the_next_prompt(self):
+        candidate = answer("LONG REJECTED SOURCE EXCERPT")
+        candidate.raw_response = {"choices": [{"message": candidate.to_message(), "finish_reason": "stop"}]}
+        agent = self.agent(read(), candidate, read(4), read(8), answer())
+        result = agent.run_turn("Read a.txt", completion_check=self.check)
+        self.assertFalse(any(m.get("content") == candidate.content for m in result.messages))
+        request = result.model_requests[1]
+        event = json.loads((self.workspace / "state/runs" / request.response_file).read_text())
+        self.assertEqual(event["raw_response"]["choices"][0]["message"]["content"], candidate.content)
+        # Historical request prefixes still end before any removed tail candidate.
+        self.assertEqual(result.messages[:request.input_message_count][-1]["role"], "tool")
+
     def test_history_does_not_satisfy_current_turn_and_budget_is_not_reset(self):
         agent = self.agent(answer())
         agent.max_iterations = 1
