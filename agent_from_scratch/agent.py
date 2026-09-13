@@ -244,7 +244,7 @@ class Agent:
                         raise ValueError("/read requires a configured workspace.")
                     path = command.split(maxsplit=1)[1]
                     completion_check = full_file_check(workspace, path)
-                    user_input = f"Read file {path}"
+                    user_input = f"Read file {path} in full, then briefly summarize it."
                 except (OSError, ValueError) as error:
                     print(f"Could not start read: {error}")
                     continue

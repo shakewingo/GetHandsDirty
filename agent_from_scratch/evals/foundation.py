@@ -82,7 +82,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     original = target.read_bytes()
     cases = args.cases.split(",")
-    if not set(cases) <= {"exact", "guarded", "guided", "partial", "history", "edit"}:
+    if not set(cases) <= {"exact", "guarded", "guided", "partial", "history", "edit", "read_command"}:
         parser.error("Unknown case.")
     if "edit" in cases and args.readonly:
         parser.error("edit requires a disposable writable workspace.")
@@ -142,9 +142,11 @@ def main():
             prompt = f"Read file {target}"
             history = []
             check = None
-            if case == "guarded":
+            if case in ("guarded", "read_command"):
                 from ..verification import full_file_check
                 check = full_file_check(workspace, target)
+                if case == "read_command":
+                    prompt += " in full, then briefly summarize it."
             elif case == "guided":
                 prompt += " in full, continuing with next_offset until eof is true. Do not ask me questions; finish by briefly summarizing the file."
             elif case == "partial":

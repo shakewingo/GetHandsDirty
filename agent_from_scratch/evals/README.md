@@ -7,8 +7,8 @@ python -m unittest discover -s agent_from_scratch/tests -v
 python -m agent_from_scratch.agent
 ```
 
-In the REPL, `/read llm.py` explicitly requests a full-file read with a coverage
-check. Paths may contain spaces. A plain sentence still uses the ordinary agent
+In the REPL, `/read llm.py` explicitly requests a full-file read and brief summary
+with a coverage check. Paths may contain spaces. A plain sentence still uses the ordinary agent
 loop: it has no automatic task-condition extraction. A successful coverage check
 does not verify the accuracy of the final summary.
 
@@ -25,7 +25,7 @@ llm = LLM(temperature=0, max_tokens=2048, n_ctx=8000,
           chat_template_path=workspace / "prompts/qwen_chat.jinja")
 agent = Agent(llm)
 result = agent.run_turn(
-    f"Read file {workspace / 'llm.py'}",
+    f"Read file {workspace / 'llm.py'} in full, then briefly summarize it.",
     completion_check=full_file_check(workspace, "llm.py"),
 )
 print(result.stop_reason, result.completion_check, result.final_answer)
@@ -45,7 +45,9 @@ python -m agent_from_scratch.evals.foundation \
 ```
 
 `exact` and `guarded` use the same initial sentence. Only `guarded` attaches the
-coverage checker. `guided` explicitly asks for all chunks; `partial` asks for the
+coverage checker. `read_command` uses the REPL command's explicit full-read/brief-summary
+wording with the checker; it is a separate condition, not an unchanged-prompt comparison.
+`guided` explicitly asks for all chunks; `partial` asks for the
 first 1024 bytes. `history` adds an actual prior exchange. `edit` resets
 `config.json` inside the supplied workspace, then asks for a read/change/read-back
 task. Run `edit` only in a disposable workspace.
