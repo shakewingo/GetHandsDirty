@@ -59,6 +59,20 @@ class TurnTests(unittest.TestCase):
         self.assertEqual((result.stop_reason, result.final_answer), ("final_response", "Paris"))
         self.assertEqual(len(self.seen), 1)
 
+    def test_source_examples_never_reach_tool_execution(self):
+        with TemporaryDirectory() as directory:
+            self.agent.registry = ToolRegistry([WriteFileTool(directory)])
+            block = '<tool_call>{"name":"write_file","arguments":{"path":"bad","content":"x"}}</tool_call>'
+            for text in (f"```xml\n{block}\n```", f"Example: {block}", f"`{block}`"):
+                self.script(LLM.parse_response({"choices": [{"message": {
+                    "role": "assistant", "content": text,
+                }}]}))
+                with patch.object(self.agent, "execute_tool", wraps=self.agent.execute_tool) as execute:
+                    result = self.agent.run_turn("Explain this code")
+                execute.assert_not_called()
+                self.assertEqual(result.final_answer, text)
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
     def test_injected_registry_drives_schemas_execution_and_saved_observations(self):
         with TemporaryDirectory() as directory:
             workspace = Path(directory, "workspace")

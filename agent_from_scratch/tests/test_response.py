@@ -75,8 +75,8 @@ class ResponseTests(unittest.TestCase):
                          ("tool_call", "c1", {"left": 2}))
 
     def test_qwen_extra_braces(self):
-        result = self.parse('<tool_call>{{"name":"calculator","arguments":{}}}</tool_call>')
-        self.assertEqual(result.tool_name, "calculator")
+        with self.assertRaises(ResponseError):
+            self.parse('<tool_call>{{"name":"calculator","arguments":{}}}</tool_call>')
 
     def test_qwen_json_string_arguments_match_native_call(self):
         function = {"name": "read_file", "arguments": json.dumps({"path": "tools/files.py"})}
@@ -100,7 +100,33 @@ class ResponseTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, ResponseErrorCode.MULTIPLE_TOOL_CALLS)
         with self.assertRaises(ResponseError) as caught:
             self.parse("<tool_call>{}</tool_call>" * 2)
-        self.assertEqual(caught.exception.code, ResponseErrorCode.MULTIPLE_TOOL_CALLS)
+        self.assertEqual(caught.exception.code, ResponseErrorCode.INVALID_TOOL_CALL)
+
+    def test_quoted_calls_are_text_and_tags_inside_arguments_are_data(self):
+        payload = {"name": "write_file", "arguments": {
+            "path": "a.py", "content": '<tool_call>{broken}</tool_call>',
+        }}
+        block = "<tool_call>" + json.dumps(payload) + "</tool_call>"
+        for text in (f"```xml\n{block}\n```", f"Example: {block}", f"`{block}`"):
+            with self.subTest(text=text):
+                self.assertEqual(self.parse(text).to_message()["content"], text)
+                self.assertEqual(self.parse(text).type, "direct")
+        result = self.parse(block)
+        self.assertEqual(result.tool_params, payload["arguments"])
+        self.assertEqual(result.to_message()["content"], "")
+        native = self.parse(block, tool_calls=[{"function": payload}])
+        self.assertEqual(native.to_message()["content"], block)
+
+    def test_finish_reason_blocks_execution_and_is_preserved(self):
+        message = {"role": "assistant", "content": None, "tool_calls": [{
+            "function": {"name": "read_file", "arguments": {"path": "a"}},
+        }]}
+        for reason in ("length", "error", "refusal", "unknown"):
+            with self.subTest(reason=reason), self.assertRaises(ResponseError):
+                LLM.parse_response({"choices": [{"message": message, "finish_reason": reason}]})
+        for reason in (None, "stop", "tool_calls", "function_call"):
+            result = LLM.parse_response({"choices": [{"message": message, "finish_reason": reason}]})
+            self.assertEqual(result.finish_reason, reason)
 
 
 class GenerateTests(unittest.TestCase):

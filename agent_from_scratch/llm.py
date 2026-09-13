@@ -33,21 +33,13 @@ class LLMResponse:
         if self.type == ResponseType.direct:
             return {"role": "assistant", "content": self.content}
 
-        # Keep surrounding text, but don't repeat the Qwen tool call
-        # when we represent it below as structured tool_calls.
-        content = self.content
-        if "<tool_call>" in content:
-            before, _, remaining = content.partition("<tool_call>")
-            _, _, after = remaining.partition("</tool_call>")
-            content = (before + after).strip()
-
         # parse_response() already validates the name and arguments.
         assert self.tool_name is not None
         assert self.tool_params is not None
 
         return {
             "role": "assistant",
-            "content": content,
+            "content": self.content,
             "tool_calls": [{
                 "id": self.call_id,
                 "type": "function",
@@ -65,6 +57,7 @@ class ResponseErrorCode(StrEnum):
     EMPTY_RESPONSE = "empty_response"
     TRUNCATED_RESPONSE = "truncated_response"
     MULTIPLE_TOOL_CALLS = "multiple_tool_calls"
+    UNSUPPORTED_FINISH_REASON = "unsupported_finish_reason"
 
 
 RESPONSE_ERROR_MESSAGES = {
@@ -73,6 +66,7 @@ RESPONSE_ERROR_MESSAGES = {
     ResponseErrorCode.EMPTY_RESPONSE: "Model response has no text or tool call.",
     ResponseErrorCode.TRUNCATED_RESPONSE: "Model response was truncated.",
     ResponseErrorCode.MULTIPLE_TOOL_CALLS: "Only one tool call per response is supported.",
+    ResponseErrorCode.UNSUPPORTED_FINISH_REASON: "Unsupported model finish reason.",
 }
 
 
@@ -175,6 +169,9 @@ class LLM:
             raise ResponseError(ResponseErrorCode.INVALID_RESPONSE, "Content must be text or null.")
         if choice.get("finish_reason") == "length":
             raise ResponseError(ResponseErrorCode.TRUNCATED_RESPONSE)
+        if choice.get("finish_reason") not in (None, "stop", "tool_calls", "function_call"):
+            raise ResponseError(ResponseErrorCode.UNSUPPORTED_FINISH_REASON,
+                                str(choice.get("finish_reason")))
         usage = LLM.read_usage(response.get("usage"))
         calls = message.get("tool_calls")
         if calls is not None and not isinstance(calls, list):
@@ -196,7 +193,8 @@ class LLM:
                 raise ResponseError(
                     ResponseErrorCode.INVALID_TOOL_CALL, "Cannot decode native tool call."
                 ) from error
-            if not isinstance(name, str) or not isinstance(arguments, dict):
+            if (not isinstance(name, str) or not name.strip() or not isinstance(arguments, dict)
+                    or not isinstance(call_id, str)):
                 raise ResponseError(
                     ResponseErrorCode.INVALID_TOOL_CALL,
                     "Expected a string name and object arguments.",
@@ -213,10 +211,7 @@ class LLM:
             )
         if not isinstance(content, str) or not content.strip():
             raise ResponseError(ResponseErrorCode.EMPTY_RESPONSE)
-        if "<tool_call>" in content or "</tool_call>" in content:
-            # qwen sepcific tool_call format processing
-            if content.count("<tool_call>") > 1:
-                raise ResponseError(ResponseErrorCode.MULTIPLE_TOOL_CALLS)
+        if content.strip().startswith("<tool_call>"):
             try:
                 tool_content = decode_qwen_tool_call(content)
             except ValueError as error:
@@ -227,7 +222,7 @@ class LLM:
             tool_params = tool_content.get("arguments")
             return LLMResponse(
                 role=role,
-                content=content,
+                content="",
                 type=ResponseType.tool_call,
                 tool_name=tool_name,
                 tool_params=tool_params,

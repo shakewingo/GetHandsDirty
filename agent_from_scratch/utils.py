@@ -37,27 +37,22 @@ def render_prompt(name: str, **context) -> str:
     return env.get_template(name).render(**context).strip()
 
 def decode_qwen_tool_call(content: str) -> dict[str, Any]:
-    # TODO; may later on extend to a structued json output helper
-    start_tag = "<tool_call>"
-    end_tag = "</tool_call>"
-
-    if content.count(start_tag) != 1 or content.count(end_tag) != 1:
-        raise ValueError("Expected exactly one complete tool-call block.")
-    start = content.index(start_tag) + len(start_tag)
-    end = content.index(end_tag, start)
-    payload = content[start:end].strip()
-
-    # Compatibility with Qwen's extra outer braces: {{...}}
-    if payload.startswith("{{") and payload.endswith("}}"):
-        payload = payload[1:-1]
+    """Decode a whole response block; tags inside JSON strings remain data."""
+    text = content.strip()
+    if not text.startswith("<tool_call>"):
+        raise ValueError("Expected a top-level tool-call block.")
+    payload = text[len("<tool_call>"):].lstrip()
     try:
-        call = json.loads(payload)
+        call, end = json.JSONDecoder().raw_decode(payload)
+        if payload[end:].strip() != "</tool_call>":
+            raise ValueError("Expected exactly one complete tool-call block.")
         # Qwen can use the same JSON-string arguments as a native tool call.
         if isinstance(call, dict) and isinstance(call.get("arguments"), str):
             call["arguments"] = json.loads(call["arguments"])
     except json.JSONDecodeError as error:
         raise ValueError("Invalid tool-call JSON") from error
-    if not isinstance(call, dict) or not isinstance(call.get("name"), str) or not isinstance(call.get("arguments"), dict):
+    if (not isinstance(call, dict) or not isinstance(call.get("name"), str)
+            or not call["name"].strip() or not isinstance(call.get("arguments"), dict)):
         raise ValueError("Tool call requires a string name and object arguments.")
     return call
 
