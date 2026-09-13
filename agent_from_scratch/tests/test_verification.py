@@ -3,7 +3,7 @@ import unittest
 from dataclasses import asdict
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from agent_from_scratch.agent import Agent
 from agent_from_scratch.llm import LLM, LLMResponse
@@ -138,6 +138,22 @@ class VerificationTests(unittest.TestCase):
         self.assertEqual(result.stop_reason, "max_iterations")
         self.assertEqual(result.completion_check["status"], "passed")
         self.assertIsNone(result.final_answer)
+
+    def test_candidate_rejections_have_a_separate_limit(self):
+        agent = self.agent(answer(), answer(), answer(), read())
+        result = agent.run_turn("Read a.txt", completion_check=self.check)
+        self.assertEqual((result.stop_reason, len(result.model_requests)), ("check_failed", 3))
+        self.assertIsNone(result.final_answer)
+        self.assertIn("retry limit", result.error_message)
+
+    def test_read_command_accepts_space_in_path_and_verifies_before_printing(self):
+        target = self.workspace / "a file.txt"
+        target.write_text("1234")
+        agent = self.agent(read(path="a file.txt"), answer("Read the file."))
+        with patch("builtins.input", side_effect=["/read a file.txt", "exit"]), patch("builtins.print") as output:
+            agent.run_repl(workspace=self.workspace)
+        self.assertTrue(output.call_args.args[0].endswith("Read the file."))
+        self.assertEqual(agent.llm.generate.call_count, 2)
 
 
 if __name__ == "__main__":

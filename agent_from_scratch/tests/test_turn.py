@@ -176,6 +176,29 @@ class TurnTests(unittest.TestCase):
         self.assertEqual(result.stop_reason, "max_iterations")
         self.assertIsNone(result.final_answer)
 
+    def test_identical_failures_stop_after_three_and_leave_complete_tool_pairs(self):
+        with TemporaryDirectory() as directory:
+            self.agent.state_dir = directory
+            self.script(call(left="bad"), call(left="bad"), call(left="bad"), answer("Unused"))
+            result = self.agent.run_turn("test", session_id="test")
+            self.assertEqual((result.stop_reason, len(self.seen)), ("no_progress", 3))
+            self.assertEqual(result.messages[-1]["role"], "tool")
+            self.assertEqual(SessionStore(Path(directory) / "sessions").load_history("test"), [])
+            self.assertIsNone(result.final_answer)
+
+    def test_success_resets_consecutive_failure_limit(self):
+        self.script(call(left="bad"), call(left="bad"), call(),
+                    call(left="bad"), call(left="bad"), call(), answer("4"))
+        self.assertEqual(self.agent.run_turn("test").final_answer, "4")
+
+    def test_identical_parse_errors_stop_at_three(self):
+        error = ResponseError(ResponseErrorCode.INVALID_TOOL_CALL)
+        self.script(error, error, error, answer("Unused"))
+        with patch.object(self.agent, "execute_tool") as execute:
+            result = self.agent.run_turn("test")
+        self.assertEqual((result.stop_reason, len(self.seen)), ("no_progress", 3))
+        execute.assert_not_called()
+
     def test_parse_error_is_feedback_then_corrected_without_executing_a_tool(self):
         self.script(ResponseError(ResponseErrorCode.INVALID_RESPONSE), answer("Paris"))
         with patch.object(self.agent, "execute_tool") as execute:

@@ -22,6 +22,7 @@ class RunStopReason(StrEnum):
     MODEL_ERROR = "model_error"
     INTERRUPTED = "interrupted"
     CHECK_FAILED = "check_failed"
+    NO_PROGRESS = "no_progress"
 
 
 class ModelRequestStatus(StrEnum):

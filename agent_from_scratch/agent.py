@@ -46,6 +46,8 @@ class Agent:
                  *, registry: ToolRegistry | None = None):
         self.llm = llm
         self.max_iterations = 20
+        self.max_same_failures = 3
+        self.max_rejected_candidates = 3
         self.state_dir = state_dir
         self.registry = default_registry if registry is None else registry
 
@@ -62,7 +64,9 @@ class Agent:
                       *deepcopy(history or []), {"role": "user", "content": user_input}],
             run_id=uuid4().hex, session_id=session_id, input=user_input,
             started_at=datetime.now(timezone.utc).isoformat(),
-            settings={**self.llm.settings(), "max_iterations": self.max_iterations},
+            settings={**self.llm.settings(), "max_iterations": self.max_iterations,
+                      "max_same_failures": self.max_same_failures,
+                      "max_rejected_candidates": self.max_rejected_candidates},
         )
         trace = TraceStore(Path(self.state_dir, "runs") if self.state_dir is not None else None)
         try:
@@ -107,6 +111,18 @@ class Agent:
                   completion_check: CompletionCheck | None = None) -> None:
         messages = result.messages
         turn_start = len(messages)
+        last_failure, failure_count, rejected_candidates = None, 0, 0
+
+        def repeated_failure(key: tuple) -> bool:
+            nonlocal last_failure, failure_count
+            failure_count = failure_count + 1 if key == last_failure else 1
+            last_failure = key
+            if failure_count < self.max_same_failures:
+                return False
+            result.stop_reason = RunStopReason.NO_PROGRESS
+            result.error_message = f"The same {key[0]} failure occurred {failure_count} times."
+            return True
+
         for iteration in range(1, self.max_iterations + 1):
             request = ModelRequest(iteration, len(messages))
             result.model_requests.append(request)
@@ -119,6 +135,8 @@ class Agent:
                 logger.error("LLM response error: {}", error)
                 trace.save_parse_error(result, iteration, error)
                 messages.append({"role": "user", "content": recovery_feedback(error)})
+                if repeated_failure(("response", error.code)):
+                    return
                 continue
             except Exception as error:
                 request.status = ModelRequestStatus.MODEL_ERROR
@@ -143,7 +161,14 @@ class Agent:
                     logger.error("Tool execution failed due to: {}", tool_result.error_message)
                 messages.append({"role": "tool", "content": json.dumps(asdict(tool_result)),
                                  "tool_call_id": tool_result.call_id})
+                if tool_result.ok:
+                    last_failure, failure_count = None, 0
+                elif repeated_failure((response.tool_name,
+                                       json.dumps(response.tool_params, sort_keys=True, ensure_ascii=False),
+                                       tool_result.error_code)):
+                    return
             elif response.type == ResponseType.direct:
+                last_failure, failure_count = None, 0
                 if completion_check is not None:
                     checked = self._check_completion(result, completion_check, turn_start)
                     if checked.status == "blocked":
@@ -151,6 +176,11 @@ class Agent:
                         result.error_message = checked.feedback
                         return
                     if checked.status == "pending":
+                        rejected_candidates += 1
+                        if rejected_candidates >= self.max_rejected_candidates:
+                            result.stop_reason = RunStopReason.CHECK_FAILED
+                            result.error_message = "Completion-check retry limit reached. " + checked.feedback
+                            return
                         messages.append({"role": "user", "content": f"[Runtime feedback] {checked.feedback}"})
                         continue
                 result.final_answer = response.content
@@ -171,7 +201,8 @@ class Agent:
         return next_id
 
     def run_repl(self, session_id: str = "default_session", *,
-                 user_color: int = 33, agent_color: int = 32):
+                 user_color: int = 33, agent_color: int = 32,
+                 workspace: str | Path | None = None):
         """ANSI label colors: 31 red, 32 green, 33 yellow, 34 blue, 35 magenta, 36 cyan."""
         user_label = color_label("User:", user_color)
         agent_label = color_label("Agent:", agent_color)
@@ -197,7 +228,19 @@ class Agent:
             except (OSError, ValueError) as error:
                 print(f"Session unavailable: {error}. Use /new, /reset, or /session <id> to recover.")
                 continue
-            result = self.run_turn(user_input, history, session_id=session_id)
+            completion_check = None
+            if command.startswith("/read "):
+                try:
+                    if workspace is None:
+                        raise ValueError("/read requires a configured workspace.")
+                    path = command.split(maxsplit=1)[1]
+                    completion_check = full_file_check(workspace, path)
+                    user_input = f"Read file {path}"
+                except (OSError, ValueError) as error:
+                    print(f"Could not start read: {error}")
+                    continue
+            result = self.run_turn(user_input, history, session_id=session_id,
+                                   completion_check=completion_check)
             if result.stop_reason == RunStopReason.FINAL_RESPONSE:
                 print(f"{agent_label} {result.final_answer}")
             elif result.stop_reason == RunStopReason.MODEL_ERROR:
@@ -208,10 +251,13 @@ class Agent:
                 print("Turn interrupted.")
             else:
                 print(f"Stopped: {result.stop_reason}. {result.error_message or ''}")
+            if result.stop_reason != RunStopReason.FINAL_RESPONSE and result.completion_check:
+                check = result.completion_check
+                print(f"Check {check['name']}: {check['status']}. {check['feedback']}")
 
 
 if __name__ == "__main__":
     llm = LLM(model_path=str(_MODEL_PATH), temperature=0.0, max_tokens=2048,
               n_gpu_layers=-1, n_ctx=8000, chat_template_path=_QWEN_TEMPLATE)
     agent = Agent(llm, state_dir="./outputs/sessions")
-    agent.run_repl()
+    agent.run_repl(workspace="./agent_from_scratch")
