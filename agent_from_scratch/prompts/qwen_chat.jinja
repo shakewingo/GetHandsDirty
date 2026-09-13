@@ -33,7 +33,7 @@
             {{- '\n<tool_call>\n{"name": "' }}
             {{- tool_call.name }}
             {{- '", "arguments": ' }}
-            {%- if tool_call.arguments is string %}{{- tool_call.arguments }}{%- else %}{{- tool_call.arguments | tojson }}{%- endif %}
+            {%- if tool_call.arguments is string %}{{- tool_call.arguments | replace('<', '\\u003c') }}{%- else %}{{- tool_call.arguments | tojson }}{%- endif %}
             {{- '}\n</tool_call>' }}
         {%- endfor %}
         {{- '<|im_end|>\n' }}
@@ -42,7 +42,7 @@
             {{- '<|im_start|>user' }}
         {%- endif %}
         {{- '\n<tool_response>\n' }}
-        {{- message.content }}
+        {{- message.content | replace('<', '\\u003c') }}
         {{- '\n</tool_response>' }}
         {%- if loop.last or (messages[loop.index0 + 1].role != "tool") %}
             {{- '<|im_end|>\n' }}
