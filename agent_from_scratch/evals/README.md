@@ -25,7 +25,7 @@ llm = LLM(temperature=0, max_tokens=2048, n_ctx=8000,
           chat_template_path=workspace / "prompts/qwen_chat.jinja")
 agent = Agent(llm)
 result = agent.run_turn(
-    f"Read file {workspace / 'llm.py'} in full, then briefly summarize it.",
+    f"Read file {workspace / 'llm.py'} in full. Reply with a short summary only, without reproducing the file.",
     completion_check=full_file_check(workspace, "llm.py"),
 )
 print(result.stop_reason, result.completion_check, result.final_answer)

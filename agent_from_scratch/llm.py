@@ -93,14 +93,19 @@ def install_qwen_template(model, path: Path) -> str:
 
     if model.metadata.get("general.architecture") != "qwen2":
         raise ValueError("The project chat template requires Qwen2.")
-    for token, token_id in (("<|im_end|>", model.token_eos()),
-                            ("<|endoftext|>", model.token_bos())):
+    eos_id, bos_id = model.token_eos(), model.token_bos()
+    if min(eos_id, bos_id) < 0:
+        raise ValueError("Missing Qwen special token IDs.")
+    eos, bos = (model.detokenize([token_id], special=True).decode("utf-8")
+                for token_id in (eos_id, bos_id))
+    for token, token_id in ((eos, eos_id), (bos, bos_id)):
         if model.tokenize(token.encode(), add_bos=False, special=True) != [token_id]:
             raise ValueError(f"Unexpected Qwen special token: {token}")
     template = path.read_text(encoding="utf-8")
+    if not eos or eos not in template:
+        raise ValueError("The chat template does not use this model's end token.")
     model.chat_handler = Jinja2ChatFormatter(
-        template=template, eos_token="<|im_end|>", bos_token="<|endoftext|>",
-        stop_token_ids=[model.token_eos()],
+        template=template, eos_token=eos, bos_token=bos, stop_token_ids=[eos_id],
     ).to_chat_handler()
     return sha256(template.encode("utf-8")).hexdigest()
 

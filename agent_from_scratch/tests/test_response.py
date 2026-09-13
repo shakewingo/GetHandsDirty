@@ -3,7 +3,7 @@ import unittest
 
 from unittest.mock import Mock, patch
 from agent_from_scratch.llm import LLM, LLMResponse, ResponseError, ResponseErrorCode, RESPONSE_ERROR_MESSAGES
-from agent_from_scratch.llm import _QWEN_TEMPLATE
+from agent_from_scratch.llm import _QWEN_TEMPLATE, install_qwen_template
 
 
 class ResponseTests(unittest.TestCase):
@@ -130,6 +130,19 @@ class ResponseTests(unittest.TestCase):
 
 
 class GenerateTests(unittest.TestCase):
+    def test_template_uses_public_tokenizer_and_rejects_wrong_end_token(self):
+        model = Mock()
+        model.metadata = {"general.architecture": "qwen2"}
+        model.token_eos.return_value, model.token_bos.return_value = 2, 1
+        tokens = {2: b"<|im_end|>", 1: b"<|endoftext|>"}
+        model.detokenize.side_effect = lambda ids, special: tokens[ids[0]]
+        model.tokenize.side_effect = lambda text, **kwargs: [next(i for i, value in tokens.items() if value == text)]
+        self.assertEqual(len(install_qwen_template(model, _QWEN_TEMPLATE)), 64)
+        self.assertTrue(callable(model.chat_handler))
+        tokens[2] = b"wrong-end-token"
+        with self.assertRaisesRegex(ValueError, "end token"):
+            install_qwen_template(model, _QWEN_TEMPLATE)
+
     def test_template_renders_arguments_once_without_changing_values(self):
         from llama_cpp.llama_chat_format import Jinja2ChatFormatter
         from agent_from_scratch.tools.register import default_registry

@@ -146,7 +146,7 @@ def main():
                 from ..verification import full_file_check
                 check = full_file_check(workspace, target)
                 if case == "read_command":
-                    prompt += " in full, then briefly summarize it."
+                    prompt += " in full. Reply with a short summary only, without reproducing the file."
             elif case == "guided":
                 prompt += " in full, continuing with next_offset until eof is true. Do not ask me questions; finish by briefly summarizing the file."
             elif case == "partial":

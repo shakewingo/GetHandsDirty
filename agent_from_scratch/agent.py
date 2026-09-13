@@ -162,7 +162,7 @@ class Agent:
                 logger.debug("Tool call detected: {} {}", response.tool_name, response.tool_params)
                 tool_result = self.execute_tool(response.tool_name, response.tool_params, response.call_id)
                 if tool_result.ok:
-                    logger.debug("Tool executed successfully: {}", tool_result)
+                    logger.debug("Tool executed successfully: {} ({})", tool_result.tool_name, tool_result.call_id)
                 else:
                     logger.error("Tool execution failed due to: {}", tool_result.error_message)
                 messages.append({"role": "tool", "content": json.dumps(asdict(tool_result)),
@@ -182,8 +182,8 @@ class Agent:
                         result.error_message = checked.feedback
                         return
                     if checked.status == "pending":
-                        # Raw candidate is already saved; don't teach the next request
-                        # to repeat an answer that failed the task's evidence check.
+                        # Raw trace, when enabled, retains the rejected candidate.
+                        # Keep it out of the next prompt to avoid repeating it.
                         messages.pop()
                         rejected_candidates += 1
                         if rejected_candidates >= self.max_rejected_candidates:
@@ -244,7 +244,7 @@ class Agent:
                         raise ValueError("/read requires a configured workspace.")
                     path = command.split(maxsplit=1)[1]
                     completion_check = full_file_check(workspace, path)
-                    user_input = f"Read file {path} in full, then briefly summarize it."
+                    user_input = f"Read file {path} in full. Reply with a short summary only, without reproducing the file."
                 except (OSError, ValueError) as error:
                     print(f"Could not start read: {error}")
                     continue
