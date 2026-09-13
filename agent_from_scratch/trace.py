@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
 from loguru import logger
-from .utils import write_jsonl
+from .utils import resolve_path, write_jsonl
 
 if TYPE_CHECKING:
     from llama_cpp import ChatCompletionRequestMessage
@@ -88,10 +88,7 @@ class TraceStore:
             raise ValueError("Invalid run ID.")
         if self.directory is None:
             return None
-        root = self.directory.resolve()
-        path = (root / f"{run_id}.jsonl").resolve()
-        if not path.is_relative_to(root):
-            raise ValueError("Run path must stay inside the trace directory.")
+        path = resolve_path(self.directory, f"{run_id}.jsonl")
         if not path.exists():
             return None
         record = json.loads(path.read_text(encoding="utf-8"))

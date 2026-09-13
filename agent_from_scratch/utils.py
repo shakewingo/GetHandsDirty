@@ -2,9 +2,29 @@ from pathlib import Path
 import json
 from typing import Any
 import os
+import sys
 from tempfile import NamedTemporaryFile
 
 _PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
+
+
+def resolve_path(root: str | Path, path: str | Path) -> Path:
+    """Resolve a path under root, rejecting empty paths and symlink escapes."""
+    if not str(path).strip():
+        raise ValueError("Path must not be empty; use '.' for the root directory.")
+    root = Path(root).resolve()
+    resolved = (root / path).resolve()
+    if not resolved.is_relative_to(root):
+        raise ValueError("Path must stay inside the configured root directory.")
+    return resolved
+
+
+def color_label(label: str, color: int) -> str:
+    """Bold and color a terminal label; preserve plain redirected output."""
+    if not sys.stdout.isatty() or "NO_COLOR" in os.environ or os.environ.get("TERM") == "dumb":
+        return label
+    return f"\033[1;{color}m{label}\033[0m"
+
 
 def render_prompt(name: str, **context) -> str:
     """Render a prompt template by filename (e.g. 'system.jinja')."""
@@ -32,6 +52,9 @@ def decode_qwen_tool_call(content: str) -> dict[str, Any]:
         payload = payload[1:-1]
     try:
         call = json.loads(payload)
+        # Qwen can use the same JSON-string arguments as a native tool call.
+        if isinstance(call, dict) and isinstance(call.get("arguments"), str):
+            call["arguments"] = json.loads(call["arguments"])
     except json.JSONDecodeError as error:
         raise ValueError("Invalid tool-call JSON") from error
     if not isinstance(call, dict) or not isinstance(call.get("name"), str) or not isinstance(call.get("arguments"), dict):

@@ -10,6 +10,8 @@ from agent_from_scratch.agent import Agent
 from agent_from_scratch.llm import LLM, LLMResponse, ResponseType, ResponseError, ResponseErrorCode
 from agent_from_scratch.session import SessionStore
 from agent_from_scratch.trace import RunStopReason, TraceStore
+from agent_from_scratch.tools.files import ReadFileTool, WriteFileTool
+from agent_from_scratch.tools.register import ToolRegistry
 
 
 def answer(text="Done"):
@@ -56,6 +58,70 @@ class TurnTests(unittest.TestCase):
         result = self.agent.run_turn("Capital of France?", [])
         self.assertEqual((result.stop_reason, result.final_answer), ("final_response", "Paris"))
         self.assertEqual(len(self.seen), 1)
+
+    def test_injected_registry_drives_schemas_execution_and_saved_observations(self):
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory, "workspace")
+            workspace.mkdir()
+            (workspace / "config.txt").write_text("old.txt")
+            registry = ToolRegistry([ReadFileTool(workspace), WriteFileTool(workspace)])
+            agent = Agent(self.model, directory, registry=registry)
+            responses = iter([
+                LLMResponse(role="assistant", content="", type=ResponseType.tool_call,
+                            tool_name="read_file", tool_params={"path": "config.txt"}),
+                LLMResponse(role="assistant", content="", type=ResponseType.tool_call,
+                            tool_name="write_file", tool_params={"path": "config.txt", "content": "new.txt"}),
+                answer("Updated config.txt"),
+            ])
+
+            def generate(messages, tools):
+                self.assertEqual(set(tools), {"read_file", "write_file"})
+                return next(responses)
+
+            self.model.generate.side_effect = generate
+            result = agent.run_turn("Change the output filename", session_id="files")
+            self.assertEqual(result.stop_reason, RunStopReason.FINAL_RESPONSE)
+            self.assertEqual((workspace / "config.txt").read_text(), "new.txt")
+            observations = [json.loads(m["content"]) for m in result.messages if m["role"] == "tool"]
+            self.assertEqual(observations[0]["output"]["content"], "old.txt")
+            self.assertTrue(all(item["ok"] for item in observations))
+            for request, observation in ((result.messages[2], result.messages[3]),
+                                         (result.messages[4], result.messages[5])):
+                self.assertEqual(request["tool_calls"][0]["id"], observation["tool_call_id"])
+            saved = TraceStore(Path(directory, "runs")).load_run(result.run_id)
+            self.assertEqual(saved["messages"], result.messages)
+            self.assertEqual(SessionStore(Path(directory, "sessions")).load_history("files"),
+                             result.messages[1:])
+            self.assertFalse(agent.execute_tool("calculator", {}).ok)
+            self.assertFalse(self.agent.execute_tool("read_file", {"path": "config.txt"}).ok)
+
+    def test_empty_registry_exposes_and_executes_no_tools(self):
+        agent = Agent(self.model, registry=ToolRegistry([]))
+        self.model.generate.return_value = answer()
+        agent.run_turn("Hello")
+        self.assertEqual(self.model.generate.call_args.args[1], {})
+        self.assertFalse(agent.execute_tool("calculator", {"operation": "add", "left": 1, "right": 2}).ok)
+
+    def test_read_recovers_from_bad_argument_then_continues_to_eof(self):
+        with TemporaryDirectory() as directory:
+            (Path(directory) / "notes.txt").write_text("abcdefghij")
+            self.agent = Agent(self.model, registry=ToolRegistry([ReadFileTool(directory)]))
+
+            def read(**arguments):
+                return LLMResponse(role="assistant", content="", type=ResponseType.tool_call,
+                                   tool_name="read_file", tool_params={"path": "notes.txt", **arguments})
+
+            self.script(read(limit=4), read(chunk_size=4), read(offset=4, chunk_size=4),
+                        read(offset=8, chunk_size=4), answer("Read all notes."))
+            result = self.agent.run_turn("Read notes.txt in chunks without asking questions")
+            observations = [json.loads(m["content"]) for m in result.messages if m["role"] == "tool"]
+            self.assertEqual(observations[0]["error_code"], "invalid_arguments")
+            self.assertIn("chunk_size", observations[0]["error_message"])
+            chunks = [o["output"] for o in observations[1:]]
+            self.assertEqual("".join(c["content"] for c in chunks), "abcdefghij")
+            self.assertEqual([c["next_offset"] for c in chunks], [4, 8, None])
+            self.assertTrue(chunks[-1]["eof"])
+            self.assertEqual(result.stop_reason, RunStopReason.FINAL_RESPONSE)
 
     def test_dependent_calls_and_matching_ids(self):
         self.script(call(), call(4, 4, "multiply", "native_id"), answer("16"))
@@ -123,7 +189,8 @@ class TurnTests(unittest.TestCase):
             self.agent.run_repl()
         self.assertEqual(len(self.seen), 3)
         self.assertIn("maximum iterations", output.call_args_list[0].args[0])
-        self.assertEqual(output.call_args_list[1].args[0], "Paris")
+        self.assertTrue(output.call_args_list[1].args[0].endswith(" Paris"))
+        self.assertIn("Agent:", output.call_args_list[1].args[0])
         self.assertEqual(self.seen[2], [{"role": "system", "content": "System"},
                                       {"role": "user", "content": "good"}])
 

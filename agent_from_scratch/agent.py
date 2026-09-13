@@ -13,22 +13,24 @@ from loguru import logger
 from .llm import LLM, ResponseError, ResponseType, _MODEL_PATH
 from .session import SessionStore
 from .tools.base import ToolResult
-from .tools.register import registry, tool_schemas
+from .tools.register import ToolRegistry, default_registry
 from .trace import ModelRequest, ModelRequestStatus, RunStopReason, TraceStore, TurnResult
-from .utils import render_prompt
+from .utils import color_label, render_prompt
 
 if TYPE_CHECKING:
     from llama_cpp import ChatCompletionRequestMessage
 
 
 class Agent:
-    def __init__(self, llm: LLM, state_dir: str | None = None):
+    def __init__(self, llm: LLM, state_dir: str | None = None,
+                 *, registry: ToolRegistry | None = None):
         self.llm = llm
         self.max_iterations = 20
         self.state_dir = state_dir
+        self.registry = default_registry if registry is None else registry
 
     def execute_tool(self, tool_name: Any, tool_params: Any, call_id: str = "") -> ToolResult:
-        return registry.invoke(tool_name, tool_params, call_id=call_id)
+        return self.registry.invoke(tool_name, tool_params, call_id=call_id)
 
     def run_turn(self, user_input: str, history: list[ChatCompletionRequestMessage] | None = None,
                  *, session_id: str | None = None) -> TurnResult:
@@ -73,7 +75,7 @@ class Agent:
             request = ModelRequest(iteration, len(messages))
             result.model_requests.append(request)
             try:
-                response = self.llm.generate(messages, tool_schemas)
+                response = self.llm.generate(messages, self.registry.schemas())
             except ResponseError as error:
                 request.status = ModelRequestStatus.PARSE_ERROR
                 if isinstance(error.raw_response, dict):
@@ -82,7 +84,11 @@ class Agent:
                 trace.save_parse_error(result, iteration, error)
                 messages.append({"role": "user", "content": (
                     f"Your previous response could not be processed: {error}. "
-                    "Please correct its format and try again."
+                    "No tool executed for that response. Continue the user's task: emit only one "
+                    "tool call with a registered name and arguments matching its schema. "
+                    "For <tool_call>, use one JSON object with name and arguments fields, "
+                    "without extra braces. Correct the call yourself; a formatting error "
+                    "does not require clarification from the user."
                 )})
                 continue
             except Exception as error:
@@ -124,11 +130,15 @@ class Agent:
         store.load_records(next_id)  # Validate before switching away from the current session.
         return next_id
 
-    def run_repl(self, session_id: str = "default_session"):
+    def run_repl(self, session_id: str = "default_session", *,
+                 user_color: int = 33, agent_color: int = 32):
+        """ANSI label colors: 31 red, 32 green, 33 yellow, 34 blue, 35 magenta, 36 cyan."""
+        user_label = color_label("User:", user_color)
+        agent_label = color_label("Agent:", agent_color)
         store = SessionStore(Path(self.state_dir, "sessions")) if self.state_dir is not None else None
         while True:
             try:
-                user_input = input("User: ")
+                user_input = input(f"{user_label} ")
             except (KeyboardInterrupt, EOFError):
                 print("\nExiting.")
                 break
@@ -149,7 +159,7 @@ class Agent:
                 continue
             result = self.run_turn(user_input, history, session_id=session_id)
             if result.stop_reason == RunStopReason.FINAL_RESPONSE:
-                print(result.final_answer)
+                print(f"{agent_label} {result.final_answer}")
             elif result.stop_reason == RunStopReason.MODEL_ERROR:
                 print(f"Stopped: model error occurred: {result.error_message}")
             elif result.stop_reason == RunStopReason.MAX_ITERATIONS:
@@ -159,7 +169,7 @@ class Agent:
 
 
 if __name__ == "__main__":
-    llm = LLM(model_path=str(_MODEL_PATH), temperature=0.7, max_tokens=512,
-              n_gpu_layers=-1, n_ctx=2048)
+    llm = LLM(model_path=str(_MODEL_PATH), temperature=0.0, max_tokens=2048,
+              n_gpu_layers=-1, n_ctx=8000)
     agent = Agent(llm, state_dir="./outputs/sessions")
     agent.run_repl()

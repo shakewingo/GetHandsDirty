@@ -60,7 +60,7 @@ class Tool(ABC):
 
         This intentionally supports the JSON Schema features used by the local
         tools: ``type``, ``properties``, ``required``, ``additionalProperties``,
-        ``enum`` and array ``items``. Invalid arguments raise ``ValueError`` and
+        ``enum``, numeric ``minimum``/``maximum`` and array ``items``. Invalid arguments raise ``ValueError`` and
         must never reach ``execute``.
         """
         if not isinstance(arguments, Mapping):
@@ -113,6 +113,12 @@ class Tool(ABC):
         if "enum" in schema and not any(cls._json_equal(value, option) for option in schema["enum"]):
             raise ValueError(f"{path} must be one of {schema['enum']}, got {value!r}")
 
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            if "minimum" in schema and value < schema["minimum"]:
+                raise ValueError(f"{path} must be >= {schema['minimum']}, got {value!r}")
+            if "maximum" in schema and value > schema["maximum"]:
+                raise ValueError(f"{path} must be <= {schema['maximum']}, got {value!r}")
+
         if isinstance(value, Mapping):
             properties = schema.get("properties", {})
             required = schema.get("required", [])
@@ -135,7 +141,7 @@ class Tool(ABC):
             additional = schema.get("additionalProperties", True)
             unknown = [name for name in value if name not in properties]
             if additional is False and unknown:
-                raise ValueError(f"{path} contains unexpected fields: {unknown}")
+                raise ValueError(f"{path} contains unexpected fields: {unknown}. Allowed fields: {list(properties)}")
 
             for name, item in value.items():
                 if name in properties:

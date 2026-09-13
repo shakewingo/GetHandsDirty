@@ -1,3 +1,4 @@
+import json
 import unittest
 
 from unittest.mock import Mock, patch
@@ -75,6 +76,22 @@ class ResponseTests(unittest.TestCase):
     def test_qwen_extra_braces(self):
         result = self.parse('<tool_call>{{"name":"calculator","arguments":{}}}</tool_call>')
         self.assertEqual(result.tool_name, "calculator")
+
+    def test_qwen_json_string_arguments_match_native_call(self):
+        function = {"name": "read_file", "arguments": json.dumps({"path": "tools/files.py"})}
+        qwen = self.parse("<tool_call>\n" + json.dumps(function) + "\n</tool_call>")
+        native = self.parse(None, tool_calls=[{"function": function}])
+        self.assertEqual((qwen.tool_name, qwen.tool_params),
+                         (native.tool_name, native.tool_params))
+        self.assertEqual(qwen.tool_params, {"path": "tools/files.py"})
+        self.assertEqual(qwen.to_message()["tool_calls"][0]["function"], function)
+
+    def test_qwen_encoded_arguments_must_decode_once_to_an_object(self):
+        for arguments in ('{broken}', '[]', 'null', '42', json.dumps('{"path":"a"}')):
+            content = "<tool_call>" + json.dumps({"name": "read_file", "arguments": arguments}) + "</tool_call>"
+            with self.subTest(arguments=arguments), self.assertRaises(ResponseError) as caught:
+                self.parse(content)
+            self.assertEqual(caught.exception.code, ResponseErrorCode.INVALID_TOOL_CALL)
 
     def test_multiple_calls_are_rejected(self):
         with self.assertRaises(ResponseError) as caught:

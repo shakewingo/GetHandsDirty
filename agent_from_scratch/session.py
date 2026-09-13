@@ -1,5 +1,5 @@
 from __future__ import annotations
-from .utils import write_jsonl
+from .utils import resolve_path, write_jsonl
 from pathlib import Path
 import json
 import re
@@ -18,11 +18,7 @@ class SessionStore:
     def _path(self, session_id: str) -> Path:
         if not re.fullmatch(r"[A-Za-z0-9_-]+", session_id):
             raise ValueError("Session ID must contain only letters, numbers, '_' or '-'.")
-        root = self.dir.resolve()
-        path = (root / f"{session_id}.jsonl").resolve()
-        if not path.is_relative_to(root):
-            raise ValueError("Session path must stay inside the session directory.")
-        return path
+        return resolve_path(self.dir, f"{session_id}.jsonl")
 
     @staticmethod
     def _validate_record(record: object) -> None:

@@ -234,7 +234,7 @@ class LLM:
 
 
 if __name__ == "__main__":
-    from .tools.register import tool_schemas
+    from .tools.register import default_tool_schemas
 
     user_input = "What is 2*2?"
     llm = LLM()
@@ -242,4 +242,4 @@ if __name__ == "__main__":
         {"role": "system", "content": render_prompt("system.md")},
         {"role": "user", "content": user_input},
     ]
-    print(llm.generate(messages, tools=tool_schemas))
+    print(llm.generate(messages, tools=default_tool_schemas))
