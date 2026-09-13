@@ -70,6 +70,10 @@ def main():
     parser.add_argument("--readonly", action="store_true", help="Block writes; record every attempt.")
     args = parser.parse_args()
     workspace, out = args.workspace.resolve(), args.output.resolve()
+    if out.is_relative_to(workspace):
+        parser.error("Output must be outside the task workspace.")
+    if not 4 <= args.read_bytes <= 8192:
+        parser.error("read-bytes must be between 4 and 8192.")
     target = (workspace / args.target).resolve()
     if not target.is_relative_to(workspace):
         parser.error("Target must be inside workspace.")
@@ -179,6 +183,7 @@ def main():
                         continue
                     if observation["tool_name"] == "write_file" and observation["output"]["path"] == "config.json":
                         wrote = True
+                        summary["read_back_verified"] = False
                     if wrote and observation["tool_name"] == "read_file" and observation["output"]["path"] == "config.json":
                         summary["read_back_verified"] = observation["output"]["content"] == actual
             summaries.append(summary)
