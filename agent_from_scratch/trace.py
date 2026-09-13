@@ -38,6 +38,8 @@ class ModelRequest:
     status: ModelRequestStatus = ModelRequestStatus.STARTED
     call_id: str | None = None
     usage: dict[str, int | None] | None = None
+    finish_reason: str | None = None
+    response_file: str | None = None
 
 
 @dataclass
@@ -81,6 +83,17 @@ class TraceStore:
             "iteration": iteration, "timestamp": datetime.now(timezone.utc).isoformat(),
             "error_code": error.code, "error": str(error), "raw_response": error.raw_response,
         }, "parse-error event")
+
+    def save_model_response(self, result: TurnResult, iteration: int, response) -> str | None:
+        if self.directory is None or response.raw_response is None:
+            return None
+        filename = f"{result.run_id}.response-{iteration}.jsonl"
+        self._write(filename, {
+            "schema_version": 1, "run_id": result.run_id, "session_id": result.session_id,
+            "iteration": iteration, "finish_reason": response.finish_reason,
+            "raw_response": response.raw_response,
+        }, "model-response event")
+        return filename
 
     def load_run(self, run_id: str) -> dict | None:
         """Resolve a session's run reference. Missing evidence is explicitly unavailable."""

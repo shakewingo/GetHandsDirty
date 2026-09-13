@@ -10,7 +10,7 @@ from typing import Any, TYPE_CHECKING
 from uuid import uuid4
 
 from loguru import logger
-from .llm import LLM, ResponseError, ResponseType, _MODEL_PATH
+from .llm import LLM, ResponseError, ResponseType, _MODEL_PATH, _QWEN_TEMPLATE
 from .session import SessionStore
 from .tools.base import ToolResult
 from .tools.register import ToolRegistry, default_registry
@@ -102,6 +102,8 @@ class Agent:
             request.status = ModelRequestStatus.COMPLETED  # previous object has been appended to result, and updates will reflect there too.
             request.call_id = response.call_id or None
             request.usage = LLM.read_usage(response.usage)
+            request.finish_reason = response.finish_reason
+            request.response_file = trace.save_model_response(result, iteration, response)
             messages.append(response.to_message())
             if response.type == ResponseType.tool_call:
                 logger.debug("Tool call detected: {} {}", response.tool_name, response.tool_params)
@@ -170,6 +172,6 @@ class Agent:
 
 if __name__ == "__main__":
     llm = LLM(model_path=str(_MODEL_PATH), temperature=0.0, max_tokens=2048,
-              n_gpu_layers=-1, n_ctx=8000)
+              n_gpu_layers=-1, n_ctx=8000, chat_template_path=_QWEN_TEMPLATE)
     agent = Agent(llm, state_dir="./outputs/sessions")
     agent.run_repl()

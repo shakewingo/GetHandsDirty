@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from hashlib import sha256
 from dataclasses import dataclass
 from enum import StrEnum
 import json
@@ -26,6 +27,7 @@ class LLMResponse:
     usage: dict | None = None
     call_id: str = ""
     finish_reason: str | None = None
+    raw_response: dict | None = None
 
     def to_message(self) -> ChatCompletionRequestAssistantMessage:
         if self.type == ResponseType.direct:
@@ -88,6 +90,25 @@ _MODEL_PATH = (
     / "hub/models--Qwen--Qwen2.5-7B-Instruct-GGUF/snapshots/bb5d59e06d9551d752d08b292a50eb208b07ab1f"
     / "qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf"
 )
+_QWEN_TEMPLATE = Path(__file__).parent / "prompts" / "qwen_chat.jinja"
+
+
+def install_qwen_template(model, path: Path) -> str:
+    """Install the project's checked Qwen2.5 format on this instance only."""
+    from llama_cpp.llama_chat_format import Jinja2ChatFormatter
+
+    if model.metadata.get("general.architecture") != "qwen2":
+        raise ValueError("The project chat template requires Qwen2.")
+    for token, token_id in (("<|im_end|>", model.token_eos()),
+                            ("<|endoftext|>", model.token_bos())):
+        if model.tokenize(token.encode(), add_bos=False, special=True) != [token_id]:
+            raise ValueError(f"Unexpected Qwen special token: {token}")
+    template = path.read_text(encoding="utf-8")
+    model.chat_handler = Jinja2ChatFormatter(
+        template=template, eos_token="<|im_end|>", bos_token="<|endoftext|>",
+        stop_token_ids=[model.token_eos()],
+    ).to_chat_handler()
+    return sha256(template.encode("utf-8")).hexdigest()
 
 
 class LLM:
@@ -99,6 +120,7 @@ class LLM:
         n_gpu_layers: int = -1,
         n_ctx: int = 2048,
         verbose=False,  # turn off tensor / metadata loading, prefix-match, timing info from llama-cpp-python
+        chat_template_path: str | Path | None = None,
     ):
         from llama_cpp import Llama
 
@@ -113,12 +135,17 @@ class LLM:
         self.model_path = str(model_path)
         self.n_ctx = n_ctx
         self.n_gpu_layers = n_gpu_layers
+        self.chat_template_sha256 = (install_qwen_template(self.llm, Path(chat_template_path))
+                                     if chat_template_path is not None else None)
 
     def settings(self) -> dict[str, Any]:
         """Snapshot the actual configuration used by this model instance."""
         return {"model_path": self.model_path, "temperature": self.temperature,
                 "max_tokens": self.max_tokens, "n_ctx": self.n_ctx,
-                "n_gpu_layers": self.n_gpu_layers}
+                "n_gpu_layers": self.n_gpu_layers,
+                "chat_template_sha256": getattr(self, "chat_template_sha256", None),
+                "chat_handler": "project_qwen_jinja" if getattr(self, "chat_template_sha256", None)
+                else str(self.llm.chat_format)}
 
     @staticmethod
     def read_usage(usage: Any) -> dict[str, int | None] | None:
@@ -182,6 +209,7 @@ class LLM:
                 tool_params=arguments,
                 usage=usage,
                 call_id=call_id,
+                finish_reason=choice.get("finish_reason"),
             )
         if not isinstance(content, str) or not content.strip():
             raise ResponseError(ResponseErrorCode.EMPTY_RESPONSE)
@@ -204,6 +232,7 @@ class LLM:
                 tool_name=tool_name,
                 tool_params=tool_params,
                 usage=usage,
+                finish_reason=choice.get("finish_reason"),
             )
         return LLMResponse(
             role=role,
@@ -212,6 +241,7 @@ class LLM:
             tool_name=None,
             tool_params=None,
             usage=usage,
+            finish_reason=choice.get("finish_reason"),
         )
 
     def generate(
@@ -227,7 +257,9 @@ class LLM:
             max_tokens=self.max_tokens,
         )
         try:
-            return LLM.parse_response(response)
+            parsed = LLM.parse_response(response)
+            parsed.raw_response = response
+            return parsed
         except ResponseError as error:
             error.raw_response = response
             raise

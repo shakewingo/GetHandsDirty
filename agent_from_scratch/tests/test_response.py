@@ -3,6 +3,7 @@ import unittest
 
 from unittest.mock import Mock, patch
 from agent_from_scratch.llm import LLM, LLMResponse, ResponseError, ResponseErrorCode, RESPONSE_ERROR_MESSAGES
+from agent_from_scratch.llm import _QWEN_TEMPLATE
 
 
 class ResponseTests(unittest.TestCase):
@@ -103,6 +104,34 @@ class ResponseTests(unittest.TestCase):
 
 
 class GenerateTests(unittest.TestCase):
+    def test_template_renders_arguments_once_without_changing_values(self):
+        from llama_cpp.llama_chat_format import Jinja2ChatFormatter
+        from agent_from_scratch.tools.register import default_registry
+        arguments = {"path": "a.txt", "content": 'a "quote"\\slash\n你好'}
+        call = LLMResponse("assistant", "", "tool_call", "write_file", arguments)
+        formatter = Jinja2ChatFormatter(
+            template=_QWEN_TEMPLATE.read_text(), eos_token="<|im_end|>",
+            bos_token="<|endoftext|>",
+        )
+        rendered = formatter(messages=[{"role": "user", "content": "Write"}, call.to_message()],
+                             tools=list(default_registry.schemas().values())).prompt
+        payload = rendered.rsplit("<tool_call>", 1)[1].split("</tool_call>", 1)[0]
+        self.assertEqual(json.loads(payload)["arguments"], arguments)
+        self.assertNotIn('{{"name"', rendered)
+        self.assertIn("only one complete", rendered)
+
+    def test_success_keeps_raw_evidence_out_of_history(self):
+        llm = LLM.__new__(LLM)
+        llm.llm = Mock()
+        llm.temperature, llm.max_tokens = 0, 512
+        raw = {"choices": [{"message": {"role": "assistant", "content": "Done"},
+                            "finish_reason": "stop"}]}
+        llm.llm.create_chat_completion.return_value = raw
+        result = llm.generate([], {})
+        self.assertIs(result.raw_response, raw)
+        self.assertEqual(result.finish_reason, "stop")
+        self.assertEqual(result.to_message(), {"role": "assistant", "content": "Done"})
+
     def test_generate_parses_and_propagates_errors(self):
         llm = LLM.__new__(LLM)  # Fake backend; no model initialization.
         llm.llm = Mock()

@@ -238,7 +238,10 @@ class TurnTests(unittest.TestCase):
                 result = self.agent.run_turn("calculate", [])
             execute.assert_not_called()
             self.assertEqual(result.final_answer, "Done")
-            self.assertEqual(len(list(runs.glob("*.jsonl"))), 3)
+            self.assertEqual(len(list(runs.glob("*.jsonl"))), 4)
+            response_path = runs / result.model_requests[-1].response_file
+            self.assertEqual(json.loads(response_path.read_text())["raw_response"]["choices"][0]
+                             ["message"]["content"], "Done")
             for iteration in (1, 2):
                 event = json.loads((runs / f"{result.run_id}.parse-error-{iteration}.jsonl").read_text())
                 self.assertEqual((event["run_id"], event["iteration"]), (result.run_id, iteration))
