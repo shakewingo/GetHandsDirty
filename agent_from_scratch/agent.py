@@ -123,7 +123,7 @@ class Agent:
             if failure_count < self.max_same_failures:
                 return False
             result.stop_reason = RunStopReason.NO_PROGRESS
-            result.error_message = f"The same {key[0]} failure occurred {failure_count} times."
+            result.error_message = f"The same {key[0]} failure ({key[-1]}) occurred {failure_count} times."
             return True
 
         for iteration in range(1, self.max_iterations + 1):

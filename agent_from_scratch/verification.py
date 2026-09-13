@@ -84,7 +84,8 @@ def full_file_check(workspace: str | Path, path: str | Path) -> CompletionCheck:
                     "size_bytes": size, "covered_bytes": size - sum(b - a for a, b in missing),
                     "missing_ranges": missing, "saw_eof": saw_eof}
         if ranges and not missing and saw_eof:
-            return CheckResult("read_coverage", "passed", evidence=evidence)
+            return CheckResult("read_coverage", "passed",
+                               f"Read all {size} bytes of {target.relative_to(root)}.", evidence)
         offset = missing[0][0] if missing else 0
         return CheckResult("read_coverage", "pending",
                            f"Full-file read is incomplete: {evidence['covered_bytes']}/{size} bytes. "
