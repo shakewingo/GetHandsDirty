@@ -30,7 +30,7 @@ class ToolRegistry:
         if tool is None:
             return ToolResult.failure(
                 ToolErrorCode.UNKNOWN_TOOL, call_id=call_id, tool_name=tool_name,
-                detail=f"Requested: {tool_name!r}.",
+                detail=f"Requested: {tool_name!r}. Available tools: {', '.join(sorted(self._tools))}.",
             )
         return tool.invoke(arguments, call_id=call_id)
 

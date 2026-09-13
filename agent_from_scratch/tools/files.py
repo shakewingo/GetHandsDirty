@@ -71,11 +71,14 @@ class ReadFileTool(Tool):
     def execute(self, path: str, offset: int = 0, chunk_size: int | None = None) -> dict:
         target = resolve_path(self.workspace, path)
         if not target.is_file():
-            raise ValueError("Path must refer to an existing regular file.")
+            raise ValueError(f"Not an existing regular file: {target.relative_to(self.workspace)}. "
+                             "Use list_files to inspect the workspace.")
         size = min(2048, self.max_bytes) if chunk_size is None else chunk_size
         with target.open("rb") as stream:
-            if offset > stream.seek(0, 2):
-                raise ValueError("offset exceeds the file size; use the previous next_offset.")
+            file_size = stream.seek(0, 2)
+            if offset > file_size:
+                raise ValueError(f"offset exceeds file size {file_size}; expected 0..{file_size}. "
+                                 "Use the previous next_offset.")
             stream.seek(offset)
             raw = stream.read(size + 1)
         eof = len(raw) <= size

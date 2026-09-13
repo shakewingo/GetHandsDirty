@@ -10,7 +10,7 @@ from typing import Any, TYPE_CHECKING
 from uuid import uuid4
 
 from loguru import logger
-from .llm import LLM, ResponseError, ResponseType, _MODEL_PATH, _QWEN_TEMPLATE
+from .llm import LLM, ResponseError, ResponseErrorCode, ResponseType, _MODEL_PATH, _QWEN_TEMPLATE
 from .session import SessionStore
 from .tools.base import ToolResult
 from .tools.register import ToolRegistry, default_registry
@@ -19,6 +19,25 @@ from .utils import color_label, render_prompt
 
 if TYPE_CHECKING:
     from llama_cpp import ChatCompletionRequestMessage
+
+
+def recovery_feedback(error: ResponseError) -> str:
+    hints = {
+        ResponseErrorCode.INVALID_TOOL_CALL:
+            "Use one complete tool-call object with a registered name and object arguments.",
+        ResponseErrorCode.MULTIPLE_TOOL_CALLS:
+            "Issue only the next necessary tool call; later calls can follow its result.",
+        ResponseErrorCode.TRUNCATED_RESPONSE:
+            "The output was cut off. Retry more concisely; do not repeat completed work.",
+        ResponseErrorCode.EMPTY_RESPONSE:
+            "Return the next useful action or a concise answer to the original request.",
+        ResponseErrorCode.INVALID_RESPONSE:
+            "The response envelope was invalid. Retry the response to the original request.",
+        ResponseErrorCode.UNSUPPORTED_FINISH_REASON:
+            "Retry using the supported response format.",
+    }
+    return ("[Runtime feedback] Your response could not be processed. "
+            f"No tool executed for this response. {hints[error.code]}")
 
 
 class Agent:
@@ -82,14 +101,7 @@ class Agent:
                     request.usage = LLM.read_usage(error.raw_response.get("usage"))
                 logger.error("LLM response error: {}", error)
                 trace.save_parse_error(result, iteration, error)
-                messages.append({"role": "user", "content": (
-                    f"Your previous response could not be processed: {error}. "
-                    "No tool executed for that response. Continue the user's task: emit only one "
-                    "tool call with a registered name and arguments matching its schema. "
-                    "For <tool_call>, use one JSON object with name and arguments fields, "
-                    "without extra braces. Correct the call yourself; a formatting error "
-                    "does not require clarification from the user."
-                )})
+                messages.append({"role": "user", "content": recovery_feedback(error)})
                 continue
             except Exception as error:
                 request.status = ModelRequestStatus.MODEL_ERROR

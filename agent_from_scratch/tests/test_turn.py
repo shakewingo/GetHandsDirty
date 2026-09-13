@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 from typing import Any
 from unittest.mock import Mock, patch
 
-from agent_from_scratch.agent import Agent
+from agent_from_scratch.agent import Agent, recovery_feedback
 from agent_from_scratch.llm import LLM, LLMResponse, ResponseType, ResponseError, ResponseErrorCode
 from agent_from_scratch.session import SessionStore
 from agent_from_scratch.trace import RunStopReason, TraceStore
@@ -185,6 +185,25 @@ class TurnTests(unittest.TestCase):
         self.assertIn("could not be processed", self.seen[1][-1]["content"])
         self.assertFalse(any(message["role"] == "tool" for message in result.messages))
         self.assertEqual((result.stop_reason, result.final_answer), ("final_response", "Paris"))
+
+    def test_truncated_answer_retries_without_forcing_tools(self):
+        self.script(ResponseError(ResponseErrorCode.TRUNCATED_RESPONSE), answer("Concise summary"))
+        with patch.object(self.agent, "execute_tool") as execute:
+            result = self.agent.run_turn("Summarize the supplied text")
+        execute.assert_not_called()
+        self.assertIn("more concisely", self.seen[1][-1]["content"])
+        self.assertNotIn("Use one complete tool-call", self.seen[1][-1]["content"])
+        self.assertEqual(result.final_answer, "Concise summary")
+        self.assertIn("next necessary", recovery_feedback(ResponseError(ResponseErrorCode.MULTIPLE_TOOL_CALLS)))
+
+    def test_unknown_tool_can_recover_using_available_names(self):
+        unknown = call()
+        unknown.tool_name = "missing"
+        self.script(unknown, call(), answer("4"))
+        result = self.agent.run_turn("2+2")
+        failure = json.loads(self.seen[1][-1]["content"])
+        self.assertIn("calculator", failure["error_message"])
+        self.assertEqual(result.final_answer, "4")
 
     def test_repeated_parse_errors_stop_without_a_final_answer(self):
         self.agent.max_iterations = 2
