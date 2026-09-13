@@ -13,6 +13,22 @@ class ResponseTests(unittest.TestCase):
     def test_plain_text_mentions_tool_call(self):
         self.assertEqual(self.parse("The tool_call field.").type, "direct")
 
+    def test_reported_usage_preserves_zero_and_marks_unknown_counts(self):
+        for usage, expected in [
+            ({"prompt_tokens": 10, "completion_tokens": 0, "total_tokens": 10},
+             {"prompt_tokens": 10, "completion_tokens": 0, "total_tokens": 10}),
+            ({"prompt_tokens": 10}, {"prompt_tokens": 10, "completion_tokens": None, "total_tokens": None}),
+            ({"prompt_tokens": 10, "completion_tokens": -1, "total_tokens": True},
+             {"prompt_tokens": 10, "completion_tokens": None, "total_tokens": None}),
+            (None, None), ({}, None), ("invalid", None),
+        ]:
+            with self.subTest(usage=usage):
+                response = LLM.parse_response({
+                    "choices": [{"message": {"role": "assistant", "content": "Hello"}}],
+                    "usage": usage,
+                })
+                self.assertEqual(response.usage, expected)
+
     def test_malformed_responses(self):
         for content, code in [
             (None, ResponseErrorCode.EMPTY_RESPONSE),
@@ -86,6 +102,27 @@ class GenerateTests(unittest.TestCase):
             with self.assertRaises(ResponseError) as caught:
                 llm.generate([{"role": "user", "content": "Hi"}], {})
             self.assertEqual(caught.exception.code, ResponseErrorCode.INVALID_RESPONSE)
+            self.assertEqual(caught.exception.raw_response, {"choices": []})
+
+    def test_generate_keeps_original_malformed_tool_response(self):
+        llm = LLM.__new__(LLM)
+        llm.llm = Mock()
+        llm.temperature = 0.7
+        llm.max_tokens = 512
+        for message in [
+            {"role": "assistant", "content": '<tool_call>{"name":"calculator","arguments":{"left":2**2}}</tool_call>'},
+            {"role": "assistant", "content": None, "tool_calls": [{
+                "id": "broken", "function": {"name": "calculator", "arguments": "{"},
+            }]},
+        ]:
+            raw = {"choices": [{"message": message, "finish_reason": "stop"}],
+                   "usage": {"prompt_tokens": 10, "completion_tokens": 12}}
+            llm.llm.create_chat_completion.return_value = raw
+            with self.subTest(message=message), self.assertRaises(ResponseError) as caught:
+                llm.generate([{"role": "user", "content": "calculate"}], {})
+            self.assertEqual(caught.exception.code, ResponseErrorCode.INVALID_TOOL_CALL)
+            self.assertIs(caught.exception.raw_response, raw)
+            self.assertIsNotNone(caught.exception.__cause__)
 
 
 if __name__ == "__main__":

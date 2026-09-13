@@ -26,9 +26,6 @@ class LLMResponse:
     usage: dict | None = None
     call_id: str = ""
     finish_reason: str | None = None
-    prompt_tokens: int | None = None
-    completion_tokens: int | None = None
-    total_tokens: int | None = None
 
     def to_message(self) -> ChatCompletionRequestAssistantMessage:
         if self.type == ResponseType.direct:
@@ -78,8 +75,9 @@ RESPONSE_ERROR_MESSAGES = {
 
 
 class ResponseError(ValueError):
-    def __init__(self, code: ResponseErrorCode, detail: str = ""):
+    def __init__(self, code: ResponseErrorCode, detail: str = "", *, raw_response: Any = None):
         self.code = code
+        self.raw_response = raw_response
         message = RESPONSE_ERROR_MESSAGES[code]
         super().__init__(f"{message} {detail}" if detail else message)
 
@@ -112,6 +110,26 @@ class LLM:
         )
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.model_path = str(model_path)
+        self.n_ctx = n_ctx
+        self.n_gpu_layers = n_gpu_layers
+
+    def settings(self) -> dict[str, Any]:
+        """Snapshot the actual configuration used by this model instance."""
+        return {"model_path": self.model_path, "temperature": self.temperature,
+                "max_tokens": self.max_tokens, "n_ctx": self.n_ctx,
+                "n_gpu_layers": self.n_gpu_layers}
+
+    @staticmethod
+    def read_usage(usage: Any) -> dict[str, int | None] | None:
+        """Keep reported counts; missing or invalid counts stay unknown, never zero."""
+        if not isinstance(usage, dict):
+            return None
+        counts = {}
+        for name in ("prompt_tokens", "completion_tokens", "total_tokens"):
+            value = usage.get(name)
+            counts[name] = value if type(value) is int and value >= 0 else None
+        return counts if any(value is not None for value in counts.values()) else None
 
     @staticmethod
     def parse_response(response) -> LLMResponse:
@@ -130,7 +148,7 @@ class LLM:
             raise ResponseError(ResponseErrorCode.INVALID_RESPONSE, "Content must be text or null.")
         if choice.get("finish_reason") == "length":
             raise ResponseError(ResponseErrorCode.TRUNCATED_RESPONSE)
-        usage = response.get("usage", {})
+        usage = LLM.read_usage(response.get("usage"))
         calls = message.get("tool_calls")
         if calls is not None and not isinstance(calls, list):
             raise ResponseError(
@@ -208,7 +226,11 @@ class LLM:
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
-        return LLM.parse_response(response)
+        try:
+            return LLM.parse_response(response)
+        except ResponseError as error:
+            error.raw_response = response
+            raise
 
 
 if __name__ == "__main__":

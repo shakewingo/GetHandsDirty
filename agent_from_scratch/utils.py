@@ -1,6 +1,8 @@
 from pathlib import Path
 import json
 from typing import Any
+import os
+from tempfile import NamedTemporaryFile
 
 _PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 
@@ -35,3 +37,21 @@ def decode_qwen_tool_call(content: str) -> dict[str, Any]:
     if not isinstance(call, dict) or not isinstance(call.get("name"), str) or not isinstance(call.get("arguments"), dict):
         raise ValueError("Tool call requires a string name and object arguments.")
     return call
+
+
+def write_jsonl(path: Path, records: list[dict]) -> None:
+    """Replace a local file atomically; a failed write leaves the old file intact."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                delete=False) as stream:
+            temporary = Path(stream.name)
+            for record in records:
+                stream.write(json.dumps(record, ensure_ascii=False) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
