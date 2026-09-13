@@ -44,7 +44,8 @@ class ReadFileTool(Tool):
     name = "read_file"
     description = (
         "Read a bounded UTF-8 file chunk. offset and chunk_size are bytes. "
-        "Start at offset 0; continue using next_offset until eof is true."
+        "For a full-file read, start at 0 and continue using next_offset until eof. "
+        "For a partial read, stop after the requested range."
     )
     parameters = {
         "type": "object",
@@ -53,7 +54,7 @@ class ReadFileTool(Tool):
             "offset": {"type": "integer", "minimum": 0,
                        "description": "Byte offset; omit to start at 0, then use returned next_offset."},
             "chunk_size": {"type": "integer", "minimum": 4,
-                           "description": "Maximum bytes to read; defaults to at most 2048 bytes."},
+                           "description": "Maximum bytes to read."},
         },
         "required": ["path"],
         "additionalProperties": False,
@@ -66,7 +67,9 @@ class ReadFileTool(Tool):
         self.max_bytes = max_bytes
         self.parameters = {**self.parameters, "properties": {
             **self.parameters["properties"],
-            "chunk_size": {**self.parameters["properties"]["chunk_size"], "maximum": max_bytes},
+            "chunk_size": {**self.parameters["properties"]["chunk_size"], "maximum": max_bytes,
+                           "default": max_bytes,
+                           "description": f"Maximum bytes to read; defaults to {max_bytes} bytes."},
         }}
 
     def execute(self, path: str, offset: int = 0, chunk_size: int | None = None) -> dict:
@@ -74,7 +77,7 @@ class ReadFileTool(Tool):
         if not target.is_file():
             raise ValueError(f"Not an existing regular file: {target.relative_to(self.workspace)}. "
                              "Use list_files to inspect the workspace.")
-        size = min(2048, self.max_bytes) if chunk_size is None else chunk_size
+        size = self.max_bytes if chunk_size is None else chunk_size
         with target.open("rb") as stream:
             before = fstat(stream.fileno())
             version = file_version(before)

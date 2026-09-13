@@ -172,6 +172,18 @@ class FileToolTests(unittest.TestCase):
         self.assertIn("changed", result.error_message)
         self.assertIsNone(result.output)
 
+    def test_default_read_size_matches_schema_and_reduces_round_trips(self):
+        content = "x" * 9562
+        (self.workspace / "long.txt").write_text(content)
+        tool = ReadFileTool(self.workspace)
+        schema = tool.to_schema()["function"]["parameters"]["properties"]["chunk_size"]
+        first = tool.invoke({"path": "long.txt"}).output
+        second = tool.invoke({"path": "long.txt", "offset": first["next_offset"]}).output
+        self.assertEqual(schema["default"], len(first["content"].encode("utf-8")))
+        self.assertEqual(first["next_offset"], 8192)
+        self.assertTrue(second["eof"])
+        self.assertEqual(first["content"] + second["content"], content)
+
 
 if __name__ == "__main__":
     unittest.main()
