@@ -16,6 +16,7 @@ from .tools.base import ToolResult
 from .tools.register import ToolRegistry, default_registry
 from .trace import ModelRequest, ModelRequestStatus, RunStopReason, TraceStore, TurnResult
 from .utils import color_label, render_prompt
+from .verification import CheckResult, CompletionCheck, full_file_check
 
 if TYPE_CHECKING:
     from llama_cpp import ChatCompletionRequestMessage
@@ -52,7 +53,8 @@ class Agent:
         return self.registry.invoke(tool_name, tool_params, call_id=call_id)
 
     def run_turn(self, user_input: str, history: list[ChatCompletionRequestMessage] | None = None,
-                 *, session_id: str | None = None) -> TurnResult:
+                 *, session_id: str | None = None,
+                 completion_check: CompletionCheck | None = None) -> TurnResult:
         """Execute supplied history; session_id associates and saves this run, not loads history."""
         started = monotonic()
         result = TurnResult(
@@ -64,12 +66,14 @@ class Agent:
         )
         trace = TraceStore(Path(self.state_dir, "runs") if self.state_dir is not None else None)
         try:
-            self._run_turn(result, trace)
+            self._run_turn(result, trace, completion_check)
         except KeyboardInterrupt:
             # A completed model request can still be followed by an interrupted tool.
             if result.model_requests and result.model_requests[-1].status == ModelRequestStatus.STARTED:
                 result.model_requests[-1].status = ModelRequestStatus.INTERRUPTED
             result.stop_reason = RunStopReason.INTERRUPTED
+        if completion_check is not None and result.stop_reason != RunStopReason.FINAL_RESPONSE:
+            self._check_completion(result, completion_check, 2 + len(history or []))
         result.elapsed_seconds = round(monotonic() - started, 2)
         trace.save_run(result)
         self._save_session(result, len(history or []))
@@ -88,8 +92,21 @@ class Agent:
             logger.error("Could not save session for run {}; this turn will not be remembered: {}",
                          result.run_id, error)
 
-    def _run_turn(self, result: TurnResult, trace: TraceStore) -> None:
+    @staticmethod
+    def _check_completion(result: TurnResult, check: CompletionCheck, start: int) -> CheckResult:
+        try:
+            checked = check(deepcopy(result.messages[start:]))
+            if not isinstance(checked, CheckResult) or checked.status not in ("passed", "pending", "blocked"):
+                raise ValueError("Invalid completion-check result.")
+        except Exception as error:
+            checked = CheckResult("completion_check", "blocked", f"{type(error).__name__}: {error}")
+        result.completion_check = asdict(checked)
+        return checked
+
+    def _run_turn(self, result: TurnResult, trace: TraceStore,
+                  completion_check: CompletionCheck | None = None) -> None:
         messages = result.messages
+        turn_start = len(messages)
         for iteration in range(1, self.max_iterations + 1):
             request = ModelRequest(iteration, len(messages))
             result.model_requests.append(request)
@@ -127,6 +144,15 @@ class Agent:
                 messages.append({"role": "tool", "content": json.dumps(asdict(tool_result)),
                                  "tool_call_id": tool_result.call_id})
             elif response.type == ResponseType.direct:
+                if completion_check is not None:
+                    checked = self._check_completion(result, completion_check, turn_start)
+                    if checked.status == "blocked":
+                        result.stop_reason = RunStopReason.CHECK_FAILED
+                        result.error_message = checked.feedback
+                        return
+                    if checked.status == "pending":
+                        messages.append({"role": "user", "content": f"[Runtime feedback] {checked.feedback}"})
+                        continue
                 result.final_answer = response.content
                 result.stop_reason = RunStopReason.FINAL_RESPONSE
                 return
@@ -180,6 +206,8 @@ class Agent:
                 print("Stopped: reached maximum iterations.")
             elif result.stop_reason == RunStopReason.INTERRUPTED:
                 print("Turn interrupted.")
+            else:
+                print(f"Stopped: {result.stop_reason}. {result.error_message or ''}")
 
 
 if __name__ == "__main__":

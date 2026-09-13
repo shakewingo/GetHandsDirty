@@ -21,6 +21,7 @@ class RunStopReason(StrEnum):
     MAX_ITERATIONS = "max_iterations"
     MODEL_ERROR = "model_error"
     INTERRUPTED = "interrupted"
+    CHECK_FAILED = "check_failed"
 
 
 class ModelRequestStatus(StrEnum):
@@ -56,6 +57,7 @@ class TurnResult:
     input: str = ""
     started_at: str = ""
     settings: dict[str, Any] = field(default_factory=dict)
+    completion_check: dict[str, Any] | None = None
 
 
 class TraceStore:

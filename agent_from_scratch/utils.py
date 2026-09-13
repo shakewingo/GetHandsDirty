@@ -26,6 +26,13 @@ def color_label(label: str, color: int) -> str:
     return f"\033[1;{color}m{label}\033[0m"
 
 
+def file_version(stat: os.stat_result) -> str:
+    """Cheap change detection for a single-writer workspace, not a content hash."""
+    return ":".join(str(value) for value in (
+        stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns,
+    ))
+
+
 def render_prompt(name: str, **context) -> str:
     """Render a prompt template by filename (e.g. 'system.jinja')."""
     from jinja2 import Environment, FileSystemLoader, StrictUndefined

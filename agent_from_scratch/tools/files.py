@@ -8,9 +8,10 @@ from codecs import getincrementaldecoder
 from itertools import islice
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from os import fstat
 
 from .base import Tool
-from ..utils import resolve_path
+from ..utils import resolve_path, file_version
 
 
 class ListFilesTool(Tool):
@@ -75,19 +76,24 @@ class ReadFileTool(Tool):
                              "Use list_files to inspect the workspace.")
         size = min(2048, self.max_bytes) if chunk_size is None else chunk_size
         with target.open("rb") as stream:
-            file_size = stream.seek(0, 2)
+            before = fstat(stream.fileno())
+            version = file_version(before)
+            file_size = before.st_size
             if offset > file_size:
                 raise ValueError(f"offset exceeds file size {file_size}; expected 0..{file_size}. "
                                  "Use the previous next_offset.")
             stream.seek(offset)
             raw = stream.read(size + 1)
+            if file_version(fstat(stream.fileno())) != version or file_version(target.stat()) != version:
+                raise ValueError("File changed during the read; this chunk cannot be used.")
         eof = len(raw) <= size
         decoder = getincrementaldecoder("utf-8")()
         content = decoder.decode(raw[:size], final=eof)
         # Leave an incomplete UTF-8 character for the next read, without data loss.
         consumed = len(raw[:size]) - len(decoder.getstate()[0])
         return {"path": str(target.relative_to(self.workspace)), "content": content,
-                "offset": offset, "next_offset": None if eof else offset + consumed, "eof": eof}
+                "offset": offset, "next_offset": None if eof else offset + consumed, "eof": eof,
+                "size_bytes": file_size, "version": version}
 
 
 class WriteFileTool(Tool):

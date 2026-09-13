@@ -3,10 +3,12 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
+from types import SimpleNamespace
 
 from agent_from_scratch.tools.base import ToolErrorCode
 from agent_from_scratch.tools.files import ListFilesTool, ReadFileTool, WriteFileTool
 from agent_from_scratch.tools.register import ToolRegistry
+from agent_from_scratch.utils import file_version
 
 
 class FileToolTests(unittest.TestCase):
@@ -152,6 +154,23 @@ class FileToolTests(unittest.TestCase):
             self.assertFalse(result.ok)
         (self.workspace / "bad.txt").write_text("valid")
         self.assertTrue(self.registry.invoke("read_file", {"path": "bad.txt"}).ok)
+
+    def test_read_metadata_matches_open_file_and_detects_mid_read_changes(self):
+        target = self.workspace / "a.txt"
+        target.write_text("abcdefghij")
+        before = target.stat()
+        result = self.registry.invoke("read_file", {"path": "a.txt"})
+        self.assertEqual(result.output["size_bytes"], 10)
+        self.assertEqual(result.output["version"], file_version(before))
+        fields = {name: getattr(before, name) for name in (
+            "st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns",
+        )}
+        changed = SimpleNamespace(**{**fields, "st_mtime_ns": before.st_mtime_ns + 1})
+        with patch("agent_from_scratch.tools.files.fstat", side_effect=[before, changed]):
+            result = self.registry.invoke("read_file", {"path": "a.txt"})
+        self.assertFalse(result.ok)
+        self.assertIn("changed", result.error_message)
+        self.assertIsNone(result.output)
 
 
 if __name__ == "__main__":
