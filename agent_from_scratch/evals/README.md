@@ -1,5 +1,8 @@
 # Foundation dev checks
 
+The implementation checkpoint and measured limitations are in
+[FOUNDATION_CHECKPOINT.md](FOUNDATION_CHECKPOINT.md).
+
 Run from the repository root in the `transformer-practice` environment:
 
 ```sh
