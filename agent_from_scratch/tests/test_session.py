@@ -91,6 +91,16 @@ class SessionTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "line 1"):
                         SessionStore(directory).load_history("bad")
 
+    def test_new_stop_reasons_round_trip_alongside_old_version_one_records(self):
+        with TemporaryDirectory() as directory:
+            store = SessionStore(directory)
+            store.append("test", "old", [{"role": "user", "content": "Old request"}])
+            for reason in (RunStopReason.NO_PROGRESS, RunStopReason.CHECK_FAILED):
+                store.append("test", str(reason), [], stop_reason=reason)
+            self.assertEqual([r["stop_reason"] for r in store.load_records("test")],
+                             ["final_response", "no_progress", "check_failed"])
+            self.assertEqual(store.load_history("test"), [{"role": "user", "content": "Old request"}])
+
     def test_trace_lookup_handles_legacy_missing_and_escaping_references(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)

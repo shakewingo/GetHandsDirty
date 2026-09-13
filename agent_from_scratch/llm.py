@@ -154,10 +154,7 @@ class LLM:
 
     @staticmethod
     def parse_response(response) -> LLMResponse:
-        """
-        Example 1 w tool_calls: {'id': 'chatcmpl-xxx', 'object': 'chat.completion', 'created': 1789008759, 'model': 'qwen2.5.gguf', 'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': '<tool_call>\n{{"name": "calculator", "arguments": {"operation": "add", "left": 2, "right": 2}}}\n</tool_call>'}, 'logprobs': None, 'finish_reason': 'stop'}], 'usage': {'prompt_tokens': 284, 'completion_tokens': 32, 'total_tokens': 316}}
-        Example 2 wo tool_calls: {'choices':[{'index': 0, 'message': {'role': 'assistant', 'content': 'The capital of China is Beijing.'}, 'logprobs': None, 'finish_reason': 'stop'}]}
-        """
+        """Parse native calls first, then a whole Qwen block, otherwise plain text."""
         try:
             choice = response["choices"][0]
             message = choice["message"]
@@ -165,6 +162,8 @@ class LLM:
             content = message.get("content")
         except (KeyError, IndexError, TypeError, AttributeError) as error:
             raise ResponseError(ResponseErrorCode.INVALID_RESPONSE) from error
+        if role != "assistant":
+            raise ResponseError(ResponseErrorCode.INVALID_RESPONSE, "Expected an assistant message.")
         if content is not None and not isinstance(content, str):
             raise ResponseError(ResponseErrorCode.INVALID_RESPONSE, "Content must be text or null.")
         if choice.get("finish_reason") == "length":
@@ -264,7 +263,7 @@ if __name__ == "__main__":
     from .tools.register import default_tool_schemas
 
     user_input = "What is 2*2?"
-    llm = LLM()
+    llm = LLM(chat_template_path=_QWEN_TEMPLATE)
     messages: list[ChatCompletionRequestMessage] = [
         {"role": "system", "content": render_prompt("system.md")},
         {"role": "user", "content": user_input},

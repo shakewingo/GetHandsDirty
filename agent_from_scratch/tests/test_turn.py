@@ -219,6 +219,21 @@ class TurnTests(unittest.TestCase):
         self.assertEqual(result.final_answer, "Concise summary")
         self.assertIn("next necessary", recovery_feedback(ResponseError(ResponseErrorCode.MULTIPLE_TOOL_CALLS)))
 
+    def test_truncated_call_never_executes_and_keeps_finish_evidence(self):
+        raw = {"choices": [{"message": {"role": "assistant", "content":
+               '<tool_call>{"name":"write_file","arguments":{"path":"a","content":"x"}}'},
+                            "finish_reason": "length"}]}
+        try:
+            LLM.parse_response(raw)
+        except ResponseError as error:
+            error.raw_response = raw
+            self.script(error, answer("Recovered briefly"))
+        with patch.object(self.agent, "execute_tool") as execute:
+            result = self.agent.run_turn("test")
+        execute.assert_not_called()
+        self.assertEqual(result.model_requests[0].finish_reason, "length")
+        self.assertEqual(result.final_answer, "Recovered briefly")
+
     def test_unknown_tool_can_recover_using_available_names(self):
         unknown = call()
         unknown.tool_name = "missing"

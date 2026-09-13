@@ -37,8 +37,9 @@ def recovery_feedback(error: ResponseError) -> str:
         ResponseErrorCode.UNSUPPORTED_FINISH_REASON:
             "Retry using the supported response format.",
     }
+    detail = f"{error} " if error.code == ResponseErrorCode.INVALID_TOOL_CALL else ""
     return ("[Runtime feedback] Your response could not be processed. "
-            f"No tool executed for this response. {hints[error.code]}")
+            f"No tool executed for this response. {detail}{hints[error.code]}")
 
 
 class Agent:
@@ -132,6 +133,9 @@ class Agent:
                 request.status = ModelRequestStatus.PARSE_ERROR
                 if isinstance(error.raw_response, dict):
                     request.usage = LLM.read_usage(error.raw_response.get("usage"))
+                    choices = error.raw_response.get("choices")
+                    if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+                        request.finish_reason = choices[0].get("finish_reason")
                 logger.error("LLM response error: {}", error)
                 trace.save_parse_error(result, iteration, error)
                 messages.append({"role": "user", "content": recovery_feedback(error)})
