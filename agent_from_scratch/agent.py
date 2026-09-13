@@ -29,7 +29,9 @@ def recovery_feedback(error: ResponseError) -> str:
         ResponseErrorCode.MULTIPLE_TOOL_CALLS:
             "Issue only the next necessary tool call; later calls can follow its result.",
         ResponseErrorCode.TRUNCATED_RESPONSE:
-            "The output was cut off. Retry more concisely; do not repeat completed work.",
+            "The output was cut off. Summarize observed results more concisely; "
+            "do not replay long tool outputs. If the requested answer cannot fit, "
+            "state what remains undelivered.",
         ResponseErrorCode.EMPTY_RESPONSE:
             "Return the next useful action or a concise answer to the original request.",
         ResponseErrorCode.INVALID_RESPONSE:

@@ -43,8 +43,8 @@ class ListFilesTool(Tool):
 class ReadFileTool(Tool):
     name = "read_file"
     description = (
-        "Read a bounded UTF-8 file chunk. offset and chunk_size are bytes. "
-        "For a full-file read, start at 0 and continue using next_offset until eof. "
+        "Read a UTF-8 file in bounded chunks. offset and chunk_size are bytes. "
+        "Unless the user requested a partial range, follow next_offset until eof before answering. "
         "For a partial read, stop after the requested range."
     )
     parameters = {
