@@ -121,11 +121,14 @@ class FileToolTests(unittest.TestCase):
                     chunks.append(chunk["content"])
                     consumed = len(chunk["content"].encode("utf-8"))
                     self.assertLessEqual(consumed, size)
+                    self.assertIn(f"[{offset}, {offset + consumed})", chunk["read_status"])
                     if chunk["eof"]:
                         self.assertIsNone(chunk["next_offset"])
+                        self.assertIn("End of file.", chunk["read_status"])
                         break
                     self.assertGreater(consumed, 0)
                     self.assertEqual(chunk["next_offset"], offset + consumed)
+                    self.assertIn(f"offset={chunk['next_offset']}", chunk["read_status"])
                     offset = chunk["next_offset"]
                 self.assertEqual("".join(chunks), content)
 

@@ -44,8 +44,8 @@ class ReadFileTool(Tool):
     name = "read_file"
     description = (
         "Read a UTF-8 file in bounded chunks. offset and chunk_size are bytes. "
-        "Unless the user requested a partial range, follow next_offset until eof before answering. "
-        "For a partial read, stop after the requested range."
+        "Use next_offset to read more when the task needs it. "
+        "eof describes the file range, not whether the user's task is complete."
     )
     parameters = {
         "type": "object",
@@ -94,9 +94,12 @@ class ReadFileTool(Tool):
         content = decoder.decode(raw[:size], final=eof)
         # Leave an incomplete UTF-8 character for the next read, without data loss.
         consumed = len(raw[:size]) - len(decoder.getstate()[0])
+        end = offset + consumed
+        read_status = f"Returned byte range [{offset}, {end}) of {file_size}. "
+        read_status += "End of file." if eof else f"More content available; continue with offset={end}."
         return {"path": str(target.relative_to(self.workspace)), "content": content,
-                "offset": offset, "next_offset": None if eof else offset + consumed, "eof": eof,
-                "size_bytes": file_size, "version": version}
+                "offset": offset, "next_offset": None if eof else end, "eof": eof,
+                "size_bytes": file_size, "version": version, "read_status": read_status}
 
 
 class WriteFileTool(Tool):

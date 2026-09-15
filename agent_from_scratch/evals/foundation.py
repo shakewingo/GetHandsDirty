@@ -1,15 +1,18 @@
 """Small real-model dev suite. Run as a module; never point writable runs at source.
 
 Example: python -m agent_from_scratch.evals.foundation --workspace outputs/fixture
-         --output outputs/foundation --cases exact,guarded --seeds 11,22,33
+         --output outputs/foundation --cases exact,full --seeds 11,22,33
 Answer relevance is deliberately left for human review, separate from read coverage.
 """
+
+from __future__ import annotations
 
 import argparse
 import hashlib
 import json
 from pathlib import Path
 from time import monotonic
+from typing import Any, TYPE_CHECKING
 
 from loguru import logger
 from ..agent import Agent
@@ -19,27 +22,50 @@ from ..tools.calculator import CalculatorTool
 from ..tools.files import ListFilesTool, ReadFileTool, WriteFileTool
 from ..tools.register import ToolRegistry
 
+if TYPE_CHECKING:
+    from llama_cpp import ChatCompletionRequestMessage
+
 
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
 def measure(result, original: bytes, relative_path: str, history_length: int) -> dict:
-    observations = [json.loads(m["content"]) for m in result.messages[2 + history_length:]
-                    if m["role"] == "tool"]
-    chunks = [o["output"] for o in observations if o["ok"] and o["tool_name"] == "read_file"
-              and o["output"]["path"] == relative_path]
+    """Score completed traces against a frozen fixture; never steer the runtime."""
+    observations, chunks, calls = [], [], {}
     covered = bytearray(len(original))
     matches = True
-    for chunk in chunks:
+    for message in result.messages[2 + history_length:]:
+        if message["role"] == "assistant":
+            for call in message.get("tool_calls", []):
+                calls[call["id"]] = call["function"]
+        if message["role"] != "tool":
+            continue
+        observation = json.loads(message["content"])
+        observations.append(observation)
+        function = calls.pop(message["tool_call_id"], None)
+        if not observation["ok"] or observation["tool_name"] != "read_file":
+            continue
+        chunk = observation["output"]
+        if chunk["path"] != relative_path:
+            continue
+        chunks.append(chunk)
         data = chunk["content"].encode("utf-8")
         offset = chunk["offset"]
-        matches &= original[offset:offset + len(data)] == data
-        if 0 <= offset <= offset + len(data) <= len(original):
-            covered[offset:offset + len(data)] = b"\1" * len(data)
+        end = offset + len(data)
+        valid = (function is not None and function["name"] == "read_file"
+                 and observation["call_id"] == message["tool_call_id"]
+                 and json.loads(function["arguments"]).get("offset", 0) == offset
+                 and 0 <= offset <= end <= len(original)
+                 and original[offset:end] == data
+                 and chunk["size_bytes"] == len(original)
+                 and chunk["eof"] is (end == len(original))
+                 and chunk["next_offset"] == (None if chunk["eof"] else end))
+        matches &= valid
+        if valid:
+            covered[offset:end] = b"\1" * len(data)
     return {
         "run_id": result.run_id, "stop_reason": result.stop_reason,
-        "completion_check": getattr(result, "completion_check", None),
         "model_requests": len(result.model_requests),
         "parse_errors": sum(q.status == "parse_error" for q in result.model_requests),
         "tool_errors": [o for o in observations if not o["ok"]],
@@ -64,7 +90,7 @@ def main():
     parser.add_argument("--workspace", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--target", default="llm.py")
-    parser.add_argument("--cases", default="exact,guarded,guided,partial")
+    parser.add_argument("--cases", default="exact,full,partial")
     parser.add_argument("--seeds", default="11,22,33")
     parser.add_argument("--read-bytes", type=int, default=8192)
     parser.add_argument("--readonly", action="store_true", help="Block writes; record every attempt.")
@@ -82,7 +108,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     original = target.read_bytes()
     cases = args.cases.split(",")
-    if not set(cases) <= {"exact", "guarded", "guided", "partial", "history", "edit", "read_command"}:
+    if not set(cases) <= {"exact", "full", "guided", "partial", "history", "edit"}:
         parser.error("Unknown case.")
     if "edit" in cases and args.readonly:
         parser.error("edit requires a disposable writable workspace.")
@@ -116,11 +142,13 @@ def main():
             name = f"{case}_{seed}"
             count = 0
 
-            def observed_backend(**kwargs):
+            def observed_backend(*positional: Any, **kwargs: Any):
                 nonlocal count
                 count += 1
                 started = monotonic()
-                raw = backend(**kwargs, seed=seed)
+                raw = backend(*positional, **kwargs, seed=seed)
+                if not isinstance(raw, dict):
+                    raise TypeError("Expected a non-streaming response.")
                 choice = raw["choices"][0]
                 print(name, "request", count, "seconds", round(monotonic() - started, 1),
                       "finish", choice["finish_reason"],
@@ -132,21 +160,17 @@ def main():
             if args.readonly:
                 invoke = agent.execute_tool
 
-                def readonly(name, arguments, call_id=""):
-                    if name == "write_file":
+                def readonly(tool_name, tool_params, call_id=""):
+                    if tool_name == "write_file":
                         return ToolResult.failure(ToolErrorCode.EXECUTION_ERROR, call_id=call_id,
-                                                  tool_name=name, detail="Read-only diagnostic.")
-                    return invoke(name, arguments, call_id)
+                                                  tool_name=tool_name, detail="Read-only diagnostic.")
+                    return invoke(tool_name, tool_params, call_id)
 
                 agent.execute_tool = readonly
             prompt = f"Read file {target}"
-            history = []
-            check = None
-            if case in ("guarded", "read_command"):
-                from ..verification import full_file_check
-                check = full_file_check(workspace, target)
-                if case == "read_command":
-                    prompt += " in full. Reply with a short summary only, without reproducing the file."
+            history: list[ChatCompletionRequestMessage] = []
+            if case == "full":
+                prompt += " in full. Reply with a short summary only, without reproducing the file."
             elif case == "guided":
                 prompt += " in full, continuing with next_offset until eof is true. Do not ask me questions; finish by briefly summarizing the file."
             elif case == "partial":
@@ -161,8 +185,7 @@ def main():
             print("START", name, flush=True)
             before = {str(p.relative_to(workspace)): digest(p.read_bytes())
                       for p in workspace.rglob("*") if p.is_file()}
-            options = {"completion_check": check} if check is not None else {}
-            result = agent.run_turn(prompt, history, session_id=name, **options)
+            result = agent.run_turn(prompt, history, session_id=name)
             summary = {"case": name, "prompt": prompt, "history_messages": len(history),
                        **measure(result, original, str(target.relative_to(workspace)), len(history))}
             summary["target_unchanged"] = target.read_bytes() == original
@@ -177,7 +200,7 @@ def main():
                 except ValueError:
                     summary["artifact_correct"] = False
                 summary["artifact"] = actual
-                observations = [json.loads(m["content"]) for m in result.messages if m["role"] == "tool"]
+                observations = [json.loads(m["content"] or "") for m in result.messages if m["role"] == "tool"]
                 wrote = False
                 summary["read_back_verified"] = False
                 for observation in observations:

@@ -29,7 +29,10 @@ class SessionStore:
         if "schema_version" in record:
             if type(record["schema_version"]) is not int or record["schema_version"] != 1:
                 raise ValueError("Unsupported session schema_version.")
-            reason = RunStopReason(record.get("stop_reason"))
+            # Legacy runtime coverage checks emitted this retired stop reason.
+            reason = record.get("stop_reason")
+            if reason != "check_failed":
+                reason = RunStopReason(reason)
             if record.get("started_at") is not None and not isinstance(record["started_at"], str):
                 raise ValueError("started_at must be text or null.")
             if reason != RunStopReason.FINAL_RESPONSE and record["messages"]:

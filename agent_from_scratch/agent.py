@@ -16,7 +16,6 @@ from .tools.base import ToolResult
 from .tools.register import ToolRegistry, default_registry
 from .trace import ModelRequest, ModelRequestStatus, RunStopReason, TraceStore, TurnResult
 from .utils import color_label, render_prompt
-from .verification import CheckResult, CompletionCheck, full_file_check
 
 if TYPE_CHECKING:
     from llama_cpp import ChatCompletionRequestMessage
@@ -50,7 +49,6 @@ class Agent:
         self.llm = llm
         self.max_iterations = 20
         self.max_same_failures = 3
-        self.max_rejected_candidates = 3
         self.state_dir = state_dir
         self.registry = default_registry if registry is None else registry
 
@@ -58,8 +56,7 @@ class Agent:
         return self.registry.invoke(tool_name, tool_params, call_id=call_id)
 
     def run_turn(self, user_input: str, history: list[ChatCompletionRequestMessage] | None = None,
-                 *, session_id: str | None = None,
-                 completion_check: CompletionCheck | None = None) -> TurnResult:
+                 *, session_id: str | None = None) -> TurnResult:
         """Execute supplied history; session_id associates and saves this run, not loads history."""
         started = monotonic()
         result = TurnResult(
@@ -68,19 +65,16 @@ class Agent:
             run_id=uuid4().hex, session_id=session_id, input=user_input,
             started_at=datetime.now(timezone.utc).isoformat(),
             settings={**self.llm.settings(), "max_iterations": self.max_iterations,
-                      "max_same_failures": self.max_same_failures,
-                      "max_rejected_candidates": self.max_rejected_candidates},
+                      "max_same_failures": self.max_same_failures},
         )
         trace = TraceStore(Path(self.state_dir, "runs") if self.state_dir is not None else None)
         try:
-            self._run_turn(result, trace, completion_check)
+            self._run_turn(result)
         except KeyboardInterrupt:
             # A completed model request can still be followed by an interrupted tool.
             if result.model_requests and result.model_requests[-1].status == ModelRequestStatus.STARTED:
                 result.model_requests[-1].status = ModelRequestStatus.INTERRUPTED
             result.stop_reason = RunStopReason.INTERRUPTED
-        if completion_check is not None and result.stop_reason != RunStopReason.FINAL_RESPONSE:
-            self._check_completion(result, completion_check, 2 + len(history or []))
         result.elapsed_seconds = round(monotonic() - started, 2)
         trace.save_run(result)
         self._save_session(result, len(history or []))
@@ -99,22 +93,9 @@ class Agent:
             logger.error("Could not save session for run {}; this turn will not be remembered: {}",
                          result.run_id, error)
 
-    @staticmethod
-    def _check_completion(result: TurnResult, check: CompletionCheck, start: int) -> CheckResult:
-        try:
-            checked = check(deepcopy(result.messages[start:]))
-            if not isinstance(checked, CheckResult) or checked.status not in ("passed", "pending", "blocked"):
-                raise ValueError("Invalid completion-check result.")
-        except Exception as error:
-            checked = CheckResult("completion_check", "blocked", f"{type(error).__name__}: {error}")
-        result.completion_check = asdict(checked)
-        return checked
-
-    def _run_turn(self, result: TurnResult, trace: TraceStore,
-                  completion_check: CompletionCheck | None = None) -> None:
+    def _run_turn(self, result: TurnResult) -> None:
         messages = result.messages
-        turn_start = len(messages)
-        last_failure, failure_count, rejected_candidates = None, 0, 0
+        last_failure, failure_count = None, 0
 
         def repeated_failure(key: tuple) -> bool:
             nonlocal last_failure, failure_count
@@ -133,13 +114,15 @@ class Agent:
                 response = self.llm.generate(messages, self.registry.schemas())
             except ResponseError as error:
                 request.status = ModelRequestStatus.PARSE_ERROR
+                request.raw_response = error.raw_response
+                request.error_code = error.code
+                request.error_message = str(error)
                 if isinstance(error.raw_response, dict):
                     request.usage = LLM.read_usage(error.raw_response.get("usage"))
                     choices = error.raw_response.get("choices")
                     if isinstance(choices, list) and choices and isinstance(choices[0], dict):
                         request.finish_reason = choices[0].get("finish_reason")
                 logger.error("LLM response error: {}", error)
-                trace.save_parse_error(result, iteration, error)
                 messages.append({"role": "user", "content": recovery_feedback(error)})
                 if repeated_failure(("response", error.code)):
                     return
@@ -148,6 +131,7 @@ class Agent:
                 request.status = ModelRequestStatus.MODEL_ERROR
                 result.stop_reason = RunStopReason.MODEL_ERROR
                 result.error_message = f"{type(error).__name__}: {error}"
+                request.error_message = result.error_message
                 logger.error("Model backend error: {}", error)
                 return
             if response.type == ResponseType.tool_call and not response.call_id:
@@ -156,7 +140,7 @@ class Agent:
             request.call_id = response.call_id or None
             request.usage = LLM.read_usage(response.usage)
             request.finish_reason = response.finish_reason
-            request.response_file = trace.save_model_response(result, iteration, response)
+            request.raw_response = response.raw_response
             messages.append(response.to_message())
             if response.type == ResponseType.tool_call:
                 logger.debug("Tool call detected: {} {}", response.tool_name, response.tool_params)
@@ -174,24 +158,6 @@ class Agent:
                                        tool_result.error_code)):
                     return
             elif response.type == ResponseType.direct:
-                last_failure, failure_count = None, 0
-                if completion_check is not None:
-                    checked = self._check_completion(result, completion_check, turn_start)
-                    if checked.status == "blocked":
-                        result.stop_reason = RunStopReason.CHECK_FAILED
-                        result.error_message = checked.feedback
-                        return
-                    if checked.status == "pending":
-                        # Raw trace, when enabled, retains the rejected candidate.
-                        # Keep it out of the next prompt to avoid repeating it.
-                        messages.pop()
-                        rejected_candidates += 1
-                        if rejected_candidates >= self.max_rejected_candidates:
-                            result.stop_reason = RunStopReason.CHECK_FAILED
-                            result.error_message = "Completion-check retry limit reached. " + checked.feedback
-                            return
-                        messages.append({"role": "user", "content": f"[Runtime feedback] {checked.feedback}"})
-                        continue
                 result.final_answer = response.content
                 result.stop_reason = RunStopReason.FINAL_RESPONSE
                 return
@@ -210,8 +176,7 @@ class Agent:
         return next_id
 
     def run_repl(self, session_id: str = "default_session", *,
-                 user_color: int = 33, agent_color: int = 32,
-                 workspace: str | Path | None = None):
+                 user_color: int = 33, agent_color: int = 32):
         """ANSI label colors: 31 red, 32 green, 33 yellow, 34 blue, 35 magenta, 36 cyan."""
         user_label = color_label("User:", user_color)
         agent_label = color_label("Agent:", agent_color)
@@ -237,19 +202,7 @@ class Agent:
             except (OSError, ValueError) as error:
                 print(f"Session unavailable: {error}. Use /new, /reset, or /session <id> to recover.")
                 continue
-            completion_check = None
-            if command.startswith("/read "):
-                try:
-                    if workspace is None:
-                        raise ValueError("/read requires a configured workspace.")
-                    path = command.split(maxsplit=1)[1]
-                    completion_check = full_file_check(workspace, path)
-                    user_input = f"Read file {path} in full. Reply with a short summary only, without reproducing the file."
-                except (OSError, ValueError) as error:
-                    print(f"Could not start read: {error}")
-                    continue
-            result = self.run_turn(user_input, history, session_id=session_id,
-                                   completion_check=completion_check)
+            result = self.run_turn(user_input, history, session_id=session_id)
             if result.stop_reason == RunStopReason.FINAL_RESPONSE:
                 print(f"{agent_label} {result.final_answer}")
             elif result.stop_reason == RunStopReason.MODEL_ERROR:
@@ -260,13 +213,10 @@ class Agent:
                 print("Turn interrupted.")
             else:
                 print(f"Stopped: {result.stop_reason}. {result.error_message or ''}")
-            if result.stop_reason != RunStopReason.FINAL_RESPONSE and result.completion_check:
-                check = result.completion_check
-                print(f"Check {check['name']}: {check['status']}. {check['feedback']}")
 
 
 if __name__ == "__main__":
     llm = LLM(model_path=str(_MODEL_PATH), temperature=0.0, max_tokens=2048,
               n_gpu_layers=-1, n_ctx=8000, chat_template_path=_QWEN_TEMPLATE)
     agent = Agent(llm, state_dir="./outputs/sessions")
-    agent.run_repl(workspace="./agent_from_scratch")
+    agent.run_repl()

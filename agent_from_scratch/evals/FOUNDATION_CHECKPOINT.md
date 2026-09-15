@@ -1,49 +1,55 @@
-# Foundation results — 2026-09-13
+# Foundation review checkpoint — 2026-09-13
 
-Implementation baseline: `2f4d32c`. Delivery runtime: `3ceb413`.
-88 deterministic tests passed. Runtime: 1357 Python lines; tests: 1325; eval: 200.
+本次 review 修订相对于 c9b30c8，代码留在工作区供审阅。
+上一版实验和设计保留在 git 历史与本地报告归档，本表只描述当前修订。
 
-Qwen2.5-7B Q4_K_M, llama-cpp-python 0.3.35, temperature 0, max_tokens 2048,
-n_ctx 8000, at most 20 requests per turn. Successful raw responses, parse failures,
-source/template/fixture hashes and settings are retained under the ignored
-`outputs/foundation` directory. The 34 completed trials span several revisions;
-they are not one final-version success-rate estimate. One in-flight duplicate
-trial was cancelled and excluded.
+## 实现
 
-| Condition | Observation |
-|---|---|
-| Fixed protocol, plain request, no verifier | Three trials read only the first 2048 of 9562 bytes, then ended. No parser errors. |
-| Full-read check, rejected source excerpt kept in context | Read coverage passed, but repeated output truncation prevented final delivery. Stronger retry wording alone did not fix it. |
-| Rejected candidate retained in raw trace, removed from active context | Three same-prompt checked trials read all bytes and delivered relevant summaries; one truncation recovery each. |
-| Explicit full read and summary | Three trials completed in three model requests each. |
-| First 1024 bytes only | Three trials stopped at the requested range, without requiring EOF. |
-| Read config, change output, read back | Final JSON matched `{"output":"new.txt","retries":3}`; read-back matched the file. |
-| Final `/read` wording on actual current llm.py | Three trials read 11097/11097 bytes and delivered short summaries. Requests: 3, 4, 4. Seconds: 30.35, 34.77, 34.26. No parse or tool errors. |
-| File containing valid tool-call examples and invalid JSON | Read and summarized; no example was executed and no file was changed. |
+- 删除 /read、运行时 completion_check、候选驳回逻辑和 verification.py。
+- 普通输入不改写；模型返回工具调用则执行并继续，返回普通答案则结束。
+- 成功/失败原始响应统一进 ModelRequest，随一个 run trace 保存，run schema=2。
+  session schema=1；历史 check_failed 记录和旧 trace 可读，不生成该停止原因。
+- 保留模板与解析修复、严格参数校验、分类恢复、重复失败停止、总迭代上限。
+- read_file 返回范围说明及 next_offset，保留 8192-byte 默认上限和 UTF-8 边界。
+  工具不强制读全；覆盖率只在 eval 结束后检查，不驱动模型。
 
-Semantic judgments above are Codex assistant reviews of responses against source
-and tool evidence, not independent human review. Programmatic read coverage is a
-separate property. Seeds at temperature zero are not fully independent samples.
+82 个确定性测试通过；运行时各模块及 eval 的 Pyright 零错误。
+运行时 1202 Python 行 / 11 文件（上次交付 1357，减少 155）；
+测试 1277 行 / 6 文件；eval 223 行 / 1 文件。模板不计入 Python 行数。
 
-The final 2048-vs-8192 default comparison did not isolate a default-size benefit:
-the model explicitly requested chunk_size=8192 in both conditions. Both made two
-reads and four model requests. Do not attribute their 37.97-vs-34.17-second timing
-difference to the default alone. Direct tool pagination with omitted sizes does
-fall from five reads to two for the frozen 9562-byte file.
+## 真实模型 smoke：6 次完成
 
-The final command explicitly asks for a short summary without reproducing the
-file. Earlier actual-source trials sometimes stopped mid-quotation at a chat-token
-literal despite finish_reason=stop. Tool JSON is now escaped at the Qwen rendering
-boundary, token strings are obtained through the public tokenizer, and the final
-command's delivery format was tested separately.
+Qwen2.5-7B Q4_K_M，temperature=0，max_tokens=2048，n_ctx=8000，
+每轮最多20次请求、连续相同失败最多3次，read默认及上限8192bytes。
+使用与上一轮相同的9562-byte冻结 llm.py；所有测试在可写的临时工作区执行。
+四个工具 schema 仍暴露：calculator/list_files/read_file/write_file。
+所有运行均无解析错误或工具错误。只有 edit 改动了 config.json；目标源码始终未变。
 
-Plain natural language still has no automatic task-condition extraction. The
-unverified full-read gate remains open; do not treat `final_response` as universal
-task success. A coverage check also cannot prove summary accuracy. Web/shell and
-Stage 3/4 are not marked ready by this checkpoint.
+| 用例 | 目标文件读取覆盖 | 模型请求 | 秒 | 观察 |
+|---|---|---|---|---|
+| exact_11 | 8192/9562 | 2 | 34.90 | 首块后结束，全文未完成 |
+| full_11 | 8192/9562 | 2 | 16.30 | 首块后结束，全文未完成 |
+| partial_11 | 1024/9562 | 2 | 19.23 | 局部读取通过 |
+| edit_11 | 0/9562 | 4 | 7.76 | 目标配置正确且回读一致 |
+| exact_22 | 8192/9562 | 2 | 34.93 | 首块后结束，全文未完成 |
+| full_22 | 8192/9562 | 2 | 16.14 | 首块后结束，全文未完成 |
 
-See [README.md](README.md) for usage and reproduction. Local detailed evidence:
-`outputs/foundation/review.json`, `environment.json`, `experiment_notes.json`,
-and each condition's `metadata.json`, `results.json`, and `state/runs` files.
-Two early `p1` fixture-directory hash changes were harness preparation actions;
-their side-effect statistics are excluded. The actual read target stayed unchanged.
+edit 的 llm.py 覆盖率不适用，其验收依据是 config.json 产物与回读。
+exact 的提示只有 Read file <path>；full 明确要求读全并短摘要，未提示工具或 offset。
+两组读取都未读全；不能因 final_response 或摘要相关便记为成功。
+同一读取用例两次输出相同；temperature=0 的不同 seed 不是充分独立样本，
+这些 smoke 不构成泛化成功率，也不证明新范围提示改善了模型能力。
+partial 的读取正确、摘要相关，但回答额外复述源码，仍偏长。
+语义审查来自本次 Codex 助手，不是独立人工评测。
+
+## 明确边界
+
+- 模型仍会过早结束或询问用户；不会被 runtime verifier 强制继续。
+- NO_PROGRESS 只检测连续相同失败，不判断成功调用是否对任务有帮助。
+- trace 在轮次结束/正常中断时保存，强制终止进程可能丢失当前轮。
+- schema 是模型输入与执行前验证，不是 constrained decoding。
+- 本轮未实现 web/shell、多调用或其他机制；交付后等待用户 review。
+
+证据：outputs/foundation-review-20260913/ 中的 smoke、repeat、review.json、
+size.json、tests.log；每组 metadata.json 记录设置、schema和源码/fixture hash。
+复跑方式见 [README.md](README.md)。

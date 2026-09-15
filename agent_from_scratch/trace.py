@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
@@ -13,7 +12,6 @@ from .utils import resolve_path, write_jsonl
 
 if TYPE_CHECKING:
     from llama_cpp import ChatCompletionRequestMessage
-    from .llm import ResponseError
 
 
 class RunStopReason(StrEnum):
@@ -21,7 +19,6 @@ class RunStopReason(StrEnum):
     MAX_ITERATIONS = "max_iterations"
     MODEL_ERROR = "model_error"
     INTERRUPTED = "interrupted"
-    CHECK_FAILED = "check_failed"
     NO_PROGRESS = "no_progress"
 
 
@@ -41,7 +38,9 @@ class ModelRequest:
     call_id: str | None = None
     usage: dict[str, int | None] | None = None
     finish_reason: str | None = None
-    response_file: str | None = None
+    raw_response: Any = None  # Includes malformed JSON envelopes, not only valid objects.
+    error_code: str | None = None
+    error_message: str | None = None
 
 
 @dataclass
@@ -53,12 +52,11 @@ class TurnResult:
     run_id: str = ""
     elapsed_seconds: float = 0.0
     model_requests: list[ModelRequest] = field(default_factory=list)
-    schema_version: int = 1
+    schema_version: int = 2
     session_id: str | None = None
     input: str = ""
     started_at: str = ""
     settings: dict[str, Any] = field(default_factory=dict)
-    completion_check: dict[str, Any] | None = None
 
 
 class TraceStore:
@@ -78,25 +76,6 @@ class TraceStore:
     def save_run(self, result: TurnResult) -> None:
         # Full messages remain available for ModelRequest.input_message_count prefixes.
         self._write(f"{result.run_id}.jsonl", asdict(result), "run trace")
-
-    def save_parse_error(self, result: TurnResult, iteration: int, error: ResponseError) -> None:
-        self._write(f"{result.run_id}.parse-error-{iteration}.jsonl", {
-            "schema_version": 1, "event": ModelRequestStatus.PARSE_ERROR,
-            "run_id": result.run_id, "session_id": result.session_id,
-            "iteration": iteration, "timestamp": datetime.now(timezone.utc).isoformat(),
-            "error_code": error.code, "error": str(error), "raw_response": error.raw_response,
-        }, "parse-error event")
-
-    def save_model_response(self, result: TurnResult, iteration: int, response) -> str | None:
-        if self.directory is None or response.raw_response is None:
-            return None
-        filename = f"{result.run_id}.response-{iteration}.jsonl"
-        self._write(filename, {
-            "schema_version": 1, "run_id": result.run_id, "session_id": result.session_id,
-            "iteration": iteration, "finish_reason": response.finish_reason,
-            "raw_response": response.raw_response,
-        }, "model-response event")
-        return filename
 
     def load_run(self, run_id: str) -> dict | None:
         """Resolve a session's run reference. Missing evidence is explicitly unavailable."""

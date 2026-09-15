@@ -95,8 +95,11 @@ class SessionTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             store = SessionStore(directory)
             store.append("test", "old", [{"role": "user", "content": "Old request"}])
-            for reason in (RunStopReason.NO_PROGRESS, RunStopReason.CHECK_FAILED):
-                store.append("test", str(reason), [], stop_reason=reason)
+            store.append("test", "no_progress", [], stop_reason=RunStopReason.NO_PROGRESS)
+            # Retired runtime check records must remain readable and unreplayed.
+            with (Path(directory) / "test.jsonl").open("a") as stream:
+                stream.write(json.dumps({"schema_version": 1, "run_id": "retired",
+                                         "stop_reason": "check_failed", "messages": []}) + "\n")
             self.assertEqual([r["stop_reason"] for r in store.load_records("test")],
                              ["final_response", "no_progress", "check_failed"])
             self.assertEqual(store.load_history("test"), [{"role": "user", "content": "Old request"}])

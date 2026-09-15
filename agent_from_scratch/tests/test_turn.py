@@ -273,7 +273,7 @@ class TurnTests(unittest.TestCase):
         self.assertEqual(output.call_args.args[0],
                          "Stopped: reached maximum iterations.")
 
-    def test_parse_events_are_saved_before_retry_and_survive_final_run_save(self):
+    def test_success_and_parse_errors_share_one_run_trace_without_entering_history(self):
         with TemporaryDirectory() as directory:
             self.agent.state_dir = directory
             self.model = LLM.__new__(LLM)
@@ -291,32 +291,28 @@ class TurnTests(unittest.TestCase):
 
             def generate(**kwargs):
                 attempt = self.model.llm.create_chat_completion.call_count
-                # Events must already exist when the NEXT model request begins.
-                events = sorted(runs.glob("*.parse-error-*.jsonl"))
-                self.assertEqual(len(events), attempt - 1)
-                for event_path in events:
-                    event = json.loads(event_path.read_text())
-                    self.assertEqual(event["raw_response"], raw)
-                    self.assertEqual(event["event"], "parse_error")
-                    self.assertEqual(event["error_code"], "invalid_tool_call")
-                    self.assertIn("Invalid tool-call JSON", event["error"])
                 if attempt < 3:
                     return raw
                 return {"choices": [{"message": {"role": "assistant", "content": "Done"}}]}
 
             self.model.llm.create_chat_completion.side_effect = generate
             with patch.object(self.agent, "execute_tool") as execute:
-                result = self.agent.run_turn("calculate", [])
+                result = self.agent.run_turn("calculate", [], session_id="trace-test")
             execute.assert_not_called()
             self.assertEqual(result.final_answer, "Done")
-            self.assertEqual(len(list(runs.glob("*.jsonl"))), 4)
-            response_path = runs / result.model_requests[-1].response_file
-            self.assertEqual(json.loads(response_path.read_text())["raw_response"]["choices"][0]
+            self.assertEqual(len(list(runs.glob("*.jsonl"))), 1)
+            trace = json.loads((runs / f"{result.run_id}.jsonl").read_text())
+            self.assertEqual(trace["schema_version"], 2)
+            self.assertEqual(trace["final_answer"], "Done")
+            self.assertEqual(trace["model_requests"][-1]["raw_response"]["choices"][0]
                              ["message"]["content"], "Done")
-            for iteration in (1, 2):
-                event = json.loads((runs / f"{result.run_id}.parse-error-{iteration}.jsonl").read_text())
-                self.assertEqual((event["run_id"], event["iteration"]), (result.run_id, iteration))
-            self.assertEqual(json.loads((runs / f"{result.run_id}.jsonl").read_text())["final_answer"], "Done")
+            for request in trace["model_requests"][:2]:
+                self.assertEqual(request["raw_response"], raw)
+                self.assertEqual(request["error_code"], "invalid_tool_call")
+                self.assertIn("Invalid tool-call JSON", request["error_message"])
+            history = SessionStore(Path(directory) / "sessions").load_history("trace-test")
+            self.assertNotIn("raw_response", json.dumps(history))
+            self.assertNotIn("2**2", json.dumps(history))
             self.assertEqual([r.status for r in result.model_requests],
                              ["parse_error", "parse_error", "completed"])
             self.assertEqual(result.model_requests[0].usage,
@@ -325,7 +321,7 @@ class TurnTests(unittest.TestCase):
             self.assertFalse(any(m["role"] == "assistant" and "<tool_call>" in (m.get("content") or "")
                                  for m in result.messages))
 
-    def test_parse_event_survives_interruption_before_turn_finishes(self):
+    def test_unified_trace_keeps_parse_evidence_on_handled_interruption(self):
         with TemporaryDirectory() as directory:
             self.agent.state_dir = directory
             raw = {"choices": []}
@@ -335,12 +331,21 @@ class TurnTests(unittest.TestCase):
             ]
             result = self.agent.run_turn("interrupt after malformed output", [])
             runs = Path(directory) / "runs"
-            event = runs / f"{result.run_id}.parse-error-1.jsonl"
-            self.assertEqual(json.loads(event.read_text())["raw_response"], raw)
             trace = json.loads((runs / f"{result.run_id}.jsonl").read_text())
+            self.assertEqual(trace["model_requests"][0]["raw_response"], raw)
+            self.assertEqual(len(list(runs.glob("*.jsonl"))), 1)
             self.assertEqual(trace["stop_reason"], "interrupted")
             self.assertEqual([r["status"] for r in trace["model_requests"]], ["parse_error", "interrupted"])
             self.assertIsNone(trace["model_requests"][-1]["usage"])
+
+    def test_disabled_persistence_keeps_malformed_envelope_only_in_run_evidence(self):
+        raw = ["invalid response envelope"]
+        self.script(ResponseError(ResponseErrorCode.INVALID_RESPONSE, raw_response=raw), answer())
+        with patch("agent_from_scratch.trace.write_jsonl") as write:
+            result = self.agent.run_turn("recover")
+        write.assert_not_called()
+        self.assertEqual(result.model_requests[0].raw_response, raw)
+        self.assertNotIn("invalid response envelope", json.dumps(result.messages))
 
     def test_interrupted_tool_turn_is_traced_but_not_replayed(self):
         for during_tool in (False, True):
@@ -449,7 +454,7 @@ class TurnTests(unittest.TestCase):
                     self.agent.run_repl()
                 self.model.generate.assert_not_called()
 
-    def test_parse_event_write_failure_does_not_stop_recovery(self):
+    def test_run_trace_write_failure_does_not_undo_recovery(self):
         with TemporaryDirectory() as directory:
             self.agent.state_dir = directory
             self.script(ResponseError(ResponseErrorCode.INVALID_RESPONSE), answer("Recovered"))
@@ -457,7 +462,7 @@ class TurnTests(unittest.TestCase):
                     patch("agent_from_scratch.trace.logger.error") as error_log:
                 result = self.agent.run_turn("recover", [])
             self.assertEqual(result.final_answer, "Recovered")
-            self.assertTrue(any("parse-error event" in args
+            self.assertTrue(any("run trace" in args
                                 for args, _ in error_log.call_args_list))
 
     def test_session_index_links_all_outcomes_to_run_metadata(self):

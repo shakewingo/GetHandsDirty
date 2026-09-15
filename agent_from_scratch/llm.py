@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from collections.abc import Mapping
 from hashlib import sha256
 from dataclasses import dataclass
 from enum import StrEnum
@@ -27,7 +28,7 @@ class LLMResponse:
     usage: dict | None = None
     call_id: str = ""
     finish_reason: str | None = None
-    raw_response: dict | None = None
+    raw_response: Mapping[str, Any] | None = None
 
     def to_message(self) -> ChatCompletionRequestAssistantMessage:
         if self.type == ResponseType.direct:
@@ -254,8 +255,12 @@ class LLM:
             tool_choice="auto",
             temperature=self.temperature,
             max_tokens=self.max_tokens,
+            stream=False,
         )
         try:
+            if not isinstance(response, dict):
+                raise ResponseError(ResponseErrorCode.INVALID_RESPONSE,
+                                    "Expected a non-streaming response object.")
             parsed = LLM.parse_response(response)
             parsed.raw_response = response
             return parsed
