@@ -362,8 +362,15 @@ class TurnTests(unittest.TestCase):
                 execute.assert_called_once()
                 traces = [json.loads(p.read_text()) for p in (Path(directory) / "runs").glob("*.jsonl")]
                 interrupted = next(t for t in traces if t["stop_reason"] == "interrupted")
-                self.assertEqual(interrupted["messages"][-1]["role"], "assistant" if during_tool else "tool")
-                if not during_tool:
+                self.assertEqual(interrupted["messages"][-1]["role"], "tool")
+                if during_tool:
+                    observation = json.loads(interrupted["messages"][-1]["content"])
+                    self.assertFalse(observation["ok"])
+                    self.assertEqual(observation["error_code"], "interrupted")
+                    self.assertIsNone(observation["output"])
+                    self.assertEqual(interrupted["messages"][-2]["tool_calls"][0]["id"],
+                                     interrupted["messages"][-1]["tool_call_id"])
+                else:
                     self.assertEqual(json.loads(interrupted["messages"][-1]["content"])["output"], 4)
                 self.assertEqual([r["status"] for r in interrupted["model_requests"]],
                                  ["completed"] if during_tool else ["completed", "interrupted"])

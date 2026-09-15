@@ -14,6 +14,9 @@ class ToolErrorCode(StrEnum):
     UNKNOWN_TOOL = "unknown_tool"
     INVALID_ARGUMENTS = "invalid_arguments"
     EXECUTION_ERROR = "execution_error"
+    DENIED = "denied"
+    TIMEOUT = "timeout"
+    INTERRUPTED = "interrupted"
 
 
 ERROR_MESSAGES = {
@@ -21,7 +24,27 @@ ERROR_MESSAGES = {
     ToolErrorCode.UNKNOWN_TOOL: "The requested tool is not registered.",
     ToolErrorCode.INVALID_ARGUMENTS: "Tool arguments do not match the schema.",
     ToolErrorCode.EXECUTION_ERROR: "Tool execution failed.",
+    ToolErrorCode.DENIED: "Operation is outside the configured tool policy.",
+    ToolErrorCode.TIMEOUT: "Tool execution timed out.",
+    ToolErrorCode.INTERRUPTED: "Tool execution was interrupted; completion is not confirmed.",
 }
+
+
+class ToolExecutionError(Exception):
+    """An expected failure that can retain bounded observations (e.g. stderr)."""
+
+    def __init__(self, code: ToolErrorCode, detail: str, output: Any = None):
+        super().__init__(detail)
+        self.code = code
+        self.output = output
+
+
+class ToolInterrupted(KeyboardInterrupt):
+    """Stop the turn, retaining any observations collected before cleanup."""
+
+    def __init__(self, output: Any = None):
+        super().__init__()
+        self.output = output
 
 
 @dataclass
@@ -36,13 +59,13 @@ class ToolResult:
     @classmethod
     def failure(
         cls, code: ToolErrorCode, *, call_id: str = "",
-        tool_name: str = "", detail: str = "",
+        tool_name: str = "", detail: str = "", output: Any = None,
     ) -> "ToolResult":
         message = ERROR_MESSAGES[code]
         if detail:
             message = f"{message} {detail}"
         return cls(call_id=call_id, tool_name=tool_name, ok=False,
-                   error_code=code, error_message=message)
+                   error_code=code, error_message=message, output=output)
 
 
 class Tool(ABC):
@@ -84,7 +107,12 @@ class Tool(ABC):
 
         try:
             output = self.execute(**dict(arguments))
+        except ToolExecutionError as error:
+            # Do explicit error code capture and stderr and stdout first including EXECUTION_ERROR
+            return ToolResult.failure(error.code, call_id=call_id, tool_name=self.name,
+                                      detail=str(error), output=error.output)
         except Exception as error:
+            # Then for other Exceptions, categorize as the general EXECUTION_ERROR with no explicit stdout
             return ToolResult.failure(
                 ToolErrorCode.EXECUTION_ERROR,
                 call_id=call_id,

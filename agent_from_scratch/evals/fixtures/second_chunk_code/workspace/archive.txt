@@ -1,0 +1,22 @@
+Archive ledger. The archive access code appears in the final entry.
+Inventory entry: ordinary archived documents, no access code here.
+Inventory entry: ordinary archived documents, no access code here.
+Inventory entry: ordinary archived documents, no access code here.
+Inventory entry: ordinary archived documents, no access code here.
+Inventory entry: ordinary archived documents, no access code here.
+Inventory entry: ordinary archived documents, no access code here.
+Inventory entry: ordinary archived documents, no access code here.
+Inventory entry: ordinary archived documents, no access code here.
+Inventory entry: ordinary archived documents, no access code here.
+Inventory entry: ordinary archived documents, no access code here.
+Inventory entry: ordinary archived documents, no access code here.
+Inventory entry: ordinary archived documents, no access code here.
+Inventory entry: ordinary archived documents, no access code here.
+Inventory entry: ordinary archived documents, no access code here.
+Inventory entry: ordinary archived documents, no access code here.
+Inventory entry: ordinary archived documents, no access code here.
+Inventory entry: ordinary archived documents, no access code here.
+Inventory entry: ordinary archived documents, no access code here.
+Inventory entry: ordinary archived documents, no access code here.
+Inventory entry: ordinary archived documents, no access code here.
+ARCHIVE_ACCESS_CODE=SEA-47

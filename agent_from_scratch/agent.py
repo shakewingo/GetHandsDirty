@@ -12,7 +12,7 @@ from uuid import uuid4
 from loguru import logger
 from .llm import LLM, ResponseError, ResponseErrorCode, ResponseType, _MODEL_PATH, _QWEN_TEMPLATE
 from .session import SessionStore
-from .tools.base import ToolResult
+from .tools.base import ToolErrorCode, ToolResult
 from .tools.register import ToolRegistry, default_registry
 from .trace import ModelRequest, ModelRequestStatus, RunStopReason, TraceStore, TurnResult
 from .utils import color_label, render_prompt
@@ -70,10 +70,20 @@ class Agent:
         trace = TraceStore(Path(self.state_dir, "runs") if self.state_dir is not None else None)
         try:
             self._run_turn(result)
-        except KeyboardInterrupt:
+        except KeyboardInterrupt as error:
             # A completed model request can still be followed by an interrupted tool.
             if result.model_requests and result.model_requests[-1].status == ModelRequestStatus.STARTED:
                 result.model_requests[-1].status = ModelRequestStatus.INTERRUPTED
+            pending = result.messages[-1].get("tool_calls")
+            if pending:
+                call = pending[0]
+                observation = ToolResult.failure(
+                    ToolErrorCode.INTERRUPTED, tool_name=call["function"]["name"],
+                    call_id=call["id"], output=getattr(error, "output", None),
+                    detail="Do not automatically replay this action; inspect its effects first.",
+                )
+                result.messages.append({"role": "tool", "content": json.dumps(asdict(observation)),
+                                        "tool_call_id": observation.call_id})
             result.stop_reason = RunStopReason.INTERRUPTED
         result.elapsed_seconds = round(monotonic() - started, 2)
         trace.save_run(result)

@@ -1,0 +1,10 @@
+{
+  "name": "spare",
+  "output": {
+    "filename": "spare.json",
+    "format": "json"
+  },
+  "retry": {
+    "count": 1
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "dev": [
+    "active_profile_lookup",
+    "late_document_fact",
+    "bounded_prefix_inspection",
+    "complete_document_coverage",
+    "flat_field_update",
+    "manifest_nested_field_update",
+    "no_op_config",
+    "check_then_fix_output",
+    "web_release_to_json",
+    "partial_web_coverage",
+    "outside_workspace_denial",
+    "unselected_profile",
+    "bounded_command_timeout",
+    "parenthesized_arithmetic",
+    "direct_no_tool_response"
+  ],
+  "train": [
+    "single_record_seed",
+    "division_seed"
+  ],
+  "test": [
+    "merge_records_reserved",
+    "joined_totals_reserved"
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "name": "draft",
+  "output": "draft-report.json",
+  "retries": 5
+}
