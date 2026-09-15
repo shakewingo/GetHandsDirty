@@ -17,6 +17,7 @@ class ToolErrorCode(StrEnum):
     DENIED = "denied"
     TIMEOUT = "timeout"
     INTERRUPTED = "interrupted"
+    SKIPPED = "skipped"
 
 
 ERROR_MESSAGES = {
@@ -27,6 +28,7 @@ ERROR_MESSAGES = {
     ToolErrorCode.DENIED: "Operation is outside the configured tool policy.",
     ToolErrorCode.TIMEOUT: "Tool execution timed out.",
     ToolErrorCode.INTERRUPTED: "Tool execution was interrupted; completion is not confirmed.",
+    ToolErrorCode.SKIPPED: "Tool call was not executed.",
 }
 
 

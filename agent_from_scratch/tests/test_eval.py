@@ -7,8 +7,8 @@ from unittest.mock import Mock, patch
 
 from agent_from_scratch.agent import Agent
 from agent_from_scratch.evals.foundation import measure
-from agent_from_scratch.llm import LLM, LLMResponse, ResponseType
-from agent_from_scratch.tools.files import ReadFileTool
+from agent_from_scratch.llm import ToolCall, LLM, LLMResponse, ResponseType
+from agent_from_scratch.evals.legacy_files import ReadFileTool
 from agent_from_scratch.tools.register import ToolRegistry
 from agent_from_scratch.trace import TurnResult
 
@@ -25,9 +25,8 @@ class ReadEvaluationTests(unittest.TestCase):
     def observations(self, *offsets, path="a.txt"):
         messages = []
         for index, offset in enumerate(offsets):
-            response = LLMResponse("assistant", "", ResponseType.tool_call, "read_file",
-                                   {"path": path, "offset": offset}, call_id=str(index))
-            result = self.registry.invoke("read_file", response.tool_params, str(index))
+            response = LLMResponse('assistant', '', ResponseType.tool_call, tool_calls=[ToolCall('read_file', {'path': path, 'offset': offset}, str(index))])
+            result = self.registry.invoke("read_file", response.tool_calls[0].arguments, str(index))
             messages.extend([response.to_message(), {"role": "tool", "tool_call_id": str(index),
                                                       "content": json.dumps(asdict(result))}])
         return messages
@@ -84,7 +83,7 @@ class ReadEvaluationTests(unittest.TestCase):
         model = Mock(spec=LLM)
         model.settings.return_value = {}
         model.generate.side_effect = [
-            LLMResponse("assistant", "", ResponseType.tool_call, "read_file", {"path": "a.txt"}),
+            LLMResponse('assistant', '', ResponseType.tool_call, tool_calls=[ToolCall('read_file', {'path': 'a.txt'})]),
             LLMResponse("assistant", "Would you like me to continue?", ResponseType.direct),
         ]
         agent = Agent(model, registry=self.registry)

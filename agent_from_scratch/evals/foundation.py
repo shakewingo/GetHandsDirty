@@ -19,7 +19,7 @@ from ..agent import Agent
 from ..llm import LLM, _QWEN_TEMPLATE
 from ..tools.base import ToolErrorCode, ToolResult
 from ..tools.calculator import CalculatorTool
-from ..tools.files import ListFilesTool, ReadFileTool, WriteFileTool
+from .legacy_files import ListFilesTool, ReadFileTool, WriteFileTool
 from ..tools.register import ToolRegistry
 
 if TYPE_CHECKING:

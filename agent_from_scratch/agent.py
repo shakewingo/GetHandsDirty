@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,7 +11,7 @@ from typing import Any, TYPE_CHECKING
 from uuid import uuid4
 
 from loguru import logger
-from .llm import LLM, ResponseError, ResponseErrorCode, ResponseType, _MODEL_PATH, _QWEN_TEMPLATE
+from .llm import LLM, ResponseError, ResponseErrorCode, ResponseType, MAX_TOOL_CALLS_PER_RESPONSE, _MODEL_PATH, _QWEN_TEMPLATE
 from .session import SessionStore
 from .tools.base import ToolErrorCode, ToolResult
 from .tools.register import ToolRegistry, default_registry
@@ -24,9 +25,9 @@ if TYPE_CHECKING:
 def recovery_feedback(error: ResponseError) -> str:
     hints = {
         ResponseErrorCode.INVALID_TOOL_CALL:
-            "Use one complete tool-call object with a registered name and object arguments.",
-        ResponseErrorCode.MULTIPLE_TOOL_CALLS:
-            "Issue only the next necessary tool call; later calls can follow its result.",
+            "Use complete tool-call objects with registered names and object arguments.",
+        ResponseErrorCode.TOO_MANY_TOOL_CALLS:
+            "Issue only the next necessary calls within the batch limit; later calls can follow their results.",
         ResponseErrorCode.TRUNCATED_RESPONSE:
             "The output was cut off. Summarize observed results more concisely; "
             "do not replay long tool outputs. If the requested answer cannot fit, "
@@ -47,8 +48,9 @@ class Agent:
     def __init__(self, llm: LLM, state_dir: str | None = None,
                  *, registry: ToolRegistry | None = None):
         self.llm = llm
-        self.max_iterations = 20
+        self.max_iterations = 20  # max number of iterations per turn
         self.max_same_failures = 3
+        self.max_tool_calls = 40  # max number of tool calls per turn
         self.state_dir = state_dir
         self.registry = default_registry if registry is None else registry
 
@@ -56,7 +58,8 @@ class Agent:
         return self.registry.invoke(tool_name, tool_params, call_id=call_id)
 
     def run_turn(self, user_input: str, history: list[ChatCompletionRequestMessage] | None = None,
-                 *, session_id: str | None = None) -> TurnResult:
+                 *, session_id: str | None = None,
+                 on_progress: Callable[[str], None] | None = None) -> TurnResult:
         """Execute supplied history; session_id associates and saves this run, not loads history."""
         started = monotonic()
         result = TurnResult(
@@ -65,30 +68,43 @@ class Agent:
             run_id=uuid4().hex, session_id=session_id, input=user_input,
             started_at=datetime.now(timezone.utc).isoformat(),
             settings={**self.llm.settings(), "max_iterations": self.max_iterations,
-                      "max_same_failures": self.max_same_failures},
+                      "max_same_failures": self.max_same_failures,
+                      "max_tool_calls": self.max_tool_calls,
+                      "max_tool_calls_per_response": MAX_TOOL_CALLS_PER_RESPONSE},
         )
         trace = TraceStore(Path(self.state_dir, "runs") if self.state_dir is not None else None)
         try:
-            self._run_turn(result)
+            self._run_turn(result, on_progress)
         except KeyboardInterrupt as error:
             # A completed model request can still be followed by an interrupted tool.
             if result.model_requests and result.model_requests[-1].status == ModelRequestStatus.STARTED:
                 result.model_requests[-1].status = ModelRequestStatus.INTERRUPTED
-            pending = result.messages[-1].get("tool_calls")
-            if pending:
-                call = pending[0]
-                observation = ToolResult.failure(
-                    ToolErrorCode.INTERRUPTED, tool_name=call["function"]["name"],
-                    call_id=call["id"], output=getattr(error, "output", None),
-                    detail="Do not automatically replay this action; inspect its effects first.",
-                )
-                result.messages.append({"role": "tool", "content": json.dumps(asdict(observation)),
-                                        "tool_call_id": observation.call_id})
+            self._finish_pending_tools(result,
+                "Interrupted. Inspect effects before retrying; remaining batch calls were not executed.",
+                interrupted=True, output=getattr(error, "output", None))
             result.stop_reason = RunStopReason.INTERRUPTED
         result.elapsed_seconds = round(monotonic() - started, 2)
         trace.save_run(result)
         self._save_session(result, len(history or []))
         return result
+
+    @staticmethod
+    def _finish_pending_tools(result: TurnResult, detail: str, *, interrupted: bool = False,
+                              output: Any = None) -> None:
+        """Give every announced call a result, including a stopped batch's remainder."""
+        calls = next((calls for m in reversed(result.messages) if (calls := m.get("tool_calls"))), [])
+        done = {m["tool_call_id"] for m in result.messages if m["role"] == "tool"}
+        for call in calls:
+            if call["id"] in done:
+                continue
+            observation = ToolResult.failure(
+                ToolErrorCode.INTERRUPTED if interrupted else ToolErrorCode.SKIPPED,
+                tool_name=call["function"]["name"], call_id=call["id"],
+                detail=detail, output=output if interrupted else None,
+            )
+            result.messages.append({"role": "tool", "content": json.dumps(asdict(observation)),
+                                    "tool_call_id": observation.call_id})
+            interrupted = False
 
     def _save_session(self, result: TurnResult, history_length: int) -> None:
         if self.state_dir is None or result.session_id is None:
@@ -103,9 +119,11 @@ class Agent:
             logger.error("Could not save session for run {}; this turn will not be remembered: {}",
                          result.run_id, error)
 
-    def _run_turn(self, result: TurnResult) -> None:
+    def _run_turn(self, result: TurnResult, on_progress: Callable[[str], None] | None = None) -> None:
         messages = result.messages
         last_failure, failure_count = None, 0
+        tool_attempts = 0
+        used_ids = {call["id"] for m in messages for call in m.get("tool_calls", [])}
 
         def repeated_failure(key: tuple) -> bool:
             nonlocal last_failure, failure_count
@@ -144,29 +162,46 @@ class Agent:
                 request.error_message = result.error_message
                 logger.error("Model backend error: {}", error)
                 return
-            if response.type == ResponseType.tool_call and not response.call_id:
-                response.call_id = f"{result.run_id}_call_{iteration}"
+            for index, call in enumerate(response.tool_calls, 1):
+                if not call.call_id or call.call_id in used_ids:
+                    suffix = f"_{index}" if len(response.tool_calls) > 1 else ""
+                    call.call_id = f"{result.run_id}_call_{iteration}{suffix}"
+                    while call.call_id in used_ids:
+                        call.call_id += "_"
+                used_ids.add(call.call_id)
             request.status = ModelRequestStatus.COMPLETED  # previous object has been appended to result, and updates will reflect there too.
-            request.call_id = response.call_id or None
+            request.call_ids = [call.call_id for call in response.tool_calls]
             request.usage = LLM.read_usage(response.usage)
             request.finish_reason = response.finish_reason
             request.raw_response = response.raw_response
             messages.append(response.to_message())
             if response.type == ResponseType.tool_call:
-                logger.debug("Tool call detected: {} {}", response.tool_name, response.tool_params)
-                tool_result = self.execute_tool(response.tool_name, response.tool_params, response.call_id)
-                if tool_result.ok:
-                    logger.debug("Tool executed successfully: {} ({})", tool_result.tool_name, tool_result.call_id)
-                else:
-                    logger.error("Tool execution failed due to: {}", tool_result.error_message)
-                messages.append({"role": "tool", "content": json.dumps(asdict(tool_result)),
-                                 "tool_call_id": tool_result.call_id})
-                if tool_result.ok:
-                    last_failure, failure_count = None, 0
-                elif repeated_failure((response.tool_name,
-                                       json.dumps(response.tool_params, sort_keys=True, ensure_ascii=False),
-                                       tool_result.error_code)):
-                    return
+                if response.content and on_progress is not None:
+                    on_progress(response.content)
+                for call in response.tool_calls:
+                    if tool_attempts >= self.max_tool_calls:
+                        self._finish_pending_tools(result, "Turn tool-call budget exhausted.")
+                        result.stop_reason = RunStopReason.TOOL_LIMIT
+                        result.error_message = f"Reached {self.max_tool_calls} tool attempts."
+                        return
+                    tool_attempts += 1
+                    logger.debug("Tool call detected: {} {}", call.name, call.arguments)
+                    tool_result = self.execute_tool(call.name, call.arguments, call.call_id)
+                    if tool_result.ok:
+                        logger.debug("Tool executed successfully: {} ({})", tool_result.tool_name, tool_result.call_id)
+                    else:
+                        logger.error("Tool execution failed due to: {}", tool_result.error_message)
+                    messages.append({"role": "tool", "content": json.dumps(asdict(tool_result)),
+                                     "tool_call_id": tool_result.call_id})
+                    if tool_result.ok:
+                        last_failure, failure_count = None, 0
+                    else:
+                        self._finish_pending_tools(result,
+                            "An earlier call failed. Reconsider these calls using its result before retrying.")
+                        if repeated_failure((call.name, json.dumps(call.arguments, sort_keys=True, ensure_ascii=False),
+                                             tool_result.error_code)):
+                            return
+                        break
             elif response.type == ResponseType.direct:
                 result.final_answer = response.content
                 result.stop_reason = RunStopReason.FINAL_RESPONSE
@@ -212,7 +247,8 @@ class Agent:
             except (OSError, ValueError) as error:
                 print(f"Session unavailable: {error}. Use /new, /reset, or /session <id> to recover.")
                 continue
-            result = self.run_turn(user_input, history, session_id=session_id)
+            result = self.run_turn(user_input, history, session_id=session_id,
+                                   on_progress=lambda text: print(f"{agent_label} {text}"))
             if result.stop_reason == RunStopReason.FINAL_RESPONSE:
                 print(f"{agent_label} {result.final_answer}")
             elif result.stop_reason == RunStopReason.MODEL_ERROR:
@@ -229,4 +265,7 @@ if __name__ == "__main__":
     llm = LLM(model_path=str(_MODEL_PATH), temperature=0.0, max_tokens=2048,
               n_gpu_layers=-1, n_ctx=8000, chat_template_path=_QWEN_TEMPLATE)
     agent = Agent(llm, state_dir="./outputs/sessions")
-    agent.run_repl()
+    try:
+        agent.run_repl()
+    finally:
+        llm.close()

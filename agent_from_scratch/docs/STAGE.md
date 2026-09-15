@@ -10,7 +10,7 @@ state/result tracing, error recovery, context compaction, and memory change its 
 The deliverable has two parts:
 
 - **A working local agent:** sustained CLI conversations, completed-turn session replay,
-  local file reads/writes and execution of configured local scripts, sequential dependent
+  local file reads/edits/writes and execution of local scripts, sequential dependent
   tool calls, traceable actions/results, and bounded recovery from common errors.
   Long conversations can compact and continue; explicitly saved knowledge can survive a new session.
 - **A post-training experiment:** adapt a trainable base checkpoint with an actual weight
@@ -39,7 +39,7 @@ as pilots; mark missing required outcomes incomplete instead of silently extendi
 |---|---|---|
 | Carried in | **0.5 — complete** | One user request → model/tool/result loop, validated contracts and error feedback |
 | Completed | **1 — complete** | Multiple user turns, persisted Session history, structured per-turn state and traces |
-| Completed | **2 — implementation complete** | 2A reviewed; 2B dev baseline 8/17 → selected prompt 12/17; gaps/costs recorded |
+| Completed | **2 — implementation complete** | General filesystem/shell/search/fetch; restricted 2B baseline 8/17 → 12/17 |
 | Next | **3 — required** | Layered prompt, token budget, manual/automatic compact, replayable checkpoint |
 | Next | **4A–4B — required** | Bounded durable memory, search/read, correction/forget, fresh-session recall |
 | Before training | **8 — required** | Resettable benchmark, isolated splits, measured baseline, frozen harness |
@@ -57,7 +57,8 @@ plumbing is already complete in Stage 1. Historical evidence filenames keep thei
 - Use ordinary functions/dataclasses and the standard library where practical.
 - Implement and explain the loop, context, tracing, tool boundaries, memory, recovery,
   and training-data logic myself. Use AI for review, fixtures, boilerplate, and debugging.
-- One tool call per model response; dependent calls run sequentially. Keep the binary calculator.
+- Accept ordered tool-call batches; execute sequentially, stop the batch on failure, and
+  wait for observations before choosing result-dependent arguments. Keep the binary calculator.
   Add modules only when needed; no framework rewrite, event bus, provider catalogue, or UI project.
 - Aim for roughly 1,500–2,000 runtime lines; review scope around 2,500. Count tests and
   eval/training separately. This is a design alarm, not a reason to compress readable code.
@@ -70,6 +71,12 @@ plumbing is already complete in Stage 1. Historical evidence filenames keep thei
   One user request can contain several model → tool → observation iterations before a final answer.
 - [x] Validate response structure and tool arguments before execution; return parse/tool
   errors to the model as feedback, with a bounded request count.
+- [x] Extract native/Qwen call batches with surrounding narration; preserve quoted examples
+  as text. Validate all call JSON/shapes before execution; cap at 8 calls/response and 40 attempts/turn.
+- [x] Trace each call/result, including skipped calls after failure, interruption or budget
+  exhaustion. The later batch support supersedes the historical single-call notes below.
+- [x] Show complete assistant progress messages in the REPL before the associated calls;
+  keep model generation non-streaming.
 - [x] Model the scratch-note concepts with the current `LLMResponse`, `ResponseError`,
   `ToolResult`/`ToolErrorCode`, and `TurnResult`; no renaming to `ResponseResult`/`ToolError` is required.
 
@@ -130,36 +137,38 @@ Read: book Chapters 1/3/4; Appendix A.1/A.3/A.5/A.8. Keep the lifecycle explicit
 **parse → registry/schema validation → execution policy → execute → result/error → next iteration**.
 Prompt rules describe expected behavior; runtime enforces paths, allowed operations, and budgets.
 
-### 2A — finish the small tool set · complete, reviewed
+### 2A — finish the small tool set · implemented
 
-- [x] Inject a registry per agent; schemas reflect that registry. Existing `tools/files.py`
-  (the file tool referred to as `file.py`) provides `list_files`, `read_file`, `write_file`.
-  Preserve resolved-path/symlink boundaries, bounded UTF-8 reads/writes, byte ranges,
-  continuation offsets, and file-change checks. Full-file replacement is enough.
-- [x] **`tools/web.py`:** synchronous `web_fetch(url)` for text/HTML/JSON; return requested/final
-  URL, status, extracted text, and truncation flag. Use configured HTTPS hosts, validate each
-  redirect, and cap redirects, time, downloaded bytes, and returned text. Treat pages as
-  untrusted evidence. Exercise one saved-page fixture and one live documentation page.
-  Search, browsers, login, and provider fallbacks are outside this minimal tool.
-- [x] **`tools/shell.py`:** synchronous `shell(command_id)` maps configured names to fixed
-  argv, workspace cwd, and timeout, including a trusted local script and a fixture check.
-  Return exit code, capped stdout/stderr, truncation, and timeout/interruption status;
-  clean up owned processes on timeout/Ctrl-C. No arbitrary command strings or execution
-  of model-authored programs. Keep verifier code outside writable fixtures.
+- [x] Inject a registry per agent; schemas reflect that registry. `tools/files.py` provides
+  recursive/paginated `list_files`, line-numbered `read_file`, full/append `write_file`, and
+  targeted `edit_file`. Support general local paths, optional confinement, continuation,
+  atomic replacement, mode preservation and optional version checks. Read PDF/Office text
+  through `file_documents.py`; images expose metadata only. Frozen evaluations retain the
+  original confined byte-based tools in `evals/legacy_files.py`.
+- [x] **`tools/web.py`:** synchronous general HTTP/HTTPS `web_fetch(url, extract_mode?)`
+  with compressed responses and readable/full-visible-text extraction, plus
+  `web_search(query, count?)` via `ddgs`. Return source URLs, retrieval time, status and
+  truncation; cap redirects, time and retained content. Pages/snippets are untrusted evidence.
+  An optional host list supports restricted fixtures. Browsers/login remain out of scope.
+- [x] **`tools/shell.py`:** synchronous `shell(command, working_dir?)` runs ordinary local
+  commands, scripts, pipes and redirects. Return exit code, capped stdout/stderr and
+  timeout/interruption status; clean up foreground process groups on timeout/Ctrl-C.
+  Keep optional fixed `command_id` mode for the original benchmark and fixture demo.
+  General shell uses local user permissions; cwd/file-tool bounds do not sandbox it.
 - [x] Make denials and failures visible through `ToolResult` and the same run trace.
   On interruption, record a pending call as interrupted/unknown if no result exists;
   never imply it succeeded or automatically replay its side effects. Keep the REPL usable.
 
-Evidence: [2A checkpoint](../evals/TOOLS_CHECKPOINT.md), 102 tests, real TLS/subprocess
-checks, and saved model traces; code/demo reviewed. Its three autonomous smoke failures
-remain historical evidence; the fixed 2B suite below supplies the current behavioral baseline.
+Evidence: [tools checkpoint](../evals/TOOLS_CHECKPOINT.md). The initial restricted 2A
+implementation had 102 tests; the general-tool follow-up has separate mechanism/live checks.
+The fixed 2B suite below remains the historical behavioral baseline.
 
 **Nanobot comparison:** [registry][nb-registry] validates and feeds errors back;
 [filesystem][nb-files] separates read/write path resolution; [shell][nb-shell] implements
 process cleanup and output limits; [web][nb-web] records extraction/redirect/truncation data.
-Borrow those contracts. Our fixed commands and allow/deny policy are deliberately smaller
-than Nanobot's general shell and the book's allow/deny/ask approval system. Out-of-policy
-operations stay denied; an interactive approval engine is deferred. A cwd is not a sandbox.
+The September 15 follow-up adopts Nanobot's filesystem, general shell and search/readability approach,
+using its underlying libraries with our synchronous `ToolResult`/trace contract.
+No async runtime, provider catalogue or interactive approval engine is added.
 
 ### 2B — first behavioral baseline · complete
 
@@ -418,10 +427,10 @@ flowchart TD
     Rules[System / user / workspace rules] --> Context
     Memory[Durable memory: index + selected details] --> Context
     Context -->|ready| Model[LLM.generate: one actor response]
-    Model --> Decision{Answer / tool / error}
-    Decision -->|tool| Registry[ToolRegistry: validate + policy]
-    Registry --> Tools[Calculator / files / web / shell / memory tools]
-    Tools -->|observation| Loop
+    Model --> Decision{Answer / tool batch / error}
+    Decision -->|ordered calls| Registry[Sequential dispatch: validate + policy]
+    Registry --> Tools[Calculator / files / search + fetch / shell / memory tools]
+    Tools -->|results; stop batch on failure| Loop
     Tools -->|remember / correct / forget| Memory
     Decision -->|recoverable feedback| Loop
     Decision -->|answer or terminal failure| End[TurnResult]
@@ -432,7 +441,7 @@ flowchart TD
     Eval[Fresh fixture + frozen config] --> Loop
     End --> Verify[Independent outcome verification]
     Eval --> Verify
-    Tools --> Workspace[Disposable workspace]
+    Tools --> Workspace[Working files / evaluation fixtures]
     Workspace --> Verify
     Trace --> Data[Verified / split training examples]
     Verify --> Data

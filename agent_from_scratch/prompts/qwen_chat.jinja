@@ -5,12 +5,12 @@
     {%- else %}
         {{- 'You are Qwen, created by Alibaba Cloud. You are a helpful assistant.' }}
     {%- endif %}
-    {{- "\n\n# Tools\n\nYou may call one function per response to assist with the user query.\n\nYou are provided with function signatures within <tools></tools> XML tags:\n<tools>" }}
+    {{- "\n\n# Tools\n\nYou may call up to eight functions per response, executed in order. Wait for results before choosing arguments that depend on them.\n\nYou are provided with function signatures within <tools></tools> XML tags:\n<tools>" }}
     {%- for tool in tools %}
         {{- "\n" }}
         {{- tool | tojson }}
     {%- endfor %}
-    {{- "\n</tools>\n\nWhen calling a function, output only one complete <tool_call> block containing a JSON object with name and arguments:\n<tool_call>\n{\"name\": <function-name>, \"arguments\": <args-json-object>}\n</tool_call><|im_end|>\n" }}
+    {{- "\n</tools>\n\nFor each function call, output one complete <tool_call> block containing a JSON object with name and arguments:\n<tool_call>\n{\"name\": <function-name>, \"arguments\": <args-json-object>}\n</tool_call><|im_end|>\n" }}
 {%- else %}
     {%- if messages[0]['role'] == 'system' %}
         {{- '<|im_start|>system\n' + messages[0]['content'] + '<|im_end|>\n' }}

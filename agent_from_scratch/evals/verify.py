@@ -134,10 +134,12 @@ def metrics(result) -> dict:
         "run_id": result.run_id, "stop_reason": result.stop_reason,
         "final_answer": result.final_answer, "model_requests": len(result.model_requests),
         "parse_errors": sum(q.status == "parse_error" for q in result.model_requests),
-        "invalid_calls": sum(q.error_code in {"invalid_tool_call", "multiple_tool_calls"}
+        "invalid_calls": sum(q.error_code in {"invalid_tool_call", "multiple_tool_calls", "too_many_tool_calls"}
                              for q in result.model_requests) + sum(r["error_code"] in invalid for r in errors),
         "tool_calls": len(rows), "tool_errors": [{k: r[k] for k in
             ("tool_name", "error_code", "error_message", "output")} for r in errors],
+        "tool_attempts": sum(r["error_code"] != "skipped" for r in rows),
+        "skipped_calls": sum(r["error_code"] == "skipped" for r in rows),
         "usage": usage,
         "requests_without_usage": sum(not q.usage for q in result.model_requests),
         "elapsed_seconds": result.elapsed_seconds,

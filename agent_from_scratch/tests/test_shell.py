@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import selectors
+import shlex
 import signal
 import sys
 from tempfile import TemporaryDirectory
@@ -10,7 +11,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from agent_from_scratch.agent import Agent
-from agent_from_scratch.llm import LLM, LLMResponse, ResponseType
+from agent_from_scratch.llm import ToolCall, LLM, LLMResponse, ResponseType
 from agent_from_scratch.session import SessionStore
 from agent_from_scratch.tools.base import ToolInterrupted
 from agent_from_scratch.tools.register import ToolRegistry
@@ -90,8 +91,7 @@ class ShellTests(unittest.TestCase):
         model.settings.return_value = {}
         seen = []
         responses = iter([
-            LLMResponse("assistant", "", ResponseType.tool_call,
-                        tool_name="shell", tool_params={"command_id": "check"}),
+            LLMResponse('assistant', '', ResponseType.tool_call, tool_calls=[ToolCall('shell', {'command_id': 'check'})]),
             LLMResponse("assistant", "REPL recovered", ResponseType.direct),
         ])
 
@@ -135,6 +135,65 @@ class ShellTests(unittest.TestCase):
             tool.invoke({"command_id": "check"})
         self.assertTrue(caught.exception.output["interrupted"])
         self.assertLess(caught.exception.output["exit_code"], 0)
+
+    def test_general_command_supports_pipes_redirects_and_environment(self):
+        result = ShellTool(self.workspace).invoke({
+            "command": "TINY_WORD=hello; printf '%s' \"$TINY_WORD\" | tr a-z A-Z > result.txt; cat result.txt",
+        })
+        self.assertTrue(result.ok, result.error_message)
+        self.assertEqual(result.output["stdout"], "HELLO")
+        self.assertEqual((self.workspace / "result.txt").read_text(), "HELLO")
+        self.assertIn("command", result.output)
+
+    def test_general_command_can_run_a_local_script_and_choose_cwd(self):
+        directory = self.workspace / "subdirectory"
+        directory.mkdir()
+        (directory / "script.py").write_text('print("script executed")')
+        tool = ShellTool(self.workspace)
+        for cwd in ("subdirectory", str(directory.resolve())):
+            result = tool.invoke({"command": "python script.py", "working_dir": cwd})
+            self.assertTrue(result.ok, result.error_message)
+            self.assertEqual(result.output["stdout"], "script executed\n")
+            self.assertEqual(Path(result.output["cwd"]), directory.resolve())
+
+    def test_general_nonzero_and_timeout_preserve_observations(self):
+        result = ShellTool(self.workspace).invoke({"command": "printf diagnostic >&2; exit 7"})
+        self.assertEqual(result.error_code, "execution_error")
+        self.assertEqual(result.output["exit_code"], 7)
+        self.assertEqual(result.output["stderr"], "diagnostic")
+        code = 'import time; print("started", flush=True); time.sleep(10)'
+        result = ShellTool(self.workspace, timeout=0.15).invoke({
+            "command": shlex.join((sys.executable, "-I", "-c", code)),
+        })
+        self.assertEqual(result.error_code, "timeout")
+        self.assertIn("started", result.output["stdout"])
+        self.assertTrue(result.output["timed_out"])
+
+    def test_general_timeout_cleans_the_shells_descendant(self):
+        code = 'import time; time.sleep(.4); open("late-write", "w").write("bad")'
+        result = ShellTool(self.workspace, timeout=0.1).invoke({
+            "command": shlex.join((sys.executable, "-I", "-c", code)) + " & wait",
+        })
+        self.assertEqual(result.error_code, "timeout")
+        sleep(0.45)
+        self.assertFalse((self.workspace / "late-write").exists())
+
+    def test_general_output_caps_still_apply(self):
+        code = 'import os; os.write(1, b"a" * 100000); os.write(2, b"b" * 100000)'
+        result = ShellTool(self.workspace, max_bytes=64).invoke({
+            "command": shlex.join((sys.executable, "-I", "-c", code)),
+        })
+        self.assertTrue(result.ok, result.error_message)
+        self.assertEqual(result.output["stdout"], "a" * 64)
+        self.assertEqual(result.output["stderr"], "b" * 64)
+        self.assertEqual(result.output["truncated"], {"stdout": True, "stderr": True})
+
+    def test_general_invalid_arguments_never_spawn(self):
+        with patch("agent_from_scratch.tools.shell.subprocess.Popen") as spawn:
+            for args in ({"command": ""}, {"command": "\0"}, {"command_id": "pwd"},
+                         {"command": "pwd", "timeout": 900}):
+                self.assertEqual(ShellTool(self.workspace).invoke(args).error_code, "invalid_arguments")
+            spawn.assert_not_called()
 
 
 if __name__ == "__main__":

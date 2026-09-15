@@ -1,8 +1,12 @@
 from collections.abc import Iterable
-from .calculator import CalculatorTool
-from .files import ListFilesTool, ReadFileTool, WriteFileTool
-from .base import Tool, ToolErrorCode, ToolResult
+from pathlib import Path
 from typing import Any, Dict, TYPE_CHECKING
+
+from .base import Tool, ToolErrorCode, ToolResult
+from .calculator import CalculatorTool
+from .files import EditFileTool, ListFilesTool, ReadFileTool, WriteFileTool
+from .shell import ShellTool
+from .web import WebFetchTool, WebSearchTool
 
 if TYPE_CHECKING:
     from llama_cpp import ChatCompletionTool
@@ -35,10 +39,16 @@ class ToolRegistry:
         return tool.invoke(arguments, call_id=call_id)
 
 
-
-tools = [CalculatorTool(), 
-         ListFilesTool(workspace="./agent_from_scratch"),
-         ReadFileTool(workspace="./agent_from_scratch"),
-         WriteFileTool(workspace="./agent_from_scratch")]
+workspace = Path(__file__).resolve().parents[1]
+tools = [
+    CalculatorTool(),
+    ListFilesTool(workspace=workspace),
+    ReadFileTool(workspace=workspace),
+    WriteFileTool(workspace=workspace),
+    EditFileTool(workspace=workspace),
+    ShellTool(workspace=workspace),
+    WebFetchTool(),
+    WebSearchTool(),
+]
 default_registry = ToolRegistry(tools)
 default_tool_schemas = default_registry.schemas()

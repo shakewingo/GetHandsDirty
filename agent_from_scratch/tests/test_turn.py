@@ -7,10 +7,11 @@ from typing import Any
 from unittest.mock import Mock, patch
 
 from agent_from_scratch.agent import Agent, recovery_feedback
-from agent_from_scratch.llm import LLM, LLMResponse, ResponseType, ResponseError, ResponseErrorCode
+from agent_from_scratch.llm import ToolCall, LLM, LLMResponse, ResponseType, ResponseError, ResponseErrorCode
 from agent_from_scratch.session import SessionStore
 from agent_from_scratch.trace import RunStopReason, TraceStore
 from agent_from_scratch.tools.files import ReadFileTool, WriteFileTool
+from agent_from_scratch.tools.shell import ShellTool
 from agent_from_scratch.tools.register import ToolRegistry
 
 
@@ -26,7 +27,7 @@ def call(left: Any = 2, right: Any = 2, operation="add", call_id=""):
         "role": "assistant",
         "content": "<tool_call>" + json.dumps(payload) + "</tool_call>",
     }}]})
-    response.call_id = call_id
+    response.tool_calls[0].call_id = call_id
     return response
 
 
@@ -63,7 +64,7 @@ class TurnTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             self.agent.registry = ToolRegistry([WriteFileTool(directory)])
             block = '<tool_call>{"name":"write_file","arguments":{"path":"bad","content":"x"}}</tool_call>'
-            for text in (f"```xml\n{block}\n```", f"Example: {block}", f"`{block}`"):
+            for text in (f"```xml\n{block}\n```", f"Example: `{block}`", f"`{block}`", f"> {block}"):
                 self.script(LLM.parse_response({"choices": [{"message": {
                     "role": "assistant", "content": text,
                 }}]}))
@@ -73,6 +74,51 @@ class TurnTests(unittest.TestCase):
                 self.assertEqual(result.final_answer, text)
             self.assertEqual(list(Path(directory).iterdir()), [])
 
+    def test_narrated_calls_execute_and_continue_through_rename_and_read(self):
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory, "workspace")
+            workspace.mkdir()
+            model = LLM.__new__(LLM)
+            model.llm = Mock()
+            model.model_path, model.temperature, model.max_tokens = "fake-model", 0.0, 512
+            model.n_ctx, model.n_gpu_layers = 2048, 0
+            registry = ToolRegistry([WriteFileTool(workspace), ReadFileTool(workspace), ShellTool(workspace)])
+            agent = Agent(model, directory, registry=registry)
+
+            def raw(content):
+                return {"choices": [{"message": {"role": "assistant", "content": content},
+                                     "finish_reason": "stop"}]}
+
+            def block(name, arguments):
+                return "<tool_call>" + json.dumps({"name": name, "arguments": arguments}) + "</tool_call>"
+
+            text = "print('Hello, World!')"
+            rename = f"The absolute path is `{workspace / 'test.py'}`.\nNow I will rename it.\n" + block(
+                "shell", {"command": "mv test.py test.text"})
+            final = str(workspace / "test.text")
+            model.llm.create_chat_completion.side_effect = [
+                raw(block("write_file", {"path": "test.py", "content": text})),
+                raw(rename),
+                raw("Verifying.\n" + block("read_file", {"path": "test.text"}) + "\nI will report next."),
+                raw(final),
+            ]
+            result = agent.run_turn("Create test.py, rename it to test.text, and return its path.", session_id="rename")
+            self.assertEqual((result.stop_reason, result.final_answer), ("final_response", final))
+            self.assertEqual(model.llm.create_chat_completion.call_count, 4)
+            self.assertFalse((workspace / "test.py").exists())
+            self.assertEqual((workspace / "test.text").read_text(), text)
+            observations = [m for m in result.messages if m["role"] == "tool"]
+            self.assertEqual([json.loads(m["content"])["ok"] for m in observations], [True] * 3)
+            self.assertIn(text, json.loads(observations[-1]["content"])["output"]["content"])
+            calls = [m for m in result.messages if m.get("tool_calls")]
+            self.assertEqual([m["tool_calls"][0]["id"] for m in calls],
+                             [m["tool_call_id"] for m in observations])
+            self.assertIn("Now I will rename it.", calls[1]["content"])
+            self.assertNotIn("<tool_call>", calls[1]["content"])
+            trace = json.loads((Path(directory) / "runs" / f"{result.run_id}.jsonl").read_text())
+            self.assertEqual(trace["model_requests"][1]["raw_response"], raw(rename))
+            self.assertEqual(SessionStore(Path(directory) / "sessions").load_history("rename"), result.messages[1:])
+
     def test_injected_registry_drives_schemas_execution_and_saved_observations(self):
         with TemporaryDirectory() as directory:
             workspace = Path(directory, "workspace")
@@ -81,10 +127,8 @@ class TurnTests(unittest.TestCase):
             registry = ToolRegistry([ReadFileTool(workspace), WriteFileTool(workspace)])
             agent = Agent(self.model, directory, registry=registry)
             responses = iter([
-                LLMResponse(role="assistant", content="", type=ResponseType.tool_call,
-                            tool_name="read_file", tool_params={"path": "config.txt"}),
-                LLMResponse(role="assistant", content="", type=ResponseType.tool_call,
-                            tool_name="write_file", tool_params={"path": "config.txt", "content": "new.txt"}),
+                LLMResponse('assistant', '', ResponseType.tool_call, tool_calls=[ToolCall('read_file', {'path': 'config.txt'})]),
+                LLMResponse('assistant', '', ResponseType.tool_call, tool_calls=[ToolCall('write_file', {'path': 'config.txt', 'content': 'new.txt'})]),
                 answer("Updated config.txt"),
             ])
 
@@ -97,7 +141,7 @@ class TurnTests(unittest.TestCase):
             self.assertEqual(result.stop_reason, RunStopReason.FINAL_RESPONSE)
             self.assertEqual((workspace / "config.txt").read_text(), "new.txt")
             observations = [json.loads(m["content"]) for m in result.messages if m["role"] == "tool"]
-            self.assertEqual(observations[0]["output"]["content"], "old.txt")
+            self.assertEqual(observations[0]["output"]["content"], "1| old.txt")
             self.assertTrue(all(item["ok"] for item in observations))
             for request, observation in ((result.messages[2], result.messages[3]),
                                          (result.messages[4], result.messages[5])):
@@ -117,13 +161,14 @@ class TurnTests(unittest.TestCase):
         self.assertFalse(agent.execute_tool("calculator", {"operation": "add", "left": 1, "right": 2}).ok)
 
     def test_read_recovers_from_bad_argument_then_continues_to_eof(self):
+        from agent_from_scratch.evals.legacy_files import ReadFileTool
+
         with TemporaryDirectory() as directory:
             (Path(directory) / "notes.txt").write_text("abcdefghij")
             self.agent = Agent(self.model, registry=ToolRegistry([ReadFileTool(directory)]))
 
             def read(**arguments):
-                return LLMResponse(role="assistant", content="", type=ResponseType.tool_call,
-                                   tool_name="read_file", tool_params={"path": "notes.txt", **arguments})
+                return LLMResponse('assistant', '', ResponseType.tool_call, tool_calls=[ToolCall('read_file', {'path': 'notes.txt', **arguments})])
 
             self.script(read(limit=4), read(chunk_size=4), read(offset=4, chunk_size=4),
                         read(offset=8, chunk_size=4), answer("Read all notes."))
@@ -217,7 +262,7 @@ class TurnTests(unittest.TestCase):
         self.assertIn("more concisely", self.seen[1][-1]["content"])
         self.assertNotIn("Use one complete tool-call", self.seen[1][-1]["content"])
         self.assertEqual(result.final_answer, "Concise summary")
-        self.assertIn("next necessary", recovery_feedback(ResponseError(ResponseErrorCode.MULTIPLE_TOOL_CALLS)))
+        self.assertIn("next necessary", recovery_feedback(ResponseError(ResponseErrorCode.TOO_MANY_TOOL_CALLS)))
 
     def test_truncated_call_never_executes_and_keeps_finish_evidence(self):
         raw = {"choices": [{"message": {"role": "assistant", "content":
@@ -236,7 +281,7 @@ class TurnTests(unittest.TestCase):
 
     def test_unknown_tool_can_recover_using_available_names(self):
         unknown = call()
-        unknown.tool_name = "missing"
+        unknown.tool_calls[0].name = "missing"
         self.script(unknown, call(), answer("4"))
         result = self.agent.run_turn("2+2")
         failure = json.loads(self.seen[1][-1]["content"])
@@ -302,7 +347,7 @@ class TurnTests(unittest.TestCase):
             self.assertEqual(result.final_answer, "Done")
             self.assertEqual(len(list(runs.glob("*.jsonl"))), 1)
             trace = json.loads((runs / f"{result.run_id}.jsonl").read_text())
-            self.assertEqual(trace["schema_version"], 2)
+            self.assertEqual(trace["schema_version"], 3)
             self.assertEqual(trace["final_answer"], "Done")
             self.assertEqual(trace["model_requests"][-1]["raw_response"]["choices"][0]
                              ["message"]["content"], "Done")
@@ -409,7 +454,7 @@ class TurnTests(unittest.TestCase):
             requests = trace["model_requests"]
             self.assertEqual([r["usage"] for r in requests], [first.usage, second.usage])
             self.assertEqual([r["iteration"] for r in requests], [1, 2])
-            self.assertEqual([r["call_id"] for r in requests], [first.call_id, None])
+            self.assertEqual([r["call_ids"] for r in requests], [[first.tool_calls[0].call_id], []])
             for record, actual in zip(requests, self.seen):
                 self.assertEqual(trace["messages"][:record["input_message_count"]], actual)
             session = json.loads((Path(directory) / "sessions" / "default_session.jsonl").read_text())

@@ -4,6 +4,13 @@ September 15, 2026, `feat/agent-foundation`. The initial baseline scored **8/17*
 prompt scores **12/17**, retaining all eight original passes. Only `prompts/system.md` changed
 for this comparison. Tasks, fixtures, parser, tool implementations and verifiers stayed fixed.
 
+The later narrated-call parser fix and sequential batch support are outside this comparison;
+these scores predate those runtime, template and prompt changes and have not been remeasured.
+
+This is the restricted fixture-tool baseline. The later general shell/search/fetch
+configuration has separate evidence in [TOOLS_CHECKPOINT.md](TOOLS_CHECKPOINT.md);
+the 12/17 score is not a measurement of those expanded capabilities.
+
 ## Delivered and checked
 
 - 17 development tasks / 15 skeletons, two matched clean/fault pairs, fresh workspace and

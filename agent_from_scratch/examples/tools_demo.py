@@ -1,4 +1,4 @@
-"""Stage 2A REPL with explicit workspace, HTTPS hosts, and trusted fixed commands."""
+"""REPL with an explicit workspace; choose fixture tools or general shell/search/fetch."""
 
 import argparse
 from pathlib import Path
@@ -7,10 +7,11 @@ import sys
 from ..agent import Agent
 from ..llm import LLM, _QWEN_TEMPLATE
 from ..tools.calculator import CalculatorTool
-from ..tools.files import ListFilesTool, ReadFileTool, WriteFileTool
+from ..tools.files import EditFileTool, ListFilesTool, ReadFileTool, WriteFileTool
+from ..evals import legacy_files
 from ..tools.register import ToolRegistry
 from ..tools.shell import Command, ShellTool
-from ..tools.web import WebFetchTool
+from ..tools.web import WebFetchTool, WebSearchTool
 
 
 def demo_registry(workspace: Path, hosts: set[str]) -> ToolRegistry:
@@ -23,8 +24,8 @@ def demo_registry(workspace: Path, hosts: set[str]) -> ToolRegistry:
         "check_fixture": Command((sys.executable, "-I", str(script), "check"),
                                  'Check output="report.txt" and retries=3 in config.json'),
     }
-    return ToolRegistry([CalculatorTool(), ListFilesTool(workspace), ReadFileTool(workspace),
-                         WriteFileTool(workspace), WebFetchTool(hosts), ShellTool(workspace, commands)])
+    return ToolRegistry([CalculatorTool(), legacy_files.ListFilesTool(workspace), legacy_files.ReadFileTool(workspace),
+                         legacy_files.WriteFileTool(workspace), WebFetchTool(hosts), ShellTool(workspace, commands)])
 
 
 def main():
@@ -32,12 +33,23 @@ def main():
     parser.add_argument("--workspace", type=Path, required=True, help="Existing disposable directory")
     parser.add_argument("--state", type=Path, default=Path("outputs/tools-demo-state"))
     parser.add_argument("--allow-host", action="append", default=[], help="Exact HTTPS host; repeat to add more")
+    parser.add_argument("--general-tools", action="store_true", help="General shell and web search/fetch instead of fixture tools")
     args = parser.parse_args()
     if args.state.resolve().is_relative_to(args.workspace.resolve()):
         parser.error("State must be outside the writable workspace.")
-    registry = demo_registry(args.workspace, set(args.allow_host))
+    if args.general_tools:
+        registry = ToolRegistry([
+            CalculatorTool(), ListFilesTool(args.workspace), ReadFileTool(args.workspace),
+            WriteFileTool(args.workspace), EditFileTool(args.workspace), ShellTool(args.workspace),
+            WebFetchTool(set(args.allow_host) if args.allow_host else None), WebSearchTool(),
+        ])
+    else:
+        registry = demo_registry(args.workspace, set(args.allow_host))
     model = LLM(temperature=0, max_tokens=2048, n_ctx=8000, chat_template_path=_QWEN_TEMPLATE)
-    Agent(model, str(args.state), registry=registry).run_repl()
+    try:
+        Agent(model, str(args.state), registry=registry).run_repl()
+    finally:
+        model.close()
 
 
 if __name__ == "__main__":

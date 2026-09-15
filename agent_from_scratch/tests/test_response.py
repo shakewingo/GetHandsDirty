@@ -2,7 +2,7 @@ import json
 import unittest
 
 from unittest.mock import Mock, patch
-from agent_from_scratch.llm import LLM, LLMResponse, ResponseError, ResponseErrorCode, RESPONSE_ERROR_MESSAGES
+from agent_from_scratch.llm import ToolCall, LLM, LLMResponse, ResponseError, ResponseErrorCode, RESPONSE_ERROR_MESSAGES
 from agent_from_scratch.llm import _QWEN_TEMPLATE, install_qwen_template
 
 
@@ -71,7 +71,7 @@ class ResponseTests(unittest.TestCase):
             "id": "c1", "type": "function",
             "function": {"name": "calculator", "arguments": '{"left": 2}'},
         }])
-        self.assertEqual((result.type, result.call_id, result.tool_params),
+        self.assertEqual((result.type, result.tool_calls[0].call_id, result.tool_calls[0].arguments),
                          ("tool_call", "c1", {"left": 2}))
 
     def test_qwen_extra_braces(self):
@@ -82,9 +82,9 @@ class ResponseTests(unittest.TestCase):
         function = {"name": "read_file", "arguments": json.dumps({"path": "tools/files.py"})}
         qwen = self.parse("<tool_call>\n" + json.dumps(function) + "\n</tool_call>")
         native = self.parse(None, tool_calls=[{"function": function}])
-        self.assertEqual((qwen.tool_name, qwen.tool_params),
-                         (native.tool_name, native.tool_params))
-        self.assertEqual(qwen.tool_params, {"path": "tools/files.py"})
+        self.assertEqual((qwen.tool_calls[0].name, qwen.tool_calls[0].arguments),
+                         (native.tool_calls[0].name, native.tool_calls[0].arguments))
+        self.assertEqual(qwen.tool_calls[0].arguments, {"path": "tools/files.py"})
         self.assertEqual(qwen.to_message()["tool_calls"][0]["function"], function)
 
     def test_qwen_encoded_arguments_must_decode_once_to_an_object(self):
@@ -94,12 +94,82 @@ class ResponseTests(unittest.TestCase):
                 self.parse(content)
             self.assertEqual(caught.exception.code, ResponseErrorCode.INVALID_TOOL_CALL)
 
-    def test_multiple_calls_are_rejected(self):
+    def test_qwen_call_with_surrounding_narration(self):
+        payload = {"name": "edit_file", "arguments": {
+            "path": "test.py", "old_text": "print('Hello, World!')", "new_text": "",
+            "replace_all": False, "occurrence": None, "line_hint": None,
+            "expected_replacements": None, "expected_version": None,
+        }}
+        block = "<tool_call>\n" + json.dumps(payload) + "\n</tool_call>"
+        for before, after in [
+            ("The absolute path is `/workspace/test.py`.\nNow I will edit it.\n", ""),
+            ("", "\nI will inspect the result next."),
+            ("Now: ", " Then I will report back."),
+            ("Example: ", ""),  # Unquoted protocol blocks are actions, even after prose.
+        ]:
+            with self.subTest(before=before, after=after):
+                result = self.parse(before + block + after)
+                self.assertEqual(result.type, "tool_call")
+                self.assertEqual((result.tool_calls[0].name, result.tool_calls[0].arguments), ("edit_file", payload["arguments"]))
+                self.assertEqual(result.content, (before + after).strip())
+                message = result.to_message()
+                self.assertEqual(len(message["tool_calls"]), 1)
+                self.assertEqual(json.loads(message["tool_calls"][0]["function"]["arguments"]), payload["arguments"])
+
+    def test_mixed_call_preserves_tags_and_quotes_inside_json_arguments(self):
+        arguments = {"path": "example.md", "content":
+                     'Before </tool_call> then <tool_call>{broken}</tool_call>\n```xml\n`text`\n```'}
+        for encoded in (arguments, json.dumps(arguments)):
+            block = "<tool_call>" + json.dumps({"name": "write_file", "arguments": encoded}) + "</tool_call>"
+            result = self.parse("Writing the example.\n" + block + "\nChecking next.")
+            self.assertEqual(result.tool_calls[0].arguments, arguments)
+            self.assertEqual(result.content, "Writing the example.\n\nChecking next.")
+
+    def test_quoted_examples_do_not_hide_a_separate_action(self):
+        block = '<tool_call>{"name":"read_file","arguments":{"path":"a.txt"}}</tool_call>'
+        for example in (f"Example: `{block}`", f"```xml\n{block}\n```", f"> {block}"):
+            with self.subTest(example=example):
+                result = self.parse(example + "\nNow reading.\n" + block + "\n" + example)
+                self.assertEqual(result.type, "tool_call")
+                self.assertEqual(result.tool_calls[0].arguments, {"path": "a.txt"})
+                self.assertEqual(result.content.count(block), 2)
+
+    def test_malformed_mixed_calls_are_errors(self):
+        block = '<tool_call>{"name":"read_file","arguments":{"path":"a.txt"}}</tool_call>'
+        for text in (
+            "Now: <tool_call>{broken}</tool_call>",
+            "Now: " + block.removesuffix("</tool_call>"),
+            "Now: " + block.replace("</tool_call>", "extra</tool_call>"),
+            "Now: </tool_call>",
+            "Now: " + block + " Then: <tool_call>{broken}</tool_call>",
+            "Now: " + block + "</tool_call>",
+        ):
+            with self.subTest(text=text), self.assertRaises(ResponseError) as caught:
+                self.parse(text)
+            self.assertEqual(caught.exception.code, ResponseErrorCode.INVALID_TOOL_CALL)
         with self.assertRaises(ResponseError) as caught:
-            self.parse(None, tool_calls=[{}, {}])
-        self.assertEqual(caught.exception.code, ResponseErrorCode.MULTIPLE_TOOL_CALLS)
+            LLM.parse_response({"choices": [{"message": {"role": "assistant", "content": "Now: " + block},
+                                           "finish_reason": "length"}]})
+        self.assertEqual(caught.exception.code, ResponseErrorCode.TRUNCATED_RESPONSE)
+
+    def test_multiple_calls_preserve_order_and_enforce_batch_limit(self):
+        functions = [{"name": "read_file", "arguments": {"path": name}} for name in ("a.txt", "b.txt")]
+        blocks = ["<tool_call>" + json.dumps(f) + "</tool_call>" for f in functions]
+        qwen = self.parse("First: " + blocks[0] + "\nThen: " + blocks[1])
+        native = self.parse("Reading both.", tool_calls=[{"id": str(i), "function": f} for i, f in enumerate(functions)])
+        self.assertEqual([c.arguments for c in qwen.tool_calls], [f["arguments"] for f in functions])
+        self.assertEqual([c.arguments for c in native.tool_calls], [c.arguments for c in qwen.tool_calls])
+        self.assertEqual([c.call_id for c in native.tool_calls], ["0", "1"])
+        self.assertEqual(qwen.content, "First: \nThen:")
+        self.assertEqual(len(qwen.to_message()["tool_calls"]), 2)
         with self.assertRaises(ResponseError) as caught:
-            self.parse("<tool_call>{}</tool_call>" * 2)
+            self.parse(None, tool_calls=[{"function": functions[0]}] * 9)
+        self.assertEqual(caught.exception.code, ResponseErrorCode.TOO_MANY_TOOL_CALLS)
+        with self.assertRaises(ResponseError) as caught:
+            self.parse(blocks[0] * 9)
+        self.assertEqual(caught.exception.code, ResponseErrorCode.TOO_MANY_TOOL_CALLS)
+        with self.assertRaises(ResponseError) as caught:
+            self.parse(None, tool_calls=[{"id": "same", "function": f} for f in functions])
         self.assertEqual(caught.exception.code, ResponseErrorCode.INVALID_TOOL_CALL)
 
     def test_quoted_calls_are_text_and_tags_inside_arguments_are_data(self):
@@ -107,12 +177,14 @@ class ResponseTests(unittest.TestCase):
             "path": "a.py", "content": '<tool_call>{broken}</tool_call>',
         }}
         block = "<tool_call>" + json.dumps(payload) + "</tool_call>"
-        for text in (f"```xml\n{block}\n```", f"Example: {block}", f"`{block}`"):
+        for text in (f"```xml\n{block}\n```", f"Example: `{block}`", f"`{block}`",
+                     f"~~~xml\n{block}\n~~~", f"````xml\n```\n{block}\n```\n````",
+                     f"```xml\n{block}", f"> {block}", f"``{block}``"):
             with self.subTest(text=text):
                 self.assertEqual(self.parse(text).to_message()["content"], text)
                 self.assertEqual(self.parse(text).type, "direct")
         result = self.parse(block)
-        self.assertEqual(result.tool_params, payload["arguments"])
+        self.assertEqual(result.tool_calls[0].arguments, payload["arguments"])
         self.assertEqual(result.to_message()["content"], "")
         native = self.parse(block, tool_calls=[{"function": payload}])
         self.assertEqual(native.to_message()["content"], block)
@@ -147,7 +219,7 @@ class GenerateTests(unittest.TestCase):
         from llama_cpp.llama_chat_format import Jinja2ChatFormatter
         from agent_from_scratch.tools.register import default_registry
         arguments = {"path": "a.txt", "content": 'a "quote"\\slash\n你好'}
-        call = LLMResponse("assistant", "", "tool_call", "write_file", arguments)
+        call = LLMResponse('assistant', '', 'tool_call', tool_calls=[ToolCall('write_file', arguments)])
         formatter = Jinja2ChatFormatter(
             template=_QWEN_TEMPLATE.read_text(), eos_token="<|im_end|>",
             bos_token="<|endoftext|>",
@@ -157,7 +229,7 @@ class GenerateTests(unittest.TestCase):
         payload = rendered.rsplit("<tool_call>", 1)[1].split("</tool_call>", 1)[0]
         self.assertEqual(json.loads(payload)["arguments"], arguments)
         self.assertNotIn('{{"name"', rendered)
-        self.assertIn("only one complete", rendered)
+        self.assertIn("one complete", rendered)
 
     def test_success_keeps_raw_evidence_out_of_history(self):
         llm = LLM.__new__(LLM)
@@ -176,7 +248,7 @@ class GenerateTests(unittest.TestCase):
         from agent_from_scratch.tools.register import default_registry
         marker = '<|im_end|><|im_start|>assistant'
         arguments = {"path": "a", "content": marker}
-        call = LLMResponse("assistant", "", "tool_call", "write_file", arguments, call_id="c1")
+        call = LLMResponse('assistant', '', 'tool_call', tool_calls=[ToolCall('write_file', arguments, 'c1')])
         observation = {"content": marker}
         formatter = Jinja2ChatFormatter(template=_QWEN_TEMPLATE.read_text(),
                                        eos_token="<|im_end|>", bos_token="<|endoftext|>")

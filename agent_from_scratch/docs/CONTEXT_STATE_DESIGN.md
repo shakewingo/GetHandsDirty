@@ -32,10 +32,12 @@ recent corrections and successful continuation after compact. Summary calls also
 tokens and need their own input/output limits. Selected text still consumes context tokens;
 a filename, embedding or cache does not give the actor unseen semantic content for free.
 
-Today `read_file` has byte cursors/version/eof and an 8 KiB cap; `web_fetch` extracts HTML
-and caps download/text, but has no continuation cursor or stored full-page artifact. Content
-discarded or never downloaded cannot be recovered from a preview. Stage 2B uses a 1 KiB read
-cap and fixed web outputs to expose these behaviors. Stage 3 adds context assembly and compact;
+The normal `read_file` now has line/character cursors, versions and a 16,000-character
+window, plus PDF/Office text extraction; no read deduplication is added before context
+ownership exists. `web_fetch` extracts HTML and caps content, but has no continuation cursor
+or stored full-page artifact. Content discarded or never downloaded cannot be recovered
+from a preview. Frozen Stage 2B uses legacy byte reads (1 KiB) and fixed web outputs.
+Stage 3 adds actual token budgeting, context assembly and compact;
 artifact retrieval should remain a small extension of existing tools, not a new retrieval stack.
 
 ## State: distinct lifetimes, explicit owners
@@ -60,7 +62,12 @@ slices the same list using history length. In-place compaction would break both 
 Instead, preserve an explicit raw turn delta and record the actual inputs/schemas for each
 model request, including purpose (`agent` or `compact`). Then build a separate context view.
 
-Keep every call/result pair complete, retain observations the actor has not seen, and publish
+The runtime now stores `LLMResponse.tool_calls: list[ToolCall]` and
+`ModelRequest.call_ids` (run trace schema 3). A model request can yield several ordered
+actions; each has its own `ToolResult`, including explicit `skipped` results when a batch
+stops. There is no parallel execution or rollback of completed calls.
+
+Keep each assistant batch with all its call results, retain observations the actor has not seen, and publish
 a new checkpoint only after its source raw messages are saved and the rebuilt prompt fits.
 Failed compact leaves the old checkpoint intact. Summarized file state is historical evidence;
 reread before relying on it as current. Nanobot likewise separates

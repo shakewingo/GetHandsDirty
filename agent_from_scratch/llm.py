@@ -3,14 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 from collections.abc import Mapping
 from hashlib import sha256
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 import json
 from typing import Dict, Any, TYPE_CHECKING, List
-from .utils import render_prompt, decode_qwen_tool_call
+from .utils import render_prompt, extract_qwen_tool_calls
 
 if TYPE_CHECKING:
-    from llama_cpp import ChatCompletionTool, ChatCompletionRequestMessage, ChatCompletionRequestAssistantMessage
+    from llama_cpp import ChatCompletionTool, ChatCompletionRequestMessage, ChatCompletionRequestAssistantMessage, ChatCompletionMessageToolCall
 
 
 class ResponseType(StrEnum):
@@ -19,14 +19,26 @@ class ResponseType(StrEnum):
 
 
 @dataclass
+class ToolCall:
+    name: str
+    arguments: dict
+    call_id: str = ""
+
+    def to_dict(self) -> ChatCompletionMessageToolCall:
+        return {"id": self.call_id, "type": "function",
+                "function": {"name": self.name, "arguments": json.dumps(self.arguments)}}
+
+
+MAX_TOOL_CALLS_PER_RESPONSE = 8
+
+
+@dataclass
 class LLMResponse:
     role: str
     content: str
     type: ResponseType
-    tool_name: str | None = None
-    tool_params: dict | None = None
+    tool_calls: list[ToolCall] = field(default_factory=list)
     usage: dict | None = None
-    call_id: str = ""
     finish_reason: str | None = None
     raw_response: Mapping[str, Any] | None = None
 
@@ -34,21 +46,10 @@ class LLMResponse:
         if self.type == ResponseType.direct:
             return {"role": "assistant", "content": self.content}
 
-        # parse_response() already validates the name and arguments.
-        assert self.tool_name is not None
-        assert self.tool_params is not None
-
         return {
             "role": "assistant",
             "content": self.content,
-            "tool_calls": [{
-                "id": self.call_id,
-                "type": "function",
-                "function": {
-                    "name": self.tool_name,
-                    "arguments": json.dumps(self.tool_params),
-                },
-            }],
+            "tool_calls": [call.to_dict() for call in self.tool_calls],
         }
 
 
@@ -57,7 +58,7 @@ class ResponseErrorCode(StrEnum):
     INVALID_TOOL_CALL = "invalid_tool_call"
     EMPTY_RESPONSE = "empty_response"
     TRUNCATED_RESPONSE = "truncated_response"
-    MULTIPLE_TOOL_CALLS = "multiple_tool_calls"
+    TOO_MANY_TOOL_CALLS = "too_many_tool_calls"
     UNSUPPORTED_FINISH_REASON = "unsupported_finish_reason"
 
 
@@ -66,7 +67,7 @@ RESPONSE_ERROR_MESSAGES = {
     ResponseErrorCode.INVALID_TOOL_CALL: "Invalid tool call.",
     ResponseErrorCode.EMPTY_RESPONSE: "Model response has no text or tool call.",
     ResponseErrorCode.TRUNCATED_RESPONSE: "Model response was truncated.",
-    ResponseErrorCode.MULTIPLE_TOOL_CALLS: "Only one tool call per response is supported.",
+    ResponseErrorCode.TOO_MANY_TOOL_CALLS: f"At most {MAX_TOOL_CALLS_PER_RESPONSE} tool calls per response are supported.",
     ResponseErrorCode.UNSUPPORTED_FINISH_REASON: "Unsupported model finish reason.",
 }
 
@@ -160,7 +161,7 @@ class LLM:
 
     @staticmethod
     def parse_response(response) -> LLMResponse:
-        """Parse native calls first, then a whole Qwen block, otherwise plain text."""
+        """Validate the entire native/Qwen batch before allowing any execution."""
         try:
             choice = response["choices"][0]
             message = choice["message"]
@@ -178,59 +179,62 @@ class LLM:
             raise ResponseError(ResponseErrorCode.UNSUPPORTED_FINISH_REASON,
                                 str(choice.get("finish_reason")))
         usage = LLM.read_usage(response.get("usage"))
+        # Generate tool content extraction
         calls = message.get("tool_calls")
         if calls is not None and not isinstance(calls, list):
             raise ResponseError(
                 ResponseErrorCode.INVALID_TOOL_CALL, "tool_calls must be a list."
             )
         if calls:
-            if len(calls) > 1:
-                raise ResponseError(ResponseErrorCode.MULTIPLE_TOOL_CALLS)
-            try:
-                call = calls[0]
-                function = call["function"]
-                arguments = function["arguments"]
-                if isinstance(arguments, str):
-                    arguments = json.loads(arguments)
-                name = function["name"]
-                call_id = call.get("id", "")
-            except (KeyError, TypeError, AttributeError, ValueError) as error:
-                raise ResponseError(
-                    ResponseErrorCode.INVALID_TOOL_CALL, "Cannot decode native tool call."
-                ) from error
-            if (not isinstance(name, str) or not name.strip() or not isinstance(arguments, dict)
-                    or not isinstance(call_id, str)):
-                raise ResponseError(
-                    ResponseErrorCode.INVALID_TOOL_CALL,
-                    "Expected a string name and object arguments.",
-                )
+            if len(calls) > MAX_TOOL_CALLS_PER_RESPONSE:
+                raise ResponseError(ResponseErrorCode.TOO_MANY_TOOL_CALLS)
+            parsed_calls = []
+            for call in calls:
+                try:
+                    function = call["function"]
+                    arguments = function["arguments"]
+                    if isinstance(arguments, str):
+                        arguments = json.loads(arguments)
+                    name = function["name"]
+                    call_id = call.get("id", "")
+                except (KeyError, TypeError, AttributeError, ValueError) as error:
+                    raise ResponseError(
+                        ResponseErrorCode.INVALID_TOOL_CALL, "Cannot decode native tool call."
+                    ) from error
+                if (not isinstance(name, str) or not name.strip() or not isinstance(arguments, dict)
+                        or not isinstance(call_id, str)):
+                    raise ResponseError(
+                        ResponseErrorCode.INVALID_TOOL_CALL,
+                        "Expected a string name, object arguments and string call ID.",
+                    )
+                if call_id and any(previous.call_id == call_id for previous in parsed_calls):
+                    raise ResponseError(ResponseErrorCode.INVALID_TOOL_CALL, "Duplicate tool-call ID.")
+                parsed_calls.append(ToolCall(name, arguments, call_id))
             return LLMResponse(
                 role=role,
                 content=content or "",
                 type=ResponseType.tool_call,
-                tool_name=name,
-                tool_params=arguments,
+                tool_calls=parsed_calls,
                 usage=usage,
-                call_id=call_id,
                 finish_reason=choice.get("finish_reason"),
             )
         if not isinstance(content, str) or not content.strip():
             raise ResponseError(ResponseErrorCode.EMPTY_RESPONSE)
-        if content.strip().startswith("<tool_call>"):
-            try:
-                tool_content = decode_qwen_tool_call(content)
-            except ValueError as error:
-                raise ResponseError(
-                    ResponseErrorCode.INVALID_TOOL_CALL, str(error)
-                ) from error
-            tool_name = tool_content.get("name")
-            tool_params = tool_content.get("arguments")
+        try:
+            # Specific tool extraction case for qwen model
+            extracted, narration = extract_qwen_tool_calls(content)
+        except ValueError as error:
+            raise ResponseError(
+                ResponseErrorCode.INVALID_TOOL_CALL, str(error)
+            ) from error
+        if len(extracted) > MAX_TOOL_CALLS_PER_RESPONSE:
+            raise ResponseError(ResponseErrorCode.TOO_MANY_TOOL_CALLS)
+        if extracted:
             return LLMResponse(
                 role=role,
-                content="",
+                content=narration,
                 type=ResponseType.tool_call,
-                tool_name=tool_name,
-                tool_params=tool_params,
+                tool_calls=[ToolCall(call["name"], call["arguments"]) for call in extracted],
                 usage=usage,
                 finish_reason=choice.get("finish_reason"),
             )
@@ -238,8 +242,6 @@ class LLM:
             role=role,
             content=content,
             type=ResponseType.direct,
-            tool_name=None,
-            tool_params=None,
             usage=usage,
             finish_reason=choice.get("finish_reason"),
         )
@@ -267,6 +269,10 @@ class LLM:
         except ResponseError as error:
             error.raw_response = response
             raise
+
+    def close(self) -> None:
+        """Release native model resources before interpreter shutdown."""
+        self.llm.close()
 
 
 if __name__ == "__main__":

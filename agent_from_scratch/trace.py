@@ -20,6 +20,7 @@ class RunStopReason(StrEnum):
     MODEL_ERROR = "model_error"
     INTERRUPTED = "interrupted"
     NO_PROGRESS = "no_progress"
+    TOOL_LIMIT = "tool_limit"
 
 
 class ModelRequestStatus(StrEnum):
@@ -35,7 +36,7 @@ class ModelRequest:
     iteration: int
     input_message_count: int
     status: ModelRequestStatus = ModelRequestStatus.STARTED
-    call_id: str | None = None
+    call_ids: list[str] = field(default_factory=list)
     usage: dict[str, int | None] | None = None
     finish_reason: str | None = None
     raw_response: Any = None  # Includes malformed JSON envelopes, not only valid objects.
@@ -52,7 +53,7 @@ class TurnResult:
     run_id: str = ""
     elapsed_seconds: float = 0.0
     model_requests: list[ModelRequest] = field(default_factory=list)
-    schema_version: int = 2
+    schema_version: int = 3
     session_id: str | None = None
     input: str = ""
     started_at: str = ""

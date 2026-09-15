@@ -1,3 +1,5 @@
+"""Frozen byte-based filesystem regressions; general tools are in test_general_files.py."""
+
 import os
 import unittest
 from pathlib import Path
@@ -6,7 +8,7 @@ from unittest.mock import patch
 from types import SimpleNamespace
 
 from agent_from_scratch.tools.base import ToolErrorCode
-from agent_from_scratch.tools.files import ListFilesTool, ReadFileTool, WriteFileTool
+from agent_from_scratch.evals.legacy_files import ListFilesTool, ReadFileTool, WriteFileTool
 from agent_from_scratch.tools.register import ToolRegistry
 from agent_from_scratch.utils import file_version
 
@@ -169,7 +171,7 @@ class FileToolTests(unittest.TestCase):
             "st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns",
         )}
         changed = SimpleNamespace(**{**fields, "st_mtime_ns": before.st_mtime_ns + 1})
-        with patch("agent_from_scratch.tools.files.fstat", side_effect=[before, changed]):
+        with patch("agent_from_scratch.evals.legacy_files.fstat", side_effect=[before, changed]):
             result = self.registry.invoke("read_file", {"path": "a.txt"})
         self.assertFalse(result.ok)
         self.assertIn("changed", result.error_message)

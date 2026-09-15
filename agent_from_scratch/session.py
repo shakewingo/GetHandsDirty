@@ -47,15 +47,19 @@ class SessionStore:
             if message["role"] == "tool" and not isinstance(message.get("tool_call_id"), str):
                 raise ValueError("Tool messages require a string tool_call_id.")
             if calls is not None:
-                if message["role"] != "assistant" or not isinstance(calls, list) or len(calls) != 1:
-                    raise ValueError("Expected one assistant tool call.")
-                call = calls[0]
-                function = call.get("function") if isinstance(call, dict) else None
-                if (not isinstance(call, dict) or not isinstance(call.get("id"), str)
-                        or call.get("type") != "function" or not isinstance(function, dict)
-                        or not isinstance(function.get("name"), str)
-                        or not isinstance(function.get("arguments"), str)):
-                    raise ValueError("Invalid assistant tool-call structure.")
+                if message["role"] != "assistant" or not isinstance(calls, list) or not calls:
+                    raise ValueError("Expected a nonempty list of assistant tool calls.")
+                ids = set()
+                for call in calls:
+                    function = call.get("function") if isinstance(call, dict) else None
+                    if (not isinstance(call, dict) or not isinstance(call.get("id"), str)
+                            or call.get("type") != "function" or not isinstance(function, dict)
+                            or not isinstance(function.get("name"), str)
+                            or not isinstance(function.get("arguments"), str)):
+                        raise ValueError("Invalid assistant tool-call structure.")
+                    if call["id"] in ids:
+                        raise ValueError("Duplicate assistant tool-call ID.")
+                    ids.add(call["id"])
 
     def load_records(self, session_id: str) -> list[dict]:
         """Read both legacy {run_id, messages} lines and versioned index entries."""

@@ -17,7 +17,7 @@ from ..agent import Agent
 from ..llm import LLM, _QWEN_TEMPLATE
 from ..tools.base import Tool, ToolErrorCode, ToolExecutionError
 from ..tools.calculator import CalculatorTool
-from ..tools.files import ListFilesTool, ReadFileTool, WriteFileTool
+from .legacy_files import ListFilesTool, ReadFileTool, WriteFileTool
 from ..tools.register import ToolRegistry
 from ..tools.shell import Command, ShellTool
 from ..tools.web import WebFetchTool
@@ -78,13 +78,22 @@ def load_tasks(directory: Path = HERE) -> list[dict]:
 class RecordedWeb(WebFetchTool):
     """Eval-only extracted-result replay, NOT a test of networking or HTML extraction."""
 
+    # Freeze the original observation interface; recorded text cannot be re-extracted.
+    parameters = {"type": "object", "properties": {"url": {"type": "string"}},
+                  "required": ["url"], "additionalProperties": False}
+
     def __init__(self, fixture: Path):
         from urllib.parse import urlsplit
         self.responses = json.loads(fixture.read_text())
         super().__init__({urlsplit(url).hostname for url in self.responses})
+        self.description = (
+            "Fetch text/HTML/JSON from an allowed HTTPS URL. Returns source URL, HTTP status, "
+            "untrusted page text and truncation flags; partial text is not a full page. "
+            f"Allowed hosts: {', '.join(sorted(self.allowed_hosts or ())) or '(none)'}."
+        )
         self.counts = Counter()
 
-    def execute(self, url: str) -> dict:
+    def execute(self, url: str, extract_mode: str = "readable") -> dict:
         current = self._validate_url(url)
         if current not in self.responses:
             raise ToolExecutionError(ToolErrorCode.DENIED, "URL has no recorded response.")

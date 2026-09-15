@@ -10,11 +10,11 @@ from unittest.mock import Mock
 
 from agent_from_scratch.evals.run import HERE, load_tasks, run_case
 from agent_from_scratch.evals.verify import summarize
-from agent_from_scratch.llm import LLM, LLMResponse, ResponseType
+from agent_from_scratch.llm import ToolCall, LLM, LLMResponse, ResponseType
 
 
 def call(name, **arguments):
-    return LLMResponse("assistant", "", ResponseType.tool_call, name, arguments)
+    return LLMResponse('assistant', '', ResponseType.tool_call, tool_calls=[ToolCall(name, arguments)])
 
 
 def answer(text):
@@ -149,10 +149,10 @@ class BehavioralEvaluationTests(unittest.TestCase):
         for task_id in ("nested_config_update", "check_fix_fault"):
             with self.subTest(task=task_id):
                 script = solution(task_id)
-                write = next(response for response in script if response.tool_name == "write_file")
-                value = json.loads(write.tool_params["content"])
+                write = next(response for response in script if response.tool_calls and response.tool_calls[0].name == "write_file")
+                value = json.loads(write.tool_calls[0].arguments["content"])
                 value["enabled"] = 1
-                write.tool_params["content"] = json.dumps(value)
+                write.tool_calls[0].arguments["content"] = json.dumps(value)
                 record, _, _ = self.run_script(task_id, script)
                 self.assertFalse(record["checks"]["artifact_correct"])
                 self.assertFalse(record["passed"])

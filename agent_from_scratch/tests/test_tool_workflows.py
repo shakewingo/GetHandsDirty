@@ -6,12 +6,12 @@ from unittest.mock import Mock
 
 from agent_from_scratch.agent import Agent
 from agent_from_scratch.examples.tools_demo import demo_registry
-from agent_from_scratch.llm import LLM, LLMResponse, ResponseType
+from agent_from_scratch.llm import ToolCall, LLM, LLMResponse, ResponseType
 from agent_from_scratch.trace import TraceStore
 
 
 def call(name, **arguments):
-    return LLMResponse("assistant", "", ResponseType.tool_call, tool_name=name, tool_params=arguments)
+    return LLMResponse('assistant', '', ResponseType.tool_call, tool_calls=[ToolCall(name, arguments)])
 
 
 class ToolWorkflowTests(unittest.TestCase):
