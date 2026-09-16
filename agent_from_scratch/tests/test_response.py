@@ -2,8 +2,10 @@ import json
 import unittest
 
 from unittest.mock import Mock, patch
-from agent_from_scratch.llm import ToolCall, LLM, LLMResponse, ResponseError, ResponseErrorCode, RESPONSE_ERROR_MESSAGES
-from agent_from_scratch.llm import _QWEN_TEMPLATE, install_qwen_template
+from agent_from_scratch.llm import LLM, LLMResponse, ResponseError, ResponseErrorCode, RESPONSE_ERROR_MESSAGES
+from agent_from_scratch.tools.base import ToolCall
+from agent_from_scratch.config import QWEN_TEMPLATE
+from agent_from_scratch.llm import install_qwen_template
 
 
 class ResponseTests(unittest.TestCase):
@@ -209,11 +211,11 @@ class GenerateTests(unittest.TestCase):
         tokens = {2: b"<|im_end|>", 1: b"<|endoftext|>"}
         model.detokenize.side_effect = lambda ids, special: tokens[ids[0]]
         model.tokenize.side_effect = lambda text, **kwargs: [next(i for i, value in tokens.items() if value == text)]
-        self.assertEqual(len(install_qwen_template(model, _QWEN_TEMPLATE)), 64)
+        self.assertEqual(len(install_qwen_template(model, QWEN_TEMPLATE)), 64)
         self.assertTrue(callable(model.chat_handler))
         tokens[2] = b"wrong-end-token"
         with self.assertRaisesRegex(ValueError, "end token"):
-            install_qwen_template(model, _QWEN_TEMPLATE)
+            install_qwen_template(model, QWEN_TEMPLATE)
 
     def test_template_renders_arguments_once_without_changing_values(self):
         from llama_cpp.llama_chat_format import Jinja2ChatFormatter
@@ -221,7 +223,7 @@ class GenerateTests(unittest.TestCase):
         arguments = {"path": "a.txt", "content": 'a "quote"\\slash\n你好'}
         call = LLMResponse('assistant', '', 'tool_call', tool_calls=[ToolCall('write_file', arguments)])
         formatter = Jinja2ChatFormatter(
-            template=_QWEN_TEMPLATE.read_text(), eos_token="<|im_end|>",
+            template=QWEN_TEMPLATE.read_text(), eos_token="<|im_end|>",
             bos_token="<|endoftext|>",
         )
         rendered = formatter(messages=[{"role": "user", "content": "Write"}, call.to_message()],
@@ -250,7 +252,7 @@ class GenerateTests(unittest.TestCase):
         arguments = {"path": "a", "content": marker}
         call = LLMResponse('assistant', '', 'tool_call', tool_calls=[ToolCall('write_file', arguments, 'c1')])
         observation = {"content": marker}
-        formatter = Jinja2ChatFormatter(template=_QWEN_TEMPLATE.read_text(),
+        formatter = Jinja2ChatFormatter(template=QWEN_TEMPLATE.read_text(),
                                        eos_token="<|im_end|>", bos_token="<|endoftext|>")
         rendered = formatter(messages=[{"role": "user", "content": "Test"}, call.to_message(),
                                        {"role": "tool", "tool_call_id": "c1", "content": json.dumps(observation)}],

@@ -10,7 +10,8 @@ from unittest.mock import Mock
 
 from agent_from_scratch.evals.run import HERE, load_tasks, run_case
 from agent_from_scratch.evals.verify import summarize
-from agent_from_scratch.llm import ToolCall, LLM, LLMResponse, ResponseType
+from agent_from_scratch.llm import LLM, LLMResponse, ResponseType
+from agent_from_scratch.tools.base import ToolCall
 
 
 def call(name, **arguments):

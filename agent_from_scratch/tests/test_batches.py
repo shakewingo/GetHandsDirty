@@ -1,3 +1,4 @@
+from dataclasses import replace
 import json
 import unittest
 from pathlib import Path
@@ -7,9 +8,8 @@ from unittest.mock import Mock, patch
 from agent_from_scratch.agent import Agent
 from agent_from_scratch.llm import LLM
 from agent_from_scratch.session import SessionStore
-from agent_from_scratch.tools.base import Tool, ToolInterrupted
+from agent_from_scratch.tools.base import Tool, ToolInterrupted, ToolRegistry
 from agent_from_scratch.tools.files import ReadFileTool, WriteFileTool
-from agent_from_scratch.tools.register import ToolRegistry
 from agent_from_scratch.tools.shell import ShellTool
 
 
@@ -73,8 +73,8 @@ class BatchTests(unittest.TestCase):
         self.assertEqual(history, result.messages[1:])
         self.assertEqual(len(history[1]["tool_calls"]), 3)
         from llama_cpp.llama_chat_format import Jinja2ChatFormatter
-        from agent_from_scratch.llm import _QWEN_TEMPLATE
-        formatter = Jinja2ChatFormatter(template=_QWEN_TEMPLATE.read_text(), eos_token="<|im_end|>", bos_token="<|endoftext|>")
+        from agent_from_scratch.config import QWEN_TEMPLATE
+        formatter = Jinja2ChatFormatter(template=QWEN_TEMPLATE.read_text(), eos_token="<|im_end|>", bos_token="<|endoftext|>")
         rendered = formatter(messages=result.messages, tools=list(self.agent.registry.schemas().values())).prompt
         self.assertEqual(rendered.count("<tool_response>"), 3)
         self.assertEqual(rendered.count('"name": "write_file"'), 2)  # Schema plus one executed call.
@@ -128,7 +128,7 @@ class BatchTests(unittest.TestCase):
         self.assertEqual(SessionStore(self.root / "state/sessions").load_history("batch"), [])
 
     def test_turn_budget_bounds_execution_within_a_batch(self):
-        self.agent.max_tool_calls = 2
+        self.agent.limits = replace(self.agent.limits, max_tool_calls=2)
         result = self.run_script(raw("".join(block("write_file", path=str(i), content="x") for i in range(3))))
         self.assertEqual(result.stop_reason, "tool_limit")
         self.assertEqual([o["error_code"] for o in self.observations(result)], [None, None, "skipped"])

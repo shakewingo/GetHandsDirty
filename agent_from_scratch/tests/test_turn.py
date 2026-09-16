@@ -1,3 +1,4 @@
+from dataclasses import replace
 import json
 import unittest
 from copy import deepcopy
@@ -7,12 +8,12 @@ from typing import Any
 from unittest.mock import Mock, patch
 
 from agent_from_scratch.agent import Agent, recovery_feedback
-from agent_from_scratch.llm import ToolCall, LLM, LLMResponse, ResponseType, ResponseError, ResponseErrorCode
+from agent_from_scratch.llm import LLM, LLMResponse, ResponseType, ResponseError, ResponseErrorCode
+from agent_from_scratch.tools.base import ToolCall, ToolRegistry
 from agent_from_scratch.session import SessionStore
 from agent_from_scratch.trace import RunStopReason, TraceStore
 from agent_from_scratch.tools.files import ReadFileTool, WriteFileTool
 from agent_from_scratch.tools.shell import ShellTool
-from agent_from_scratch.tools.register import ToolRegistry
 
 
 def answer(text="Done"):
@@ -214,7 +215,7 @@ class TurnTests(unittest.TestCase):
         self.assertEqual(result.final_answer, "4")
 
     def test_repeated_failures_stop_at_iteration_limit(self):
-        self.agent.max_iterations = 2
+        self.agent.limits = replace(self.agent.limits, max_iterations=2)
         self.script(call(left="bad"), call(left="bad"), answer("Unused"))
         result = self.agent.run_turn("test", [])
         self.assertEqual(len(self.seen), 2)
@@ -289,7 +290,7 @@ class TurnTests(unittest.TestCase):
         self.assertEqual(result.final_answer, "4")
 
     def test_repeated_parse_errors_stop_without_a_final_answer(self):
-        self.agent.max_iterations = 2
+        self.agent.limits = replace(self.agent.limits, max_iterations=2)
         error = ResponseError(ResponseErrorCode.INVALID_RESPONSE)
         self.script(error, error, answer("Unused"))
         result = self.agent.run_turn("bad", [])
@@ -298,7 +299,7 @@ class TurnTests(unittest.TestCase):
         self.assertIsNone(result.final_answer)
 
     def test_parse_exhaustion_does_not_end_repl_or_leak_failed_turn(self):
-        self.agent.max_iterations = 2
+        self.agent.limits = replace(self.agent.limits, max_iterations=2)
         error = ResponseError(ResponseErrorCode.INVALID_RESPONSE)
         self.script(error, error, answer("Paris"))
         with patch("builtins.input", side_effect=["bad", "good", "exit"]), patch("builtins.print") as output:
@@ -311,7 +312,7 @@ class TurnTests(unittest.TestCase):
                                       {"role": "user", "content": "good"}])
 
     def test_repl_does_not_print_tool_output_as_final_answer(self):
-        self.agent.max_iterations = 1
+        self.agent.limits = replace(self.agent.limits, max_iterations=1)
         self.script(call())
         with patch("builtins.input", side_effect=["test", "exit"]), patch("builtins.print") as output:
             self.agent.run_repl()
@@ -520,7 +521,7 @@ class TurnTests(unittest.TestCase):
     def test_session_index_links_all_outcomes_to_run_metadata(self):
         with TemporaryDirectory() as directory:
             self.agent.state_dir = directory
-            self.agent.max_iterations = 1
+            self.agent.limits = replace(self.agent.limits, max_iterations=1)
             store = SessionStore(Path(directory) / "sessions")
             traces = TraceStore(Path(directory) / "runs")
             self.script(answer("Blue"), RuntimeError("offline"), call(), KeyboardInterrupt(), answer("Still blue"))

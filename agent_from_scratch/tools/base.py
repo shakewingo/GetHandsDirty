@@ -1,12 +1,28 @@
 from __future__ import annotations # postpone evaluating type annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from collections.abc import Iterable
+from dataclasses import asdict, dataclass
 from enum import StrEnum
+import json
 from typing import Any, Dict, Mapping, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from llama_cpp import ChatCompletionTool
+    from llama_cpp import (ChatCompletionTool, ChatCompletionMessageToolCall,
+                           ChatCompletionRequestToolMessage)
+
+
+@dataclass
+class ToolCall:
+    """One action requested by the model, before the registry has resolved it."""
+
+    name: str
+    arguments: dict
+    call_id: str = ""
+
+    def to_dict(self) -> ChatCompletionMessageToolCall:
+        return {"id": self.call_id, "type": "function",
+                "function": {"name": self.name, "arguments": json.dumps(self.arguments)}}
 
 
 class ToolErrorCode(StrEnum):
@@ -68,6 +84,10 @@ class ToolResult:
             message = f"{message} {detail}"
         return cls(call_id=call_id, tool_name=tool_name, ok=False,
                    error_code=code, error_message=message, output=output)
+
+    def to_message(self) -> ChatCompletionRequestToolMessage:
+        return {"role": "tool", "content": json.dumps(asdict(self)),
+                "tool_call_id": self.call_id}
 
 
 class Tool(ABC):
@@ -239,3 +259,30 @@ class Tool(ABC):
                 "parameters": self.parameters,
             },
         }
+
+
+class ToolRegistry:
+    def __init__(self, tools: Iterable[Tool]):
+        self._tools: dict[str, Tool] = {}
+        for tool in tools:
+            if not isinstance(tool.name, str) or not tool.name.strip():
+                raise ValueError("Registered tools must have non-empty string names.")
+            if tool.name in self._tools:
+                raise ValueError(f"Duplicate tool name: {tool.name!r}")
+            self._tools[tool.name] = tool
+
+    def schemas(self) -> Dict[str, "ChatCompletionTool"]:
+        return {name: tool.to_schema() for name, tool in self._tools.items()}
+
+    def invoke(self, tool_name: Any, arguments: Any, call_id: str = "") -> ToolResult:
+        if not isinstance(tool_name, str) or not tool_name.strip():
+            return ToolResult.failure(
+                ToolErrorCode.INVALID_TOOL_CALL, call_id=call_id,
+            )
+        tool = self._tools.get(tool_name)
+        if tool is None:
+            return ToolResult.failure(
+                ToolErrorCode.UNKNOWN_TOOL, call_id=call_id, tool_name=tool_name,
+                detail=f"Requested: {tool_name!r}. Available tools: {', '.join(sorted(self._tools))}.",
+            )
+        return tool.invoke(arguments, call_id=call_id)

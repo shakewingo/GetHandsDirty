@@ -12,9 +12,9 @@ from unittest.mock import Mock, patch
 import httpx
 
 from agent_from_scratch.agent import Agent
-from agent_from_scratch.llm import ToolCall, LLM, LLMResponse, ResponseType
+from agent_from_scratch.llm import LLM, LLMResponse, ResponseType
+from agent_from_scratch.tools.base import ToolCall, ToolRegistry
 from agent_from_scratch.tools.files import WriteFileTool
-from agent_from_scratch.tools.register import ToolRegistry
 from agent_from_scratch.tools.web import WebFetchTool, WebSearchTool
 
 

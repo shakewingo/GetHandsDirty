@@ -7,9 +7,9 @@ from unittest.mock import Mock, patch
 
 from agent_from_scratch.agent import Agent
 from agent_from_scratch.evals.foundation import measure
-from agent_from_scratch.llm import ToolCall, LLM, LLMResponse, ResponseType
+from agent_from_scratch.llm import LLM, LLMResponse, ResponseType
+from agent_from_scratch.tools.base import ToolCall, ToolRegistry
 from agent_from_scratch.evals.legacy_files import ReadFileTool
-from agent_from_scratch.tools.register import ToolRegistry
 from agent_from_scratch.trace import TurnResult
 
 

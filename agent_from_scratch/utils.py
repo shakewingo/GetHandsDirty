@@ -6,7 +6,7 @@ import os
 import sys
 from tempfile import NamedTemporaryFile
 
-_PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
+from .config import PROMPTS_DIR
 
 
 def resolve_path(root: str | Path, path: str | Path) -> Path:
@@ -39,7 +39,7 @@ def render_prompt(name: str, **context) -> str:
     from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
     env = Environment(
-        loader=FileSystemLoader(_PROMPTS_DIR), trim_blocks=True,
+        loader=FileSystemLoader(PROMPTS_DIR), trim_blocks=True,
         lstrip_blocks=True, undefined=StrictUndefined, keep_trailing_newline=False,
     )
     return env.get_template(name).render(**context).strip()

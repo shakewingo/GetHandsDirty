@@ -1,7 +1,7 @@
 """Three real-model Stage 2A demonstrations; not the Stage 2B behavioral benchmark."""
 
 import argparse
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import hashlib
 import json
 from pathlib import Path
@@ -9,7 +9,7 @@ from pathlib import Path
 from loguru import logger
 from ..agent import Agent
 from ..examples.tools_demo import demo_registry
-from ..llm import LLM, _QWEN_TEMPLATE
+from ..llm import LLM
 from ..session import SessionStore
 from ..tools.web import WebFetchTool
 
@@ -30,7 +30,7 @@ def main():
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=False)
     logger.remove()
-    model = LLM(temperature=0, max_tokens=2048, n_ctx=8000, chat_template_path=_QWEN_TEMPLATE)
+    model = LLM()
     root = Path(__file__).resolve().parents[1]
     metadata = {
         "settings": model.settings(), "prompts": PROMPTS,
@@ -55,7 +55,7 @@ def main():
         registry = demo_registry(workspace, {"docs.python.org"})
         (out / name / "schemas.json").write_text(json.dumps(registry.schemas(), indent=2))
         agent = Agent(model, str(out / name / "state"), registry=registry)
-        agent.max_iterations = 12
+        agent.limits = replace(agent.limits, max_iterations=12)
         print(f"START {name}", flush=True)
         result = agent.run_turn(prompt, session_id=name)
         observations = [json.loads(m["content"] or "") for m in result.messages if m["role"] == "tool"]
@@ -109,7 +109,7 @@ def run_conversation(model, out):
         print("TURN", prompt, flush=True)
         # A fresh Agent reloads disk history between turns; the model instance is reused.
         agent = Agent(model, str(state), registry=registry)
-        agent.max_iterations = 8
+        agent.limits = replace(agent.limits, max_iterations=8)
         result = agent.run_turn(prompt, store.load_history("conversation"), session_id="conversation")
         record = {"prompt": prompt, "run_id": result.run_id, "stop_reason": result.stop_reason,
                   "model_requests": len(result.model_requests), "final_answer": result.final_answer}

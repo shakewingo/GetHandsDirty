@@ -1,5 +1,6 @@
 """Stage 2B dev benchmark: fresh fixtures, ordinary agent loop, independent scoring."""
 
+from dataclasses import replace
 import argparse
 from collections import Counter
 from datetime import datetime, timezone
@@ -14,11 +15,10 @@ from tempfile import TemporaryDirectory
 
 from loguru import logger
 from ..agent import Agent
-from ..llm import LLM, _QWEN_TEMPLATE
-from ..tools.base import Tool, ToolErrorCode, ToolExecutionError
+from ..llm import LLM
+from ..tools.base import Tool, ToolErrorCode, ToolExecutionError, ToolRegistry
 from ..tools.calculator import CalculatorTool
 from .legacy_files import ListFilesTool, ReadFileTool, WriteFileTool
-from ..tools.register import ToolRegistry
 from ..tools.shell import Command, ShellTool
 from ..tools.web import WebFetchTool
 from .foundation import digest
@@ -140,7 +140,7 @@ def run_case(model, task: dict, output: Path, directory: Path = HERE) -> dict:
         registry = registry_for(task, workspace, private, fixture)
         save(output / "schemas.json", registry.schemas())
         agent = Agent(model, str(output / "state"), registry=registry)
-        agent.max_iterations = task["max_iterations"]
+        agent.limits = replace(agent.limits, max_iterations=task["max_iterations"])
         try:
             result = agent.run_turn(task["prompt"], session_id=task["id"])
             score = verify(task, result, workspace, fixture / "workspace", before)
@@ -197,7 +197,7 @@ def main():
         parser.error("Evidence must be outside the source package and frozen fixtures.")
     out.mkdir(parents=True, exist_ok=False)
     logger.remove()
-    model = LLM(temperature=0, max_tokens=2048, n_ctx=8000, chat_template_path=_QWEN_TEMPLATE)
+    model = LLM()
     backend = model.llm.create_chat_completion
     # Reset the RNG on every request; temperature=0, so seed is bookkeeping, not extra trials.
     model.llm.create_chat_completion = lambda *a, **kw: backend(*a, **kw, seed=args.seed)

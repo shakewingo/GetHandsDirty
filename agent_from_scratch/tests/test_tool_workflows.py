@@ -6,7 +6,8 @@ from unittest.mock import Mock
 
 from agent_from_scratch.agent import Agent
 from agent_from_scratch.examples.tools_demo import demo_registry
-from agent_from_scratch.llm import ToolCall, LLM, LLMResponse, ResponseType
+from agent_from_scratch.llm import LLM, LLMResponse, ResponseType
+from agent_from_scratch.tools.base import ToolCall
 from agent_from_scratch.trace import TraceStore
 
 

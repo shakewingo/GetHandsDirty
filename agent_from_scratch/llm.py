@@ -7,29 +7,19 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 import json
 from typing import Dict, Any, TYPE_CHECKING, List
+
+from .config import (MAX_TOKENS, MAX_TOOL_CALLS_PER_RESPONSE, MODEL_PATH, N_CTX,
+                     N_GPU_LAYERS, QWEN_TEMPLATE, TEMPERATURE)
+from .tools.base import ToolCall
 from .utils import render_prompt, extract_qwen_tool_calls
 
 if TYPE_CHECKING:
-    from llama_cpp import ChatCompletionTool, ChatCompletionRequestMessage, ChatCompletionRequestAssistantMessage, ChatCompletionMessageToolCall
+    from llama_cpp import ChatCompletionTool, ChatCompletionRequestMessage, ChatCompletionRequestAssistantMessage
 
 
 class ResponseType(StrEnum):
     tool_call = "tool_call"
     direct = "direct"
-
-
-@dataclass
-class ToolCall:
-    name: str
-    arguments: dict
-    call_id: str = ""
-
-    def to_dict(self) -> ChatCompletionMessageToolCall:
-        return {"id": self.call_id, "type": "function",
-                "function": {"name": self.name, "arguments": json.dumps(self.arguments)}}
-
-
-MAX_TOOL_CALLS_PER_RESPONSE = 8
 
 
 @dataclass
@@ -80,15 +70,6 @@ class ResponseError(ValueError):
         super().__init__(f"{message} {detail}" if detail else message)
 
 
-_MODEL_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "gz-data"
-    / "hub/models--Qwen--Qwen2.5-7B-Instruct-GGUF/snapshots/bb5d59e06d9551d752d08b292a50eb208b07ab1f"
-    / "qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf"
-)
-_QWEN_TEMPLATE = Path(__file__).parent / "prompts" / "qwen_chat.jinja"
-
-
 def install_qwen_template(model, path: Path) -> str:
     """Install the project's checked Qwen2.5 format on this instance only."""
     from llama_cpp.llama_chat_format import Jinja2ChatFormatter
@@ -115,13 +96,13 @@ def install_qwen_template(model, path: Path) -> str:
 class LLM:
     def __init__(
         self,
-        model_path: str = str(_MODEL_PATH),
-        temperature: float = 0.7,
-        max_tokens: int = 512,
-        n_gpu_layers: int = -1,
-        n_ctx: int = 2048,
+        model_path: str = str(MODEL_PATH),
+        temperature: float = TEMPERATURE,
+        max_tokens: int = MAX_TOKENS,
+        n_gpu_layers: int = N_GPU_LAYERS,
+        n_ctx: int = N_CTX,
         verbose=False,  # turn off tensor / metadata loading, prefix-match, timing info from llama-cpp-python
-        chat_template_path: str | Path | None = None,
+        chat_template_path: str | Path | None = QWEN_TEMPLATE,
     ):
         from llama_cpp import Llama
 
@@ -279,7 +260,7 @@ if __name__ == "__main__":
     from .tools.register import default_tool_schemas
 
     user_input = "What is 2*2?"
-    llm = LLM(chat_template_path=_QWEN_TEMPLATE)
+    llm = LLM()
     messages: list[ChatCompletionRequestMessage] = [
         {"role": "system", "content": render_prompt("system.md")},
         {"role": "user", "content": user_input},

@@ -5,11 +5,11 @@ from pathlib import Path
 import sys
 
 from ..agent import Agent
-from ..llm import LLM, _QWEN_TEMPLATE
+from ..llm import LLM
 from ..tools.calculator import CalculatorTool
 from ..tools.files import EditFileTool, ListFilesTool, ReadFileTool, WriteFileTool
 from ..evals import legacy_files
-from ..tools.register import ToolRegistry
+from ..tools.base import ToolRegistry
 from ..tools.shell import Command, ShellTool
 from ..tools.web import WebFetchTool, WebSearchTool
 
@@ -45,7 +45,7 @@ def main():
         ])
     else:
         registry = demo_registry(args.workspace, set(args.allow_host))
-    model = LLM(temperature=0, max_tokens=2048, n_ctx=8000, chat_template_path=_QWEN_TEMPLATE)
+    model = LLM()
     try:
         Agent(model, str(args.state), registry=registry).run_repl()
     finally:

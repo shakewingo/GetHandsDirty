@@ -16,11 +16,10 @@ from typing import Any, TYPE_CHECKING
 
 from loguru import logger
 from ..agent import Agent
-from ..llm import LLM, _QWEN_TEMPLATE
-from ..tools.base import ToolErrorCode, ToolResult
+from ..llm import LLM
+from ..tools.base import ToolErrorCode, ToolRegistry, ToolResult
 from ..tools.calculator import CalculatorTool
 from .legacy_files import ListFilesTool, ReadFileTool, WriteFileTool
-from ..tools.register import ToolRegistry
 
 if TYPE_CHECKING:
     from llama_cpp import ChatCompletionRequestMessage
@@ -113,7 +112,7 @@ def main():
     if "edit" in cases and args.readonly:
         parser.error("edit requires a disposable writable workspace.")
     logger.remove()
-    llm = LLM(temperature=0, max_tokens=2048, n_ctx=8000, chat_template_path=_QWEN_TEMPLATE)
+    llm = LLM()
     reader = ReadFileTool(workspace)
     # Before/after comparison without changing the protocol's 8192-byte ceiling.
     execute_read = reader.execute

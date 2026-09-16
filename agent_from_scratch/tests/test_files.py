@@ -7,9 +7,8 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 from types import SimpleNamespace
 
-from agent_from_scratch.tools.base import ToolErrorCode
+from agent_from_scratch.tools.base import ToolErrorCode, ToolRegistry
 from agent_from_scratch.evals.legacy_files import ListFilesTool, ReadFileTool, WriteFileTool
-from agent_from_scratch.tools.register import ToolRegistry
 from agent_from_scratch.utils import file_version
 
 

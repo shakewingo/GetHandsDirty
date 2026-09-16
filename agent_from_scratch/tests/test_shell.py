@@ -11,10 +11,10 @@ import unittest
 from unittest.mock import Mock, patch
 
 from agent_from_scratch.agent import Agent
-from agent_from_scratch.llm import ToolCall, LLM, LLMResponse, ResponseType
+from agent_from_scratch.llm import LLM, LLMResponse, ResponseType
+from agent_from_scratch.tools.base import ToolCall, ToolRegistry
 from agent_from_scratch.session import SessionStore
 from agent_from_scratch.tools.base import ToolInterrupted
-from agent_from_scratch.tools.register import ToolRegistry
 from agent_from_scratch.tools.shell import Command, ShellTool
 from agent_from_scratch.trace import TraceStore
 

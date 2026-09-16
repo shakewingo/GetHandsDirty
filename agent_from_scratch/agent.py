@@ -11,10 +11,11 @@ from typing import Any, TYPE_CHECKING
 from uuid import uuid4
 
 from loguru import logger
-from .llm import LLM, ResponseError, ResponseErrorCode, ResponseType, MAX_TOOL_CALLS_PER_RESPONSE, _MODEL_PATH, _QWEN_TEMPLATE
+from .config import AgentLimits
+from .llm import LLM, ResponseError, ResponseErrorCode, ResponseType
 from .session import SessionStore
-from .tools.base import ToolErrorCode, ToolResult
-from .tools.register import ToolRegistry, default_registry
+from .tools.base import ToolErrorCode, ToolRegistry, ToolResult
+from .tools.register import default_registry
 from .trace import ModelRequest, ModelRequestStatus, RunStopReason, TraceStore, TurnResult
 from .utils import color_label, render_prompt
 
@@ -46,15 +47,14 @@ def recovery_feedback(error: ResponseError) -> str:
 
 class Agent:
     def __init__(self, llm: LLM, state_dir: str | None = None,
-                 *, registry: ToolRegistry | None = None):
+                 *, registry: ToolRegistry | None = None, limits: AgentLimits = AgentLimits()):
         self.llm = llm
-        self.max_iterations = 20  # max number of iterations per turn
-        self.max_same_failures = 3
-        self.max_tool_calls = 40  # max number of tool calls per turn
+        self.limits = limits
         self.state_dir = state_dir
         self.registry = default_registry if registry is None else registry
 
     def execute_tool(self, tool_name: Any, tool_params: Any, call_id: str = "") -> ToolResult:
+        """Single dispatch point; evaluations override it to enforce read-only runs."""
         return self.registry.invoke(tool_name, tool_params, call_id=call_id)
 
     def run_turn(self, user_input: str, history: list[ChatCompletionRequestMessage] | None = None,
@@ -67,10 +67,7 @@ class Agent:
                       *deepcopy(history or []), {"role": "user", "content": user_input}],
             run_id=uuid4().hex, session_id=session_id, input=user_input,
             started_at=datetime.now(timezone.utc).isoformat(),
-            settings={**self.llm.settings(), "max_iterations": self.max_iterations,
-                      "max_same_failures": self.max_same_failures,
-                      "max_tool_calls": self.max_tool_calls,
-                      "max_tool_calls_per_response": MAX_TOOL_CALLS_PER_RESPONSE},
+            settings={**self.llm.settings(), **asdict(self.limits)},
         )
         trace = TraceStore(Path(self.state_dir, "runs") if self.state_dir is not None else None)
         try:
@@ -102,8 +99,7 @@ class Agent:
                 tool_name=call["function"]["name"], call_id=call["id"],
                 detail=detail, output=output if interrupted else None,
             )
-            result.messages.append({"role": "tool", "content": json.dumps(asdict(observation)),
-                                    "tool_call_id": observation.call_id})
+            result.messages.append(observation.to_message())
             interrupted = False
 
     def _save_session(self, result: TurnResult, history_length: int) -> None:
@@ -129,13 +125,13 @@ class Agent:
             nonlocal last_failure, failure_count
             failure_count = failure_count + 1 if key == last_failure else 1
             last_failure = key
-            if failure_count < self.max_same_failures:
+            if failure_count < self.limits.max_same_failures:
                 return False
             result.stop_reason = RunStopReason.NO_PROGRESS
             result.error_message = f"The same {key[0]} failure ({key[-1]}) occurred {failure_count} times."
             return True
 
-        for iteration in range(1, self.max_iterations + 1):
+        for iteration in range(1, self.limits.max_iterations + 1):
             request = ModelRequest(iteration, len(messages))
             result.model_requests.append(request)
             try:
@@ -179,10 +175,10 @@ class Agent:
                 if response.content and on_progress is not None:
                     on_progress(response.content)
                 for call in response.tool_calls:
-                    if tool_attempts >= self.max_tool_calls:
+                    if tool_attempts >= self.limits.max_tool_calls:
                         self._finish_pending_tools(result, "Turn tool-call budget exhausted.")
                         result.stop_reason = RunStopReason.TOOL_LIMIT
-                        result.error_message = f"Reached {self.max_tool_calls} tool attempts."
+                        result.error_message = f"Reached {self.limits.max_tool_calls} tool attempts."
                         return
                     tool_attempts += 1
                     logger.debug("Tool call detected: {} {}", call.name, call.arguments)
@@ -191,8 +187,7 @@ class Agent:
                         logger.debug("Tool executed successfully: {} ({})", tool_result.tool_name, tool_result.call_id)
                     else:
                         logger.error("Tool execution failed due to: {}", tool_result.error_message)
-                    messages.append({"role": "tool", "content": json.dumps(asdict(tool_result)),
-                                     "tool_call_id": tool_result.call_id})
+                    messages.append(tool_result.to_message())
                     if tool_result.ok:
                         last_failure, failure_count = None, 0
                     else:
@@ -262,10 +257,15 @@ class Agent:
 
 
 if __name__ == "__main__":
-    llm = LLM(model_path=str(_MODEL_PATH), temperature=0.0, max_tokens=2048,
-              n_gpu_layers=-1, n_ctx=8000, chat_template_path=_QWEN_TEMPLATE)
+    llm = LLM()
     agent = Agent(llm, state_dir="./outputs/sessions")
     try:
         agent.run_repl()
     finally:
         llm.close()
+
+
+# user: edit test.py with "Hello world"
+# assistant: <tool_call> {"tool_names": shell.py, "parameters": shell -pr("Hello world")}</tool_call>
+# role: {output: {"args": "123"}, tool_name: shell.py, ok}
+# assistant: "Executed"

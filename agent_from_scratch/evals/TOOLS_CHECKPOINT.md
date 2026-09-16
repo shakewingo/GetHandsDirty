@@ -256,3 +256,27 @@ and false completion separate. Small deterministic smokes are not generalization
 Logs: `outputs/stage2a-tests-20260915.log`, `outputs/stage2a-pyright-cli-20260915.log`,
 `outputs/stage2a-smoke-20260915.log`. Metadata records settings, prompts, source hashes,
 schemas, final artifacts, and full run traces. Earlier runs are retained separately.
+
+## September 16 structural refactor (no behavior change)
+
+Module paths moved ahead of Stage 3; no runtime logic was changed.
+
+- `ToolCall` (with its wire `to_dict`) and `ToolRegistry` now live in `tools/base.py`,
+  which holds the whole tool contract. `tools/register.py` keeps only the default wiring.
+  `ToolResult.to_message()` replaces the two hand-written tool-message literals in `agent.py`.
+- New `config.py` holds the single definition of `MODEL_PATH`, `QWEN_TEMPLATE`, `PROMPTS_DIR`,
+  the decoding defaults, `MAX_TOOL_CALLS_PER_RESPONSE`, and the frozen `AgentLimits` budgets.
+  `Agent` takes `limits`; evaluations override per task with `dataclasses.replace`.
+  `TurnResult.settings` is now `{**llm.settings(), **asdict(limits)}` — the same keys and
+  values as before, built in one place so Stage 3's budgets appear without another edit.
+- `LLM.__init__` defaults now come from `config.py`, so the five entry points call `LLM()`
+  instead of retyping `temperature=0, max_tokens=2048, n_ctx=8000`. This also changes
+  `llm.py`'s own `__main__` demo, which previously used the unused `0.7 / 512 / 2048` defaults.
+
+Verified: **167/167 deterministic tests pass**, unchanged from before the refactor, with no
+test assertion edited (only import lines and the `replace(...)` budget overrides). Pyflakes
+reports no new findings; all runtime, eval and example modules import cleanly.
+**Not re-verified:** the real-model two-task eval could not run on the current host
+(3 GB RAM, no GPU; the Q4_K_M checkpoint is ~4.7 GB and the process was OOM-killed).
+Rerun `python -m agent_from_scratch.evals.run --output outputs/refactor-check
+--tasks check_fix_clean,check_fix_fault` on the benchmark host before Stage 8 freezes settings.
