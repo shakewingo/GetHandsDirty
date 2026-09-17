@@ -88,6 +88,10 @@ class ShellTests(unittest.TestCase):
     def test_ctrl_c_preserves_output_closes_process_and_repl_does_not_replay(self):
         tool = self.tool('import os,time; print(os.getpid(), flush=True); time.sleep(10)')
         model = Mock(spec=LLM)
+        model.measure_context.return_value = {  # Scripted fitting budget; no real tokenizer.
+            "count_method": "exact", "prompt_tokens": 100, "window_tokens": 8000,
+            "response_reserve": 512, "remaining_tokens": 7388,
+        }
         model.settings.return_value = {}
         seen = []
         responses = iter([

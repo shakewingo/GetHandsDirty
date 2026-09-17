@@ -21,6 +21,7 @@ class RunStopReason(StrEnum):
     INTERRUPTED = "interrupted"
     NO_PROGRESS = "no_progress"
     TOOL_LIMIT = "tool_limit"
+    CONTEXT_LIMIT = "context_limit"
 
 
 class ModelRequestStatus(StrEnum):
@@ -29,6 +30,7 @@ class ModelRequestStatus(StrEnum):
     PARSE_ERROR = "parse_error"
     MODEL_ERROR = "model_error"
     INTERRUPTED = "interrupted"
+    BLOCKED = "blocked"
 
 
 @dataclass
@@ -42,6 +44,9 @@ class ModelRequest:
     raw_response: Any = None  # Includes malformed JSON envelopes, not only valid objects.
     error_code: str | None = None
     error_message: str | None = None
+
+    # Pre-generation measurement for later action like compact, distinct from the backend's post-generation usage.
+    context: dict[str, Any] | None = None
 
 
 @dataclass

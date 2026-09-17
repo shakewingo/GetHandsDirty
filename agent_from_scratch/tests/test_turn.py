@@ -8,6 +8,7 @@ from typing import Any
 from unittest.mock import Mock, patch
 
 from agent_from_scratch.agent import Agent, recovery_feedback
+from agent_from_scratch.context import InstructionConfig, InstructionLoadError
 from agent_from_scratch.llm import LLM, LLMResponse, ResponseType, ResponseError, ResponseErrorCode
 from agent_from_scratch.tools.base import ToolCall, ToolRegistry
 from agent_from_scratch.session import SessionStore
@@ -35,11 +36,17 @@ def call(left: Any = 2, right: Any = 2, operation="add", call_id=""):
 class TurnTests(unittest.TestCase):
     def setUp(self):
         self.model = Mock(spec=LLM)
+        self.model.measure_context.return_value = {  # Scripted fitting budget; no real tokenizer.
+            "count_method": "exact", "prompt_tokens": 100, "window_tokens": 8000,
+            "response_reserve": 512, "remaining_tokens": 7388,
+        }
         self.model.settings.return_value = {}
         self.model.read_usage.side_effect = LLM.read_usage
         self.agent = Agent(self.model)
         self.seen = []
-        prompt = patch("agent_from_scratch.agent.render_prompt", return_value="System")
+        self.prompt_dir = Path(self.enterContext(TemporaryDirectory()))
+        (self.prompt_dir / "system.md").write_text("System", encoding="utf-8")
+        prompt = patch("agent_from_scratch.context.PROMPTS_DIR", self.prompt_dir)
         prompt.start()
         self.addCleanup(prompt.stop)
 
@@ -61,6 +68,255 @@ class TurnTests(unittest.TestCase):
         self.assertEqual((result.stop_reason, result.final_answer), ("final_response", "Paris"))
         self.assertEqual(len(self.seen), 1)
 
+    def budget(self, remaining):
+        # Scripted counts exercise admission policy, not tokenizer accuracy.
+        return {"count_method": "exact", "prompt_tokens": 8000 - 512 - remaining,
+                "window_tokens": 8000, "response_reserve": 512, "remaining_tokens": remaining}
+
+    def test_context_exact_boundary_allows_final_answer_without_another_measurement(self):
+        self.model.measure_context.side_effect = [self.budget(self.agent.limits.context_margin_tokens)]
+        self.script(answer("Done"))
+        result = self.agent.run_turn("Finish")
+        self.assertEqual(result.stop_reason, "final_response")
+        self.assertEqual(result.final_answer, "Done")
+        self.assertEqual(self.model.generate.call_count, 1)
+        self.assertEqual(self.model.measure_context.call_count, 1)
+
+    def test_context_one_token_over_blocks_generation_and_tools(self):
+        self.model.measure_context.return_value = self.budget(self.agent.limits.context_margin_tokens - 1)
+        self.script(call())
+        with patch.object(self.agent, "execute_tool") as execute:
+            result = self.agent.run_turn("Calculate")
+        self.model.generate.assert_not_called()
+        execute.assert_not_called()
+        self.assertEqual(result.stop_reason, "context_limit")
+        self.assertEqual(result.model_requests[0].status, "blocked")
+        self.assertEqual(result.model_requests[0].error_code, "context_limit")
+        self.assertEqual([m["role"] for m in result.messages], ["system", "user"])
+
+    def test_context_unavailable_measurement_or_unbounded_reserve_blocks(self):
+        for budget in (None, {**self.budget(1000), "count_method": "unavailable"},
+                       {**self.budget(1000), "response_reserve": None, "remaining_tokens": None}):
+            with self.subTest(budget=budget):
+                self.model.measure_context.return_value = budget
+                self.script(answer())
+                result = self.agent.run_turn("Finish")
+                self.model.generate.assert_not_called()
+                self.assertEqual(result.stop_reason, "context_limit")
+                self.assertEqual(result.model_requests[0].error_code, "context_unavailable")
+
+    def test_context_overflow_after_tool_preserves_effects_trace_and_session_history(self):
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory, "workspace")
+            workspace.mkdir()
+            self.agent.state_dir = directory
+            self.agent.registry = ToolRegistry([WriteFileTool(workspace)])
+            store = SessionStore(Path(directory, "sessions"))
+            history = [{"role": "user", "content": "Old"}, {"role": "assistant", "content": "Saved"}]
+            store.append("budget", "old", history)
+            self.model.measure_context.side_effect = [self.budget(1000), self.budget(-100)]
+            self.script(LLMResponse("assistant", "Writing", ResponseType.tool_call, tool_calls=[
+                ToolCall("write_file", {"path": "evidence.txt", "content": "written"})]))
+            with patch.object(self.agent, "execute_tool", wraps=self.agent.execute_tool) as execute:
+                result = self.agent.run_turn("Write the file", history, session_id="budget")
+            self.assertEqual(result.stop_reason, "context_limit")
+            self.assertEqual(self.model.generate.call_count, 1)
+            self.assertEqual(execute.call_count, 1)
+            self.assertEqual((workspace / "evidence.txt").read_text(), "written")
+            observation = result.messages[-1]
+            self.assertEqual(observation["role"], "tool")
+            self.assertTrue(json.loads(observation["content"])["ok"])
+            self.assertEqual(self.model.measure_context.call_args.args[0][-1], observation)
+            self.assertEqual(store.load_history("budget"), history)
+            trace = TraceStore(Path(directory, "runs")).load_run(result.run_id)
+            self.assertEqual(trace["messages"], result.messages)
+            blocked = trace["model_requests"][-1]
+            self.assertEqual(blocked["status"], "blocked")
+            self.assertEqual(blocked["context"], self.budget(-100))
+            self.assertEqual(blocked["input_message_count"], len(result.messages))
+            self.assertEqual(trace["settings"]["context_margin_tokens"], 256)
+            for field in ("usage", "raw_response", "finish_reason"):
+                self.assertIsNone(blocked[field])
+
+    def test_context_overflow_after_parser_feedback_blocks_retry(self):
+        self.model.measure_context.side_effect = [self.budget(1000), self.budget(255)]
+        self.script(ResponseError(ResponseErrorCode.INVALID_RESPONSE))
+        with patch.object(self.agent, "execute_tool") as execute:
+            result = self.agent.run_turn("Calculate")
+        self.assertEqual(result.stop_reason, "context_limit")
+        self.assertEqual(self.model.generate.call_count, 1)
+        execute.assert_not_called()
+        self.assertEqual([q.status for q in result.model_requests], ["parse_error", "blocked"])
+        self.assertIn("[Runtime feedback]", result.messages[-1]["content"])
+        self.assertEqual(self.model.measure_context.call_args.args[0][-1], result.messages[-1])
+
+    def test_repl_explains_context_stop_without_claiming_rollback(self):
+        self.model.measure_context.return_value = self.budget(-1)
+        with patch("builtins.input", side_effect=["Hello", "exit"]), patch("builtins.print") as output:
+            self.agent.run_repl()
+        printed = "\n".join(str(c.args[0]) for c in output.call_args_list)
+        self.assertIn("Request exceeds the context budget", printed)
+        self.assertIn("Completed tool actions remain in effect", printed)
+        self.model.generate.assert_not_called()
+
+    def test_context_measurements_precede_each_generation_and_survive_backend_failure(self):
+        measured_inputs, stats = [], []
+
+        def measure(messages, schemas):
+            measured_inputs.append(deepcopy(messages))
+            self.assertEqual(schemas, self.agent.registry.schemas())
+            count = 100 * len(measured_inputs)
+            stats.append({"count_method": "exact", "prompt_tokens": count,
+                          "window_tokens": 8000, "response_reserve": 512,
+                          "remaining_tokens": 8000 - count - 512})
+            return stats[-1]
+
+        replies = iter([ResponseError(ResponseErrorCode.INVALID_RESPONSE), call(), RuntimeError("backend failed")])
+
+        def generate(messages, schemas):
+            self.assertEqual(messages, measured_inputs[-1])
+            self.assertEqual(len(measured_inputs), self.model.generate.call_count)
+            response = next(replies)
+            if isinstance(response, BaseException):
+                raise response
+            return response
+
+        self.model.measure_context.side_effect = measure
+        self.model.generate.side_effect = generate
+        with TemporaryDirectory() as directory:
+            self.agent.state_dir = directory
+            result = self.agent.run_turn("2+2", session_id="measurement")
+            self.assertEqual(result.stop_reason, "model_error")
+            self.assertIn("[Runtime feedback]", measured_inputs[1][-1]["content"])
+            self.assertEqual(measured_inputs[2][-1]["role"], "tool")
+            trace = TraceStore(Path(directory) / "runs").load_run(result.run_id)
+            self.assertEqual([r["context"] for r in trace["model_requests"]], stats)
+            self.assertTrue(all(r["usage"] is None for r in trace["model_requests"]))
+
+    def test_instructions_reload_between_turns_but_not_after_tool_execution(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            rules = workspace / "AGENTS.md"
+            rules.write_text("Original rules", encoding="utf-8")
+            self.agent.state_dir = str(root / "state")
+            self.agent.instruction_config = InstructionConfig(workspace=workspace)
+            self.script(call(), answer("4"), answer("Next"))
+            execute = self.agent.execute_tool
+
+            def change_rules(*args, **kwargs):
+                rules.write_text("Changed rules", encoding="utf-8")
+                return execute(*args, **kwargs)
+
+            with patch.object(self.agent, "execute_tool", side_effect=change_rules):
+                first = self.agent.run_turn("2+2", session_id="rules")
+            self.assertEqual(self.seen[0][0], self.seen[1][0])
+            self.assertIn("Original rules", self.seen[1][0]["content"])
+            store = SessionStore(root / "state/sessions")
+            history = store.load_history("rules")
+            self.assertTrue(all(m["role"] != "system" for m in history))
+            second = self.agent.run_turn("Next", history, session_id="rules")
+            self.assertIn("Changed rules", self.seen[2][0]["content"])
+            self.assertEqual(sum(m["role"] == "system" for m in self.seen[2]), 1)
+            first_source = first.settings["instructions"]["sources"][-1]
+            second_source = second.settings["instructions"]["sources"][-1]
+            from hashlib import sha256
+            self.assertEqual(first_source["sha256"], sha256(b"Original rules").hexdigest())
+            self.assertEqual(second_source["sha256"], sha256(b"Changed rules").hexdigest())
+            trace = TraceStore(root / "state/runs").load_run(first.run_id)
+            self.assertEqual(trace["settings"]["instructions"], first.settings["instructions"])
+            self.assertEqual(trace["messages"][0], self.seen[0][0])
+
+    def test_instruction_failure_preserves_session_and_repl_recovers(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            missing = root / "user.md"
+            self.agent.state_dir = str(root / "state")
+            self.agent.instruction_config = InstructionConfig(user_path=missing)
+            store = SessionStore(root / "state/sessions")
+            history = [{"role": "user", "content": "Old"}, {"role": "assistant", "content": "Saved"}]
+            store.append("rules", "old-run", history)
+            before = (root / "state/sessions/rules.jsonl").read_bytes()
+            with patch.object(self.agent, "execute_tool") as execute:
+                with self.assertRaises(InstructionLoadError):
+                    self.agent.run_turn("Rejected", history, session_id="rules")
+                self.model.generate.assert_not_called()
+                execute.assert_not_called()
+            self.assertEqual((root / "state/sessions/rules.jsonl").read_bytes(), before)
+            self.assertFalse((root / "state/runs").exists())
+
+            self.script(answer("Recovered"))
+            def inputs():
+                yield "Still rejected"
+                missing.write_text("User defaults", encoding="utf-8")
+                yield "Try again"
+                yield "exit"
+
+            with patch("builtins.input", side_effect=inputs()), patch("builtins.print") as output:
+                self.agent.run_repl(session_id="rules")
+            self.model.generate.assert_called_once()
+            self.assertIn("Instructions unavailable", output.call_args_list[0].args[0])
+            self.assertNotIn("Still rejected", json.dumps(store.load_history("rules")))
+            self.assertEqual(store.load_history("rules")[-1]["content"], "Recovered")
+
+    def test_prepared_inputs_stay_independent_across_feedback_tools_and_replay(self):
+        received = []
+        responses = iter([ResponseError(ResponseErrorCode.INVALID_RESPONSE), call(), answer("4")])
+
+        def generate(messages, tools):
+            received.append(messages)  # Retain actual inputs, without copying them in the mock.
+            response = next(responses)
+            if isinstance(response, BaseException):
+                raise response
+            return response
+
+        self.model.generate.side_effect = generate
+        history = [{"role": "user", "content": "Earlier request"},
+                   {"role": "assistant", "content": "Earlier answer"}]
+        original_history = deepcopy(history)
+        with TemporaryDirectory() as directory:
+            self.agent.state_dir = directory
+            store = SessionStore(Path(directory) / "sessions")
+            store.append("context", "earlier-run", history)
+            result = self.agent.run_turn("2+2", history, session_id="context")
+
+            self.assertEqual(result.final_answer, "4")
+            self.assertEqual([len(messages) for messages in received], [4, 5, 7])
+            self.assertIn("[Runtime feedback]", received[1][-1]["content"])
+            self.assertEqual([m["role"] for m in received[2][-2:]], ["assistant", "tool"])
+            self.assertEqual(json.loads(received[2][-1]["content"])["output"], 4)
+            self.assertEqual(len({id(messages) for messages in received}), 3)
+            for request, messages in zip(result.model_requests, received):
+                self.assertEqual(messages, result.messages[:request.input_message_count])
+                self.assertIsNot(messages, result.messages)
+            self.assertEqual(store.load_history("context"), result.messages[1:])
+            trace = TraceStore(Path(directory) / "runs").load_run(result.run_id)
+            self.assertEqual(trace["messages"], result.messages)
+            self.assertEqual(history, original_history)
+
+    def test_backend_input_mutation_does_not_change_raw_history_or_next_request(self):
+        received = []
+        history = [{"role": "user", "content": "Remember this"},
+                   {"role": "assistant", "content": "Remembered"}]
+
+        def generate(messages, tools):
+            received.append(deepcopy(messages))
+            if len(received) == 1:
+                messages[1]["content"] = "Changed by backend"
+                messages[-1]["content"] = "Changed request"
+                return call()
+            return answer("4")
+
+        self.model.generate.side_effect = generate
+        result = self.agent.run_turn("2+2", history)
+        self.assertEqual(result.final_answer, "4")
+        self.assertEqual(result.messages[1:3], history)
+        self.assertEqual(received[1][1:3], history)
+        self.assertEqual(result.messages[3]["content"], "2+2")
+        self.assertEqual(received[1][3]["content"], "2+2")
+        self.assertEqual(history[0]["content"], "Remember this")
+
     def test_source_examples_never_reach_tool_execution(self):
         with TemporaryDirectory() as directory:
             self.agent.registry = ToolRegistry([WriteFileTool(directory)])
@@ -80,6 +336,10 @@ class TurnTests(unittest.TestCase):
             workspace = Path(directory, "workspace")
             workspace.mkdir()
             model = LLM.__new__(LLM)
+            model.measure_context = Mock(return_value={  # Scripted fitting budget.
+                "count_method": "exact", "prompt_tokens": 100, "window_tokens": 2048,
+                "response_reserve": 512, "remaining_tokens": 1436,
+            })
             model.llm = Mock()
             model.model_path, model.temperature, model.max_tokens = "fake-model", 0.0, 512
             model.n_ctx, model.n_gpu_layers = 2048, 0
@@ -323,6 +583,10 @@ class TurnTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             self.agent.state_dir = directory
             self.model = LLM.__new__(LLM)
+            self.model.measure_context = Mock(return_value={  # Scripted fitting budget.
+                "count_method": "exact", "prompt_tokens": 100, "window_tokens": 2048,
+                "response_reserve": 512, "remaining_tokens": 1436,
+            })
             self.model.llm = Mock()
             self.model.temperature = 0.0
             self.model.max_tokens = 32

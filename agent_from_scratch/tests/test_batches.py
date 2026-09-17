@@ -37,6 +37,10 @@ class BatchTests(unittest.TestCase):
         self.workspace = self.root / "workspace"
         self.workspace.mkdir()
         self.model = LLM.__new__(LLM)
+        self.model.measure_context = Mock(return_value={  # Scripted fitting budget.
+            "count_method": "exact", "prompt_tokens": 100, "window_tokens": 2048,
+            "response_reserve": 512, "remaining_tokens": 1436,
+        })
         self.model.llm = Mock()
         self.model.model_path, self.model.temperature, self.model.max_tokens = "fake", 0, 512
         self.model.n_ctx, self.model.n_gpu_layers = 2048, 0
@@ -73,8 +77,8 @@ class BatchTests(unittest.TestCase):
         self.assertEqual(history, result.messages[1:])
         self.assertEqual(len(history[1]["tool_calls"]), 3)
         from llama_cpp.llama_chat_format import Jinja2ChatFormatter
-        from agent_from_scratch.config import QWEN_TEMPLATE
-        formatter = Jinja2ChatFormatter(template=QWEN_TEMPLATE.read_text(), eos_token="<|im_end|>", bos_token="<|endoftext|>")
+        from agent_from_scratch.config import CHAT_TEMPLATE_PATH
+        formatter = Jinja2ChatFormatter(template=CHAT_TEMPLATE_PATH.read_text(), eos_token="<|im_end|>", bos_token="<|endoftext|>")
         rendered = formatter(messages=result.messages, tools=list(self.agent.registry.schemas().values())).prompt
         self.assertEqual(rendered.count("<tool_response>"), 3)
         self.assertEqual(rendered.count('"name": "write_file"'), 2)  # Schema plus one executed call.

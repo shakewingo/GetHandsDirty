@@ -117,6 +117,6 @@ See [README](README.md) for commands. Local evidence under the repository root:
 - `outputs/stage2b-baseline-20260915.log`, `outputs/stage2b-tests-20260915.log`,
   `outputs/stage2b-pyright-20260915.log`.
 
-The original baseline predates three regression tests; all candidate runs use the current
+The original baseline predates three regression tests; all candidate runs use the then-current
 118-test source. Runtime, task definitions and evaluator hashes match throughout.
 Generation metadata contains the exact system prompt. Never overwrite an earlier run.

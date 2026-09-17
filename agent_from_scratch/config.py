@@ -10,7 +10,7 @@ from pathlib import Path
 _PACKAGE_DIR = Path(__file__).resolve().parent
 
 PROMPTS_DIR = _PACKAGE_DIR / "prompts"
-QWEN_TEMPLATE = PROMPTS_DIR / "qwen_chat.jinja"
+CHAT_TEMPLATE_PATH = PROMPTS_DIR / "qwen_chat.jinja"
 MODEL_PATH = (
     _PACKAGE_DIR.parent
     / "gz-data"
@@ -35,3 +35,5 @@ class AgentLimits:
     max_same_failures: int = 3
     max_tool_calls: int = 40  # max number of tool calls per turn
     max_tool_calls_per_response: int = MAX_TOOL_CALLS_PER_RESPONSE
+
+    context_margin_tokens: int = 256  # token margin to reserve in the context window

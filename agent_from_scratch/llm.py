@@ -6,15 +6,17 @@ from hashlib import sha256
 from dataclasses import dataclass, field
 from enum import StrEnum
 import json
+from loguru import logger
 from typing import Dict, Any, TYPE_CHECKING, List
 
 from .config import (MAX_TOKENS, MAX_TOOL_CALLS_PER_RESPONSE, MODEL_PATH, N_CTX,
-                     N_GPU_LAYERS, QWEN_TEMPLATE, TEMPERATURE)
+                     N_GPU_LAYERS, CHAT_TEMPLATE_PATH, TEMPERATURE)
 from .tools.base import ToolCall
 from .utils import render_prompt, extract_qwen_tool_calls
 
 if TYPE_CHECKING:
     from llama_cpp import ChatCompletionTool, ChatCompletionRequestMessage, ChatCompletionRequestAssistantMessage
+    from llama_cpp.llama_chat_format import Jinja2ChatFormatter
 
 
 class ResponseType(StrEnum):
@@ -70,7 +72,7 @@ class ResponseError(ValueError):
         super().__init__(f"{message} {detail}" if detail else message)
 
 
-def install_qwen_template(model, path: Path) -> str:
+def install_qwen_template(model, path: Path) -> tuple[Jinja2ChatFormatter, str]:
     """Install the project's checked Qwen2.5 format on this instance only."""
     from llama_cpp.llama_chat_format import Jinja2ChatFormatter
 
@@ -87,10 +89,11 @@ def install_qwen_template(model, path: Path) -> str:
     template = path.read_text(encoding="utf-8")
     if not eos or eos not in template:
         raise ValueError("The chat template does not use this model's end token.")
-    model.chat_handler = Jinja2ChatFormatter(
+    formatter = Jinja2ChatFormatter(
         template=template, eos_token=eos, bos_token=bos, stop_token_ids=[eos_id],
-    ).to_chat_handler()
-    return sha256(template.encode("utf-8")).hexdigest()
+    )
+    model.chat_handler = formatter.to_chat_handler()
+    return formatter, sha256(template.encode("utf-8")).hexdigest()
 
 
 class LLM:
@@ -102,7 +105,7 @@ class LLM:
         n_gpu_layers: int = N_GPU_LAYERS,
         n_ctx: int = N_CTX,
         verbose=False,  # turn off tensor / metadata loading, prefix-match, timing info from llama-cpp-python
-        chat_template_path: str | Path | None = QWEN_TEMPLATE,
+        chat_template_path: str | Path | None = CHAT_TEMPLATE_PATH,
     ):
         from llama_cpp import Llama
 
@@ -115,10 +118,39 @@ class LLM:
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.model_path = str(model_path)
-        self.n_ctx = n_ctx
+        self.n_ctx = self.llm.n_ctx()  # Record the backend's effective window.
         self.n_gpu_layers = n_gpu_layers
-        self.chat_template_sha256 = (install_qwen_template(self.llm, Path(chat_template_path))
-                                     if chat_template_path is not None else None)
+        self._chat_formatter = None
+        self.chat_template_sha256 = None
+        if chat_template_path is not None and "qwen_chat" in str(chat_template_path):
+            self._chat_formatter, self.chat_template_sha256 = install_qwen_template(self.llm, Path(chat_template_path))
+        else:
+            self._chat_formatter, self.chat_template_sha256 = None, None
+        self._chat_handler = self.llm.chat_handler
+
+    def measure_context(
+        self, messages: List[ChatCompletionRequestMessage], tools: Dict[str, ChatCompletionTool],
+    ) -> dict[str, Any]:
+        """Measure the next input without generation or changing the model's KV cache.
+
+        Remaining room reserves the configured output maximum, before any safety
+        margin.
+        """
+        reserve = self.max_tokens if self.max_tokens is not None and self.max_tokens > 0 else None
+        measurement = {"count_method": "unavailable", "prompt_tokens": None,
+                       "window_tokens": self.n_ctx, "response_reserve": reserve,
+                       "remaining_tokens": None}
+        formatter = getattr(self, "_chat_formatter", None)
+        if formatter is None or self.llm.chat_handler is not self._chat_handler:
+            logger.warning("Context measurement is unavailable due to unsupported chat formatter.")
+            return measurement
+        formatted = formatter(messages=messages, tools=list(tools.values()), tool_choice="auto")
+        # Match llama_cpp.chat_formatter_to_chat_completion_handler exactly.
+        tokens = self.llm.tokenize(formatted.prompt.encode("utf-8"),
+                                   add_bos=not formatted.added_special, special=True)
+        measurement.update(count_method="exact", prompt_tokens=len(tokens),
+                           remaining_tokens=self.n_ctx - len(tokens) - reserve if reserve is not None else None)
+        return measurement
 
     def settings(self) -> dict[str, Any]:
         """Snapshot the actual configuration used by this model instance."""

@@ -1,5 +1,9 @@
 # Foundation review checkpoint — 2026-09-13
 
+历史记录：下文的“当前修订”指 9 月 13 日检查点，测试数量和工具协议也仅适用于该版本。
+现行工具与 schema 见 [TOOLS_CHECKPOINT.md](TOOLS_CHECKPOINT.md)，阶段状态见
+[STAGE.md](../docs/STAGE.md)。
+
 本次 review 修订相对于 c9b30c8，代码留在工作区供审阅。
 上一版实验和设计保留在 git 历史与本地报告归档，本表只描述当前修订。
 

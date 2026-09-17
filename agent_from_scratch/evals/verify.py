@@ -123,25 +123,27 @@ def verify(task: dict, result, workspace: Path, original: Path, before: dict) ->
 
 
 def metrics(result) -> dict:
+    requests = [q for q in result.model_requests if q.status != "blocked"]
     rows = exchanges(result)
     errors = [r for r in rows if not r["ok"]]
     usage = {}
     for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
-        values = [(q.usage or {}).get(key) for q in result.model_requests]
-        usage[key] = sum(v for v in values if isinstance(v, int)) if values and all(isinstance(v, int) for v in values) else None
+        values = [(q.usage or {}).get(key) for q in requests]
+        # No calls means zero usage; an actual call with missing usage stays unknown.
+        usage[key] = sum(values) if all(isinstance(v, int) for v in values) else None
     invalid = {"invalid_tool_call", "unknown_tool", "invalid_arguments"}
     return {
         "run_id": result.run_id, "stop_reason": result.stop_reason,
-        "final_answer": result.final_answer, "model_requests": len(result.model_requests),
-        "parse_errors": sum(q.status == "parse_error" for q in result.model_requests),
+        "final_answer": result.final_answer, "model_requests": len(requests),
+        "parse_errors": sum(q.status == "parse_error" for q in requests),
         "invalid_calls": sum(q.error_code in {"invalid_tool_call", "multiple_tool_calls", "too_many_tool_calls"}
-                             for q in result.model_requests) + sum(r["error_code"] in invalid for r in errors),
+                             for q in requests) + sum(r["error_code"] in invalid for r in errors),
         "tool_calls": len(rows), "tool_errors": [{k: r[k] for k in
             ("tool_name", "error_code", "error_message", "output")} for r in errors],
         "tool_attempts": sum(r["error_code"] != "skipped" for r in rows),
         "skipped_calls": sum(r["error_code"] == "skipped" for r in rows),
         "usage": usage,
-        "requests_without_usage": sum(not q.usage for q in result.model_requests),
+        "requests_without_usage": sum(not q.usage for q in requests),
         "elapsed_seconds": result.elapsed_seconds,
     }
 

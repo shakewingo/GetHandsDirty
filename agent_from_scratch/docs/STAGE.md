@@ -1,6 +1,6 @@
 # Build a tiny agent: a two-week sprint
 
-Updated September 15, 2026. Sprint: **September 13–26**; earlier experiments are carried-in work.
+Updated September 17, 2026. Sprint: **September 13–26**; earlier experiments are carried-in work.
 This is the implementation scope. [REPORT_ANALYSIS.md](REPORT_ANALYSIS.md) retains the broader learning rationale.
 
 ## The finished project
@@ -40,7 +40,7 @@ as pilots; mark missing required outcomes incomplete instead of silently extendi
 | Carried in | **0.5 — complete** | One user request → model/tool/result loop, validated contracts and error feedback |
 | Completed | **1 — complete** | Multiple user turns, persisted Session history, structured per-turn state and traces |
 | Completed | **2 — implementation complete** | General filesystem/shell/search/fetch; restricted 2B baseline 8/17 → 12/17 |
-| Next | **3 — required** | Layered prompt, token budget, manual/automatic compact, replayable checkpoint |
+| In progress | **3 — required** | Stage 3A context assembly, measurement and fit enforcement complete; compact and checkpoint next |
 | Next | **4A–4B — required** | Bounded durable memory, search/read, correction/forget, fresh-session recall |
 | Before training | **8 — required** | Resettable benchmark, isolated splits, measured baseline, frozen harness |
 | Research | **9 — draft, required outcome** | Verified trajectories → adapter update/reload → base/adapter comparison |
@@ -64,6 +64,73 @@ plumbing is already complete in Stage 1. Historical evidence filenames keep thei
   eval/training separately. This is a design alarm, not a reason to compress readable code.
 - Each stage leaves a small demo, a deliberate failure, and evidence of what changed.
   Use focused tests for state and side effects, real-model runs for capability; keep those claims separate.
+
+### Core code size audit
+
+Audit date: September 17, 2026. Count committed **core Python only**: top-level runtime
+modules and `tools/`, including the real `agent.py` REPL entry point, argument validation,
+response parsing, tracing and session persistence. Exclude `prompts/`, tests, evals,
+verification modules, examples, docs, dependencies, generated outputs and untracked stubs.
+Non-agent `__main__` demo blocks are also excluded (currently the demo in `llm.py`).
+The unused, untracked `memory.py` placeholder is not part of Stage 3A.
+
+**Code lines** are physical lines containing Python syntax tokens, excluding blank lines,
+comments and docstrings; multiline literals used by runtime count as code. **Physical lines**
+include blanks/comments/docstrings in the same selected source, but exclude demo blocks.
+File counts below exclude empty package initializers. These are size measures, not a measure
+of capability or quality. The earlier 1,500–2,000 / 2,500 scope alarm refers to physical lines;
+do not switch it to the smaller code-only number to hide growth.
+
+Only snapshots with an explicit stage-completion marker are used below. `ebd249d` says
+“Complete Stage 2” in its commit subject. `24f2608` and `b3dfab0` contain a `STAGE.md` marking
+Stage 2 implementation complete, with the latter labeled “before stage 3” in its subject.
+Stage 0.5 (`e282138`) and old Stage 1.1 (`e248ca2`, now Stage 1) have named baseline commits,
+but no separate, unambiguous completion marker under today's scope: the former still records
+an unresolved parser test and the latter says “initial session management.” Both are explicitly
+marked complete retrospectively by `ebd249d`, whose source already includes Stage 2. Do not
+invent separate completion counts from that combined tree or treat intermediate baselines
+as completed stages. Intermediate experiments and stash commits are excluded.
+
+| Completed checkpoint | Git reference | Nonempty core files | Code lines | Physical lines | Code change from previous row |
+|---|---|---:|---:|---:|---:|
+| Stage 2, initial restricted tools + behavioral evaluation | `ebd249d` | 11 | 1,285 | 1,515 | — |
+| Stage 2, general tools + narrated batches | `24f2608` | 12 | 1,747 | 2,039 | +462 |
+| Stage 2 handoff, structural refactor before Stage 3 | `b3dfab0` | 13 | 1,759 | 2,073 | +12 |
+| Stage 3A complete: context, instructions, measurement, fit gate | Commit containing this audit: `Complete Stage 3A context budgeting` | 14 | **1,940** | **2,296** | **+181 (+10.3%)** |
+
+Stage 3A added **223 physical lines (+10.8%)** over its direct parent. Its code growth is:
+
+| Core file | Before 3A | After 3A | Code-line increase |
+|---|---:|---:|---:|
+| `context.py` | 0 | 96 | +96 |
+| `agent.py` | 242 | 298 | +56 |
+| `llm.py` | 223 | 248 | +25 |
+| `trace.py` | 73 | 76 | +3 |
+| `config.py` | 22 | 23 | +1 |
+| Other core modules | 1,199 | 1,199 | 0 |
+
+Tools account for **1,019 / 1,940 code lines (52.5%)**; the loop/model/context/session and
+support modules account for the other 921. The largest earlier jump was general tools and
+batches, not context management. At 2,296 physical lines we are above the original target and
+204 lines below the scope-review alarm. Before Stage 3B grows, review the design boundary;
+do not compress readable code merely to stay under it.
+
+Reproduce from the repository root with the dependency-free audit utility
+[`evals/core_lines.py`](../evals/core_lines.py), which is itself excluded from the count:
+
+```sh
+python -m agent_from_scratch.evals.core_lines ebd249d 24f2608 b3dfab0 HEAD
+# Before a future completion commit, audit exactly the staged source:
+python -m agent_from_scratch.evals.core_lines INDEX
+```
+
+Use `--git /Library/Developer/CommandLineTools/usr/bin/git` on this Mac if the normal Git
+launcher is unavailable. Output includes per-file counts and a SHA-256 of sorted source
+paths/contents. Stage 3A source fingerprint:
+`70e426cf585e43211a32cb4ffe7ce95702a194092942b6f08ef152a02f07ba0f`.
+At each explicitly completed stage, append one row using its committed snapshot; preserve
+older rows, replace this row's self-reference with its hash, and explain any scope-rule change.
+Review newly added root/tool modules for verification-only or demo code before counting them.
 
 ## Stage 0.5 — one request with an agent loop · complete
 
@@ -118,9 +185,9 @@ Our `SessionStore` keeps that distinction without Nanobot's channels, hooks, or 
   `run_turn` receives history explicitly; the REPL loads completed turns from disk.
 - [x] Keep structured **session → run → model request/tool result** records: IDs,
   ordered messages, raw responses, errors, stop reason, settings, elapsed time, and available usage.
-  Call IDs join requests to results. Run schema is v2; session schema is v1, with legacy readers.
-- [x] Distinguish `final_response`, `max_iterations`, `no_progress`, `model_error`, and
-  `interrupted`. Parser/tool failures get targeted feedback; three identical consecutive
+  Call IDs join requests to results. Run schema is v3; session schema is v1, with legacy readers.
+- [x] Distinguish `final_response`, `max_iterations`, `tool_limit`, `no_progress`, `model_error`,
+  and `interrupted`. Parser/tool failures get targeted feedback; three identical consecutive
   failures stop the loop. Backend errors stop cleanly; Ctrl-C retains available run evidence.
 - [x] Replay only completed turns. Failed/interrupted runs remain trace evidence;
   independent trace/session write failures do not erase previously saved state.
@@ -146,9 +213,10 @@ Prompt rules describe expected behavior; runtime enforces paths, allowed operati
   through `file_documents.py`; images expose metadata only. Frozen evaluations retain the
   original confined byte-based tools in `evals/legacy_files.py`.
 - [x] **`tools/web.py`:** synchronous general HTTP/HTTPS `web_fetch(url, extract_mode?)`
-  with compressed responses and readable/full-visible-text extraction, plus
-  `web_search(query, count?)` via `ddgs`. Return source URLs, retrieval time, status and
-  truncation; cap redirects, time and retained content. Pages/snippets are untrusted evidence.
+  with compressed responses and main-content or navigation-inclusive HTML text extraction,
+  plus `web_search(query, count?)` via `ddgs`. Both return source URLs and retrieval time;
+  fetch also reports HTTP status and truncation. Bound time/content and fetch redirects.
+  Extraction does not render CSS or JavaScript. Pages/snippets are untrusted evidence.
   An optional host list supports restricted fixtures. Browsers/login remain out of scope.
 - [x] **`tools/shell.py`:** synchronous `shell(command, working_dir?)` runs ordinary local
   commands, scripts, pipes and redirects. Return exit code, capped stdout/stderr and
@@ -191,6 +259,16 @@ Bad arguments/blocked commands and follow-up/reload/reset have scripted regressi
 real dev tasks exercise path denial, fetch failure and timeout. Fake “done” artifacts fail.
 Implementation/baseline are complete; reliable autonomous completion remains a measured goal.
 
+**September 16 handoff review:** all **167 deterministic tests pass** in
+`transformer-practice` (`python -m unittest discover -s agent_from_scratch/tests -v`).
+The **8/17 → 12/17** results above are historical restricted-tool development runs,
+predating the general tools, narrated-call parser, batches and later prompt/template changes.
+Saved results were checked; no fresh real-model benchmark was run for this review.
+Stage 2 is complete at that implementation/baseline boundary, and Stage 3 can begin.
+The original handoff count was **2,083 physical Python lines / 15 files** (including two empty
+package files). The core-only audit above excludes the 10-line embedded `llm.py` demo,
+yielding **2,073 physical lines / 1,759 code lines / 13 nonempty files** at `b3dfab0`.
+
 ## Stage 3 — context construction and compaction · required
 
 Read: book Chapters 2/3/5; Appendix A.1/A.2/A.4/A.5. Nanobot:
@@ -198,33 +276,58 @@ Read: book Chapters 2/3/5; Appendix A.1/A.2/A.4/A.5. Nanobot:
 and [summary checkpoint][nb-summary]. Apply the mechanisms to our measured window;
 the book's token constants and vendor-specific recovery paths are not our configuration.
 Design decisions: [tool-result semantics and state ownership](CONTEXT_STATE_DESIGN.md).
+All four 3A items are implemented: each generation receives an independent prepared
+view with a bounded instruction snapshot loaded at turn start, and its prompt tokens and
+remaining room are recorded and checked before generation. Automatic compaction and
+summary checkpoints remain planned. Defer new CLI commands;
+a future `/status` may expose usage, reported cache data, session ID and context statistics.
 
 ### 3A — one prompt path and a visible budget
 
-- [ ] Add `context.py`: one builder used **before every generation**, including after tools.
-  Separate stable instructions, durable memory data, session summary/history, and current
-  input/tool observations. Keep raw history distinct from the model-facing view.
-- [ ] Organize `prompts/system.md` into purpose, behavior, tools, and reporting rules.
+- [x] Add `context.py`: one builder used **before every generation**, including after tools
+  and parser feedback. Explicit instruction/history/current-turn inputs are deep-copied
+  into the model-facing view; raw messages retain all exchanges for traces, sessions and
+  evaluation. Durable memory and summaries remain future inputs when those features exist.
+  Validation: **170 deterministic tests pass**, including deep-copy isolation and fresh
+  inputs after parser feedback/tool results, with trace/session replay preserved.
+- [x] Organize `prompts/system.md` into purpose, behavior, tools, and reporting rules.
   Load only an explicitly configured user instruction file and workspace-root `AGENTS.md`.
   Use a documented order (system → user rules → workspace rules), source hashes, and caps;
   preserve the runtime contract, and give current user corrections priority over saved preferences.
-  Source order aids inspection; it does not itself enforce model compliance. Reload rules at
-  turn/compact boundaries; no ancestor crawling, imports, or autonomous rule edits.
-- [ ] Count the actual formatted prompt, including schemas/role markers, with the generation
-  tokenizer; label any conservative fallback estimate. `/context` shows component sizes,
-  window, reserves, and remaining room without calling the model. Stale usage and KV-cache
-  hits do not measure the next changed prompt or enlarge the context window.
-- [ ] Require `prompt + response reserve + margin <= window`; trigger compact early enough
-  to leave headroom for a bounded tool exchange. Budget summarizer input/output independently.
-  Measure small-window settings and tool-output caps; oversized pinned input stops explicitly
-  as `context_limit`, without silently truncating the request, rules, or claimed file coverage.
+  Source order aids inspection; it does not itself enforce model compliance. `context.py`
+  loads once per turn; compact-boundary reloading waits for Stage 3B. No ancestor crawling
+  or imports; the prompt prohibits autonomous rule edits. Defaults are 8 KiB/source and
+  16 KiB assembled, with visible setup errors instead of silent omission/truncation.
+  **178 deterministic tests pass**; source metadata lives in the existing run settings.
+  Implementation guide: [Stage 3A item 2 plan](STAGE3A_ITEM2_PLAN.md).
+- [x] Count the actual formatted prompt, including schemas/role markers, with the generation
+  formatter and tokenizer. Record total prompt tokens, effective backend window, configured
+  response reserve and remaining room in request traces; no new CLI command. Custom or
+  replaced handlers are explicitly unavailable, with null counts rather than an estimate.
+  Detailed component breakdowns and a future `/status` can follow when useful. Stale usage
+  and KV-cache hits do not measure the next changed prompt or enlarge the context window.
+  **183 deterministic tests pass**. Five local Qwen requests matched reported prompt usage
+  exactly; a 12,030-token measurement exposed negative room without attempting generation.
+  Evidence and limits: [context measurement](CONTEXT_STATE_DESIGN.md#implemented-next-request-token-measurement).
+- [x] Require `prompt + response reserve + margin <= window` before every generation.
+  The initial fit check stops with `context_limit`, including when exact measurement or
+  a bounded reserve is unavailable. Default margin: 256 tokens. Blocked requests retain
+  their budget in the trace but do not count as model calls; completed tool effects/results
+  remain intact. No silent truncation of the request, rules, or claimed file coverage.
+  **191 deterministic tests pass**. Local Qwen diagnostics compared 2,048/4,096-token
+  windows and 256/16,000-character read caps: small output continued, large output blocked
+  the next generation, and oversized initial input made zero model calls.
+  Evidence: [fit enforcement](CONTEXT_STATE_DESIGN.md#implemented-request-fit-enforcement).
+  Stage 3B will add early compaction with bounded tool-exchange headroom and separate
+  summarizer input/output budgets; the current margin cannot guarantee arbitrary results fit.
 
 ### 3B — compact and continue the same task
 
-- [ ] Implement `/compact [focus]` and automatic compact with one function and
+- [ ] Implement automatic compact and a callable manual compact path with one function and
   `prompts/compact.md`. Summarize goal, constraints, observed progress, errors/corrections,
   and next steps; keep instructions, current request, recent complete tool pairs, and every
   observation not yet sent to the actor. Track that last-sent boundary separately.
+  Expose manual compaction through tests/library calls initially; defer a CLI command.
 - [ ] Compact old turns first, then older complete exchanges within a long ongoing turn.
   Never split a call/result pair. Rebuild the prompt with summary + retained suffix + fresh
   observations, reload stable rules and bounded memory, then recheck fit before publishing it.
@@ -271,7 +374,9 @@ loads full `MEMORY.md`; our short index and explicit update tools below are inte
   show omissions/capacity errors instead of silently evicting facts.
 - [ ] Store memory outside resettable task fixtures with explicit workspace identity.
   `/new` and `/reset` preserve durable memory; forgetting is explicit. `/memory` inspects
-  scope and size. File tools cannot access another workspace's memory.
+  scope and size. Memory tools must reject another workspace's identity. The current
+  general file/shell tools are unrestricted; stronger isolation requires an explicitly
+  confined tool configuration and cannot be promised by the memory store alone.
 
 ### 4B — provenance, corrections, and recall
 
@@ -386,10 +491,11 @@ This sprint uses disposable fixtures and explicit outcomes instead of a coding-a
 
 Nanobot links below refer to inspected local source at commit
 `0b1fa0c3e44510e3d34d9bed4d491884cb19de7e` (shakewingo fork of HKUDS/nanobot).
-Our synchronous loop, fixed commands, capped memory index, and explicit failure policies are
-smaller implementations of selected ideas, not claims of identical behavior.
+Our synchronous loop, optional fixed-command evaluation mode and explicit failure policies
+are smaller implementations of selected ideas, not claims of identical behavior.
+The capped memory index remains planned Stage 4 work.
 
-**Next coding session:** Stage 3A's raw transcript/model-input separation and visible budget.
+**Next coding session:** Stage 3B: design bounded compaction and preserve continuation evidence.
 Complete Stage 3's context/compact/replay block and Stage 4A–4B memory before the
 Stage 8 freeze. For each session record: what I built, what I broke, what the evidence shows,
 what I can explain unaided, and the next smallest gap.
@@ -416,6 +522,8 @@ what I can explain unaided, and the next smallest gap.
 [nb-child]: ../../../nanobot/nanobot/agent/subagent.py
 
 ## The small architecture you will grow
+
+Target architecture for the required stages; context, memory and training nodes are planned.
 
 ```mermaid
 flowchart TD
@@ -449,8 +557,8 @@ flowchart TD
     Train --> Model
 ```
 
-Reuse `agent.py`, `llm.py`, `session.py`, `trace.py`, and the implemented tools; add `context.py`,
-`memory.py`, and `prompts/compact.md` when their stages start. Keep result records scoped;
+Reuse `agent.py`, `llm.py`, `session.py`, `trace.py`, `context.py`, and the implemented tools;
+implement memory and add `prompts/compact.md` when their stages start. Keep result records scoped;
 introduce small loop/context state only where continuation needs shared mutable state.
 Keep the configured state root (`outputs/sessions` today); add memory/checkpoint records
 there as needed. Raw history, active prompt, durable memory, trace evidence, and training

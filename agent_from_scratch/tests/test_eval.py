@@ -7,13 +7,46 @@ from unittest.mock import Mock, patch
 
 from agent_from_scratch.agent import Agent
 from agent_from_scratch.evals.foundation import measure
+from agent_from_scratch.evals.verify import metrics
 from agent_from_scratch.llm import LLM, LLMResponse, ResponseType
 from agent_from_scratch.tools.base import ToolCall, ToolRegistry
 from agent_from_scratch.evals.legacy_files import ReadFileTool
-from agent_from_scratch.trace import TurnResult
+from agent_from_scratch.trace import ModelRequest, ModelRequestStatus, TurnResult
 
 
 class ReadEvaluationTests(unittest.TestCase):
+    def test_blocked_requests_do_not_count_as_model_calls_or_missing_usage(self):
+        usage = {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110}
+        completed = ModelRequest(1, 2, status=ModelRequestStatus.COMPLETED, usage=usage)
+        blocked = ModelRequest(2, 4, status=ModelRequestStatus.BLOCKED,
+                               context={"count_method": "exact", "prompt_tokens": 9000})
+        for requests, count, expected_usage in (
+            ([blocked], 0, dict.fromkeys(usage, 0)),
+            ([completed, blocked], 1, usage),
+        ):
+            with self.subTest(count=count):
+                result = TurnResult(messages=[], model_requests=requests)
+                before = asdict(result)
+                foundation = measure(result, b"", "a.txt", 0)
+                behavior = metrics(result)
+                for measured in (foundation, behavior):
+                    self.assertEqual(measured["model_requests"], count)
+                    self.assertEqual(measured["usage"], expected_usage)
+                    self.assertEqual(measured["parse_errors"], 0)
+                self.assertEqual(foundation["max_prompt_tokens"], 100 if count else 0)
+                self.assertEqual(behavior["requests_without_usage"], 0)
+                self.assertEqual(asdict(result), before)
+
+    def test_actual_request_with_missing_usage_remains_unknown(self):
+        result = TurnResult(messages=[], model_requests=[
+            ModelRequest(1, 2, status=ModelRequestStatus.MODEL_ERROR),
+            ModelRequest(2, 2, status=ModelRequestStatus.BLOCKED),
+        ])
+        measured = metrics(result)
+        self.assertEqual(measured["model_requests"], 1)
+        self.assertEqual(measured["requests_without_usage"], 1)
+        self.assertTrue(all(v is None for v in measured["usage"].values()))
+
     def setUp(self):
         temporary = TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -81,6 +114,10 @@ class ReadEvaluationTests(unittest.TestCase):
 
     def test_early_answer_ends_turn_and_only_eval_reports_missing_coverage(self):
         model = Mock(spec=LLM)
+        model.measure_context.return_value = {  # Scripted fitting budget; no real tokenizer.
+            "count_method": "exact", "prompt_tokens": 100, "window_tokens": 8000,
+            "response_reserve": 512, "remaining_tokens": 7388,
+        }
         model.settings.return_value = {}
         model.generate.side_effect = [
             LLMResponse('assistant', '', ResponseType.tool_call, tool_calls=[ToolCall('read_file', {'path': 'a.txt'})]),
@@ -99,6 +136,10 @@ class ReadEvaluationTests(unittest.TestCase):
 
     def test_repl_preserves_input_without_read_command_rewriting(self):
         model = Mock(spec=LLM)
+        model.measure_context.return_value = {  # Scripted fitting budget; no real tokenizer.
+            "count_method": "exact", "prompt_tokens": 100, "window_tokens": 8000,
+            "response_reserve": 512, "remaining_tokens": 7388,
+        }
         model.settings.return_value = {}
         model.generate.return_value = LLMResponse("assistant", "Answer", ResponseType.direct)
         agent = Agent(model, registry=self.registry)

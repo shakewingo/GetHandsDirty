@@ -1,10 +1,11 @@
 import json
 import unittest
+from copy import deepcopy
 
 from unittest.mock import Mock, patch
 from agent_from_scratch.llm import LLM, LLMResponse, ResponseError, ResponseErrorCode, RESPONSE_ERROR_MESSAGES
 from agent_from_scratch.tools.base import ToolCall
-from agent_from_scratch.config import QWEN_TEMPLATE
+from agent_from_scratch.config import CHAT_TEMPLATE_PATH
 from agent_from_scratch.llm import install_qwen_template
 
 
@@ -204,6 +205,97 @@ class ResponseTests(unittest.TestCase):
 
 
 class GenerateTests(unittest.TestCase):
+    def measured_model(self):
+        """Real project formatter/llama.cpp handler with a deterministic tokenizer."""
+        llm = LLM.__new__(LLM)
+        llm.llm = Mock()
+        llm.temperature, llm.max_tokens, llm.n_ctx = 0, 32, 8000
+        model = llm.llm
+        model.metadata = {"general.architecture": "qwen2"}
+        model.token_eos.return_value, model.token_bos.return_value = 2, 1
+        special_tokens = {2: b"<|im_end|>", 1: b"<|endoftext|>"}
+        model.detokenize.side_effect = lambda ids, special: special_tokens[ids[0]]
+        model.tokenize.side_effect = lambda text, **kwargs: (
+            [next(i for i, value in special_tokens.items() if value == text)]
+            if text in special_tokens.values() else list(text)
+        )
+        llm._chat_formatter, llm.chat_template_sha256 = install_qwen_template(model, CHAT_TEMPLATE_PATH)
+        llm._chat_handler = model.chat_handler
+        model.tokenize.reset_mock()
+        model.create_chat_completion.side_effect = lambda **kwargs: model.chat_handler(llama=model, **kwargs)
+
+        def complete(**kwargs):
+            count = len(kwargs["prompt"])
+            return {"id": "test", "created": 0, "model": "fake", "object": "text_completion",
+                    "choices": [{"text": "Done", "index": 0, "finish_reason": "stop", "logprobs": None}],
+                    "usage": {"prompt_tokens": count, "completion_tokens": 1, "total_tokens": count + 1}}
+
+        model.create_completion.side_effect = complete
+        return llm
+
+    def test_measurement_matches_generation_handler_with_schemas_and_tool_results(self):
+        from agent_from_scratch.tools.register import default_registry
+        base = [{"role": "system", "content": "System"}, {"role": "user", "content": "你好, calculate."}]
+        call = LLMResponse("assistant", "Checking", "tool_call", tool_calls=[
+            ToolCall("calculator", {"left": 2, "right": 2, "operation": "add"}, "one")])
+        after_tools = [*base, call.to_message(),
+                       {"role": "tool", "tool_call_id": "one", "content": '{"output": "4 <|im_end|>"}'},
+                       {"role": "user", "content": "[Runtime feedback] Retry."}]
+        for messages, tools in ((base, {}), (base, default_registry.schemas()),
+                                (after_tools, default_registry.schemas())):
+            with self.subTest(tool_count=len(tools), messages=len(messages)):
+                llm = self.measured_model()
+                original = deepcopy(messages)
+                measured = llm.measure_context(messages, tools)
+                llm.llm.create_chat_completion.assert_not_called()
+                llm.llm.create_completion.assert_not_called()
+                counter_tokenize = llm.llm.tokenize.call_args
+                self.assertEqual(counter_tokenize.kwargs, {"add_bos": False, "special": True})
+                self.assertTrue(counter_tokenize.args[0].endswith(b"<|im_start|>assistant\n"))
+                response = llm.generate(messages, tools)
+                self.assertEqual(llm.llm.tokenize.call_args, counter_tokenize)
+                self.assertEqual(measured["prompt_tokens"], response.usage["prompt_tokens"])
+                self.assertEqual(measured["count_method"], "exact")
+                self.assertEqual(measured["remaining_tokens"], 8000 - measured["prompt_tokens"] - 32)
+                self.assertEqual(messages, original)
+
+    def test_measurement_records_negative_room_without_enforcing_a_limit(self):
+        llm = self.measured_model()
+        llm.n_ctx = 16
+        measured = llm.measure_context([{"role": "user", "content": "More than enough text"}], {})
+        self.assertLess(measured["remaining_tokens"], 0)
+        self.assertEqual(measured["window_tokens"], 16)
+        llm.llm.create_completion.assert_not_called()
+
+    def test_unavailable_formatter_and_unbounded_output_are_not_guessed(self):
+        llm = self.measured_model()
+        llm.max_tokens = 0
+        measured = llm.measure_context([{"role": "user", "content": "Hi"}], {})
+        self.assertEqual(measured["count_method"], "exact")
+        self.assertIsNone(measured["response_reserve"])
+        self.assertIsNone(measured["remaining_tokens"])
+        for missing_formatter in (False, True):
+            with self.subTest(missing_formatter=missing_formatter):
+                llm = self.measured_model()
+                if missing_formatter:
+                    llm._chat_formatter = None
+                else:
+                    llm.llm.chat_handler = lambda **kwargs: None
+                measured = llm.measure_context([{"role": "user", "content": "Hi"}], {})
+                self.assertEqual(measured["count_method"], "unavailable")
+                self.assertIsNone(measured["prompt_tokens"])
+                self.assertIsNone(measured["remaining_tokens"])
+                llm.llm.tokenize.assert_not_called()
+
+    def test_window_uses_effective_backend_size(self):
+        with patch("llama_cpp.Llama") as backend:
+            backend.return_value.n_ctx.return_value = 4096
+            llm = LLM(n_ctx=0, chat_template_path=None)
+        self.assertEqual(llm.n_ctx, 4096)
+        measured = llm.measure_context([{"role": "user", "content": "Hi"}], {})
+        self.assertEqual(measured["window_tokens"], 4096)
+        self.assertEqual(measured["count_method"], "unavailable")
+
     def test_template_uses_public_tokenizer_and_rejects_wrong_end_token(self):
         model = Mock()
         model.metadata = {"general.architecture": "qwen2"}
@@ -211,11 +303,13 @@ class GenerateTests(unittest.TestCase):
         tokens = {2: b"<|im_end|>", 1: b"<|endoftext|>"}
         model.detokenize.side_effect = lambda ids, special: tokens[ids[0]]
         model.tokenize.side_effect = lambda text, **kwargs: [next(i for i, value in tokens.items() if value == text)]
-        self.assertEqual(len(install_qwen_template(model, QWEN_TEMPLATE)), 64)
+        formatter, digest = install_qwen_template(model, CHAT_TEMPLATE_PATH)
+        self.assertEqual(len(digest), 64)
+        self.assertTrue(callable(formatter))
         self.assertTrue(callable(model.chat_handler))
         tokens[2] = b"wrong-end-token"
         with self.assertRaisesRegex(ValueError, "end token"):
-            install_qwen_template(model, QWEN_TEMPLATE)
+            install_qwen_template(model, CHAT_TEMPLATE_PATH)
 
     def test_template_renders_arguments_once_without_changing_values(self):
         from llama_cpp.llama_chat_format import Jinja2ChatFormatter
@@ -223,7 +317,7 @@ class GenerateTests(unittest.TestCase):
         arguments = {"path": "a.txt", "content": 'a "quote"\\slash\n你好'}
         call = LLMResponse('assistant', '', 'tool_call', tool_calls=[ToolCall('write_file', arguments)])
         formatter = Jinja2ChatFormatter(
-            template=QWEN_TEMPLATE.read_text(), eos_token="<|im_end|>",
+            template=CHAT_TEMPLATE_PATH.read_text(), eos_token="<|im_end|>",
             bos_token="<|endoftext|>",
         )
         rendered = formatter(messages=[{"role": "user", "content": "Write"}, call.to_message()],
@@ -252,7 +346,7 @@ class GenerateTests(unittest.TestCase):
         arguments = {"path": "a", "content": marker}
         call = LLMResponse('assistant', '', 'tool_call', tool_calls=[ToolCall('write_file', arguments, 'c1')])
         observation = {"content": marker}
-        formatter = Jinja2ChatFormatter(template=QWEN_TEMPLATE.read_text(),
+        formatter = Jinja2ChatFormatter(template=CHAT_TEMPLATE_PATH.read_text(),
                                        eos_token="<|im_end|>", bos_token="<|endoftext|>")
         rendered = formatter(messages=[{"role": "user", "content": "Test"}, call.to_message(),
                                        {"role": "tool", "tool_call_id": "c1", "content": json.dumps(observation)}],

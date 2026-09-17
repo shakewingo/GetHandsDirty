@@ -249,6 +249,10 @@ class WebTests(unittest.TestCase):
     def test_web_failure_then_fetch_and_write_through_the_ordinary_loop(self):
         with TemporaryDirectory() as directory:
             model = Mock(spec=LLM)
+            model.measure_context.return_value = {  # Scripted fitting budget; no real tokenizer.
+                "count_method": "exact", "prompt_tokens": 100, "window_tokens": 8000,
+                "response_reserve": 512, "remaining_tokens": 7388,
+            }
             model.settings.return_value = {}
             step = 0
 

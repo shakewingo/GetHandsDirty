@@ -224,6 +224,10 @@ class GeneralFileTests(unittest.TestCase):
     def test_read_edit_read_uses_the_ordinary_loop_and_traces_versions(self):
         (self.workspace / "config.txt").write_text("value=1\n")
         model = Mock(spec=LLM)
+        model.measure_context.return_value = {  # Scripted fitting budget; no real tokenizer.
+            "count_method": "exact", "prompt_tokens": 100, "window_tokens": 8000,
+            "response_reserve": 512, "remaining_tokens": 7388,
+        }
         model.settings.return_value = {}
         model.generate.side_effect = [
             LLMResponse('assistant', '', ResponseType.tool_call, tool_calls=[ToolCall('read_file', {'path': 'config.txt'})]),

@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 
 from ..agent import Agent
+from ..context import InstructionConfig
 from ..llm import LLM
 from ..tools.calculator import CalculatorTool
 from ..tools.files import EditFileTool, ListFilesTool, ReadFileTool, WriteFileTool
@@ -34,6 +35,7 @@ def main():
     parser.add_argument("--state", type=Path, default=Path("outputs/tools-demo-state"))
     parser.add_argument("--allow-host", action="append", default=[], help="Exact HTTPS host; repeat to add more")
     parser.add_argument("--general-tools", action="store_true", help="General shell and web search/fetch instead of fixture tools")
+    parser.add_argument("--user-instructions", type=Path, help="Explicit UTF-8 user defaults file")
     args = parser.parse_args()
     if args.state.resolve().is_relative_to(args.workspace.resolve()):
         parser.error("State must be outside the writable workspace.")
@@ -45,9 +47,10 @@ def main():
         ])
     else:
         registry = demo_registry(args.workspace, set(args.allow_host))
+    instruction_config = InstructionConfig(workspace=args.workspace, user_path=args.user_instructions)
     model = LLM()
     try:
-        Agent(model, str(args.state), registry=registry).run_repl()
+        Agent(model, str(args.state), registry=registry, instruction_config=instruction_config).run_repl()
     finally:
         model.close()
 

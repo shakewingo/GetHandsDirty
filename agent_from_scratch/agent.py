@@ -14,10 +14,11 @@ from loguru import logger
 from .config import AgentLimits
 from .llm import LLM, ResponseError, ResponseErrorCode, ResponseType
 from .session import SessionStore
+from .context import ContextBuilder, InstructionConfig, InstructionLoadError, load_instructions
 from .tools.base import ToolErrorCode, ToolRegistry, ToolResult
-from .tools.register import default_registry
+from .tools.register import default_registry, workspace as default_workspace
 from .trace import ModelRequest, ModelRequestStatus, RunStopReason, TraceStore, TurnResult
-from .utils import color_label, render_prompt
+from .utils import color_label
 
 if TYPE_CHECKING:
     from llama_cpp import ChatCompletionRequestMessage
@@ -47,11 +48,13 @@ def recovery_feedback(error: ResponseError) -> str:
 
 class Agent:
     def __init__(self, llm: LLM, state_dir: str | None = None,
-                 *, registry: ToolRegistry | None = None, limits: AgentLimits = AgentLimits()):
+                 *, registry: ToolRegistry | None = None, limits: AgentLimits = AgentLimits(),
+                 instruction_config: InstructionConfig = InstructionConfig()):
         self.llm = llm
         self.limits = limits
         self.state_dir = state_dir
         self.registry = default_registry if registry is None else registry
+        self.instruction_config = instruction_config
 
     def execute_tool(self, tool_name: Any, tool_params: Any, call_id: str = "") -> ToolResult:
         """Single dispatch point; evaluations override it to enforce read-only runs."""
@@ -62,16 +65,18 @@ class Agent:
                  on_progress: Callable[[str], None] | None = None) -> TurnResult:
         """Execute supplied history; session_id associates and saves this run, not loads history."""
         started = monotonic()
+        instructions, instruction_metadata = load_instructions(self.instruction_config)
         result = TurnResult(
-            messages=[{"role": "system", "content": render_prompt("system.md")},
+            messages=[{"role": "system", "content": instructions},
                       *deepcopy(history or []), {"role": "user", "content": user_input}],
             run_id=uuid4().hex, session_id=session_id, input=user_input,
             started_at=datetime.now(timezone.utc).isoformat(),
-            settings={**self.llm.settings(), **asdict(self.limits)},
+            settings={**self.llm.settings(), **asdict(self.limits), "instructions": instruction_metadata},
         )
         trace = TraceStore(Path(self.state_dir, "runs") if self.state_dir is not None else None)
+
         try:
-            self._run_turn(result, on_progress)
+            self._run_turn(result, history_length=len(history or []), on_progress=on_progress)
         except KeyboardInterrupt as error:
             # A completed model request can still be followed by an interrupted tool.
             if result.model_requests and result.model_requests[-1].status == ModelRequestStatus.STARTED:
@@ -102,6 +107,35 @@ class Agent:
             result.messages.append(observation.to_message())
             interrupted = False
 
+    def _measure_context_limit(self, result: TurnResult, request: ModelRequest) -> tuple[TurnResult, ModelRequest]:
+        budget = request.context or {}
+        remaining = budget.get("remaining_tokens")
+        margin = self.limits.context_margin_tokens
+        if budget.get("count_method") != "exact" or remaining is None:
+            detail = (
+                "Cannot establish request fit: exact prompt measurement "
+                "and a bounded output reserve are required."
+            )
+            error_code = "context_unavailable"
+        elif remaining < margin:
+            detail = (
+                "Request exceeds the context budget: "
+                f"prompt={budget['prompt_tokens']}, "
+                f"output_reserve={budget['response_reserve']}, "
+                f"margin={margin}, "
+                f"window={budget['window_tokens']}."
+            )
+            error_code = "context_limit"
+        else:
+            detail, error_code = None, None
+        if detail is not None:
+            request.status = ModelRequestStatus.BLOCKED
+            request.error_code = error_code
+            request.error_message = detail
+            result.stop_reason = RunStopReason.CONTEXT_LIMIT
+            result.error_message = detail
+        return result, request
+
     def _save_session(self, result: TurnResult, history_length: int) -> None:
         if self.state_dir is None or result.session_id is None:
             return
@@ -115,11 +149,16 @@ class Agent:
             logger.error("Could not save session for run {}; this turn will not be remembered: {}",
                          result.run_id, error)
 
-    def _run_turn(self, result: TurnResult, on_progress: Callable[[str], None] | None = None) -> None:
-        messages = result.messages
+    def _run_turn(self, result: TurnResult, *, history_length: int,
+                  on_progress: Callable[[str], None] | None = None) -> None:
+        # Keep the original layout for tracing, session saving and evaluators.
+        # Only raw_messages receives new events; prepared views are disposable.
+        raw_messages = result.messages
+        turn_start = 1 + history_length
+        context_builder = ContextBuilder()
         last_failure, failure_count = None, 0
         tool_attempts = 0
-        used_ids = {call["id"] for m in messages for call in m.get("tool_calls", [])}
+        used_ids = {call["id"] for m in raw_messages for call in m.get("tool_calls", [])}
 
         def repeated_failure(key: tuple) -> bool:
             nonlocal last_failure, failure_count
@@ -132,10 +171,23 @@ class Agent:
             return True
 
         for iteration in range(1, self.limits.max_iterations + 1):
-            request = ModelRequest(iteration, len(messages))
+            request = ModelRequest(iteration, len(raw_messages))
             result.model_requests.append(request)
             try:
-                response = self.llm.generate(messages, self.registry.schemas())
+                prepared_messages = context_builder.build_messages(
+                    instructions=raw_messages[:1],
+                    history=raw_messages[1:turn_start],
+                    current_turn=raw_messages[turn_start:],
+                )
+                schemas = self.registry.schemas()
+
+                request.context = self.llm.measure_context(prepared_messages, schemas)
+                result, request = self._measure_context_limit(result, request)
+                if request.status == ModelRequestStatus.BLOCKED:
+                    return
+
+                response = self.llm.generate(prepared_messages, schemas)
+
             except ResponseError as error:
                 request.status = ModelRequestStatus.PARSE_ERROR
                 request.raw_response = error.raw_response
@@ -147,7 +199,7 @@ class Agent:
                     if isinstance(choices, list) and choices and isinstance(choices[0], dict):
                         request.finish_reason = choices[0].get("finish_reason")
                 logger.error("LLM response error: {}", error)
-                messages.append({"role": "user", "content": recovery_feedback(error)})
+                raw_messages.append({"role": "user", "content": recovery_feedback(error)})
                 if repeated_failure(("response", error.code)):
                     return
                 continue
@@ -170,7 +222,7 @@ class Agent:
             request.usage = LLM.read_usage(response.usage)
             request.finish_reason = response.finish_reason
             request.raw_response = response.raw_response
-            messages.append(response.to_message())
+            raw_messages.append(response.to_message())
             if response.type == ResponseType.tool_call:
                 if response.content and on_progress is not None:
                     on_progress(response.content)
@@ -187,7 +239,8 @@ class Agent:
                         logger.debug("Tool executed successfully: {} ({})", tool_result.tool_name, tool_result.call_id)
                     else:
                         logger.error("Tool execution failed due to: {}", tool_result.error_message)
-                    messages.append(tool_result.to_message())
+                    raw_messages.append(tool_result.to_message())
+
                     if tool_result.ok:
                         last_failure, failure_count = None, 0
                     else:
@@ -242,8 +295,12 @@ class Agent:
             except (OSError, ValueError) as error:
                 print(f"Session unavailable: {error}. Use /new, /reset, or /session <id> to recover.")
                 continue
-            result = self.run_turn(user_input, history, session_id=session_id,
-                                   on_progress=lambda text: print(f"{agent_label} {text}"))
+            try:
+                result = self.run_turn(user_input, history, session_id=session_id,
+                                       on_progress=lambda text: print(f"{agent_label} {text}"))
+            except InstructionLoadError as error:
+                print(f"Instructions unavailable: {error}")
+                continue
             if result.stop_reason == RunStopReason.FINAL_RESPONSE:
                 print(f"{agent_label} {result.final_answer}")
             elif result.stop_reason == RunStopReason.MODEL_ERROR:
@@ -252,13 +309,20 @@ class Agent:
                 print("Stopped: reached maximum iterations.")
             elif result.stop_reason == RunStopReason.INTERRUPTED:
                 print("Turn interrupted.")
+            elif result.stop_reason == RunStopReason.CONTEXT_LIMIT:
+                print(f"Stopped: {result.error_message}")
+                print(
+                    "Completed tool actions remain in effect. "
+                    "This turn is not included in replayable session history."
+                )
             else:
                 print(f"Stopped: {result.stop_reason}. {result.error_message or ''}")
 
 
 if __name__ == "__main__":
     llm = LLM()
-    agent = Agent(llm, state_dir="./outputs/sessions")
+    agent = Agent(llm, state_dir="./outputs/sessions",
+                  instruction_config=InstructionConfig(workspace=default_workspace))
     try:
         agent.run_repl()
     finally:

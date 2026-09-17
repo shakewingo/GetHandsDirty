@@ -29,12 +29,15 @@ metadata records the actual prompt.
 source evidence, allowed changes and split allocation. `splits.json` assigns task skeletons
 before their paired variants; train/test names are reservations, not finished task sets.
 Each task gets a new temporary workspace and empty session state. No memory is implemented yet.
-Read results are capped at 1024 bytes in this suite; writes retain the runtime's 8192-byte cap.
+Read results are capped at 1024 bytes in this suite; writes retain the frozen legacy tools' 8192-byte cap.
 `RecordedWeb` replays extracted results, including a first-request 503. It does not exercise
 DNS/TLS/HTML parsing; the Stage 2A tool tests and live smoke cover those separately.
 The suite retains fixed shell commands, the original recorded-web schema/description,
 and byte-based file tools in `evals/legacy_files.py`. Its 12/17 result does not measure
 the expanded filesystem/shell/search/fetch configuration.
+Its write checks combine `write_file` call evidence with final filesystem snapshots;
+they do not detect every transient change restored by general shell or `edit_file` calls.
+An expanded-tool benchmark needs corresponding verifier coverage before claiming those checks.
 
 The evaluator runs after `Agent.run_turn` returns. It checks JSON types/fields, source byte
 ranges, required execution, no-op behavior and unintended writes, including writes later
@@ -106,15 +109,16 @@ python -m agent_from_scratch.agent
 - `web_search(query, count?)` discovers URLs through `ddgs`, without an API key; returns
   titles, URLs and bounded snippets. Snippets may be stale.
 - `web_fetch(url, extract_mode?)` reads HTTP/HTTPS without a default host list. It supports
-  gzip/deflate and local readability extraction; `extract_mode="text"` keeps all visible
-  text. Limits: 20 seconds, 5 redirects, 262,144 decoded body bytes and 4,096 output characters.
+  gzip/deflate and local readability extraction; `extract_mode="text"` retains navigation
+  in the extracted HTML text. Neither mode evaluates CSS visibility or renders the page.
+  Limits: 20 seconds, 5 redirects, 262,144 decoded body bytes and 4,096 output characters.
   It does not execute JavaScript or sign in; HTTP 403 remains an observable failure.
 
 File tools accept absolute, `~`, and workspace-relative paths. Normal REPL file tools are
 unrestricted; pass `restrict_to_workspace=True` when constructing an isolated file registry.
 The old demo/evaluations retain confined byte-offset tools. Restart and use `/new` after
 this update so old byte-offset messages are not reused as line-based calls. PDF/Office
-extraction is text-only; automatic token budgeting and compaction remain Stage 3 work.
+extraction is text-only. Stage 3A now measures and enforces request fit; compaction remains planned.
 
 Try: `Get China's current time using the local computer clock`, or
 `Create hello.py that prints hello, run it with Python and report the actual output`.
@@ -153,6 +157,37 @@ python -m agent_from_scratch.evals.tools_smoke --output outputs/tools-conversati
 The first command runs three autonomous tasks; the second uses explicit user turns
 and reloads the session between them. Neither is the Stage 2B benchmark. Each saves
 actual traces and artifacts, including failed tasks and false completion claims.
+
+## Stage 3A instruction layers
+
+`context.py` loads the static system prompt, an explicitly configured user defaults file,
+and `AGENTS.md` directly inside the configured workspace. Instructions are loaded once
+per turn in that order, with source hashes in `TurnResult.settings["instructions"]`.
+The message builder uses that snapshot before each generation; files are reread next turn.
+
+The default `python -m agent_from_scratch.agent` REPL uses `agent_from_scratch` as its
+instruction workspace, matching its tools. Library `Agent(...)` calls default to system-only
+instructions; opt in with `instruction_config=InstructionConfig(workspace=..., user_path=...)`
+from `agent_from_scratch.context`. Frozen evaluators do not load personal/workspace rules.
+
+The existing demo accepts an explicit user file and uses its `--workspace` for root rules:
+
+```sh
+python -m agent_from_scratch.examples.tools_demo --general-tools \
+  --workspace outputs/general-demo/workspace --state outputs/general-demo/state \
+  --user-instructions /absolute/path/to/user-rules.md
+```
+
+The workspace must exist. Omit `--user-instructions` to disable that layer. An absent root
+`AGENTS.md` is optional, but a configured user file must exist. Invalid UTF-8, unreadable
+or non-regular files, workspace rule symlinks escaping the root, and oversized sources
+fail before generation. The REPL reports the error and remains usable. Defaults: 8 KiB
+per source and 16 KiB assembled (including labels); these are not token-window guarantees.
+No ancestor discovery, include processing or Jinja rendering occurs in instruction files.
+
+Current explicit requests take priority over saved preferences according to the system
+prompt; source order alone does not enforce compliance. The updated system prompt is a
+new condition and does not inherit the historical restricted-tool 12/17 score.
 
 ## Earlier foundation checks
 
@@ -202,7 +237,17 @@ retaining the 8192-byte schema ceiling; record explicitly requested sizes when c
 Each run is a single `state/runs/<run_id>.jsonl` file (run schema version 3).
 `ModelRequest.call_ids` links all calls in a batch; older schema-2 traces use singular `call_id`.
 Its model_requests include raw_response, status, error_code/error_message,
-finish_reason and reported usage. No success-response or parse-error side files
+finish_reason and reported usage. Each model request also records pre-generation `context`:
+prompt tokens, effective window, configured response reserve and remaining room. This is
+exact for the installed project Qwen formatter; unsupported handlers have unavailable/null
+counts. Stage 3A item 4 blocks generation unless the measured remaining room covers the
+configured margin (default 256 tokens), stopping the turn with `context_limit`.
+Blocked entries stay in the trace but are excluded from model-call and usage metrics.
+Behavioral metrics report zero usage for zero actual calls; actual calls with missing usage
+remain unknown. Completed tool effects and raw results are retained, while unsuccessful
+turns remain excluded from session replay. See the
+[fit enforcement notes](../docs/CONTEXT_STATE_DESIGN.md#implemented-request-fit-enforcement).
+No success-response or parse-error side files
 are created. Session records remain version 1 and contain replayable messages,
 without raw backend envelopes. Old evidence files are not rewritten.
 

@@ -31,6 +31,7 @@ def digest(data: bytes) -> str:
 
 def measure(result, original: bytes, relative_path: str, history_length: int) -> dict:
     """Score completed traces against a frozen fixture; never steer the runtime."""
+    requests = [q for q in result.model_requests if q.status != "blocked"]
     observations, chunks, calls = [], [], {}
     covered = bytearray(len(original))
     matches = True
@@ -65,8 +66,8 @@ def measure(result, original: bytes, relative_path: str, history_length: int) ->
             covered[offset:end] = b"\1" * len(data)
     return {
         "run_id": result.run_id, "stop_reason": result.stop_reason,
-        "model_requests": len(result.model_requests),
-        "parse_errors": sum(q.status == "parse_error" for q in result.model_requests),
+        "model_requests": len(requests),
+        "parse_errors": sum(q.status == "parse_error" for q in requests),
         "tool_errors": [o for o in observations if not o["ok"]],
         "tool_names": [o["tool_name"] for o in observations],
         "read_calls": len(chunks), "offsets": [c["offset"] for c in chunks],
@@ -77,10 +78,10 @@ def measure(result, original: bytes, relative_path: str, history_length: int) ->
         and all(covered[:1024]),
         "elapsed_seconds": result.elapsed_seconds, "error_message": result.error_message,
         "final_answer": result.final_answer, "answer_relevant": None,
-        "usage": {key: sum((q.usage or {}).get(key) or 0 for q in result.model_requests)
+        "usage": {key: sum((q.usage or {}).get(key) or 0 for q in requests)
                   for key in ("prompt_tokens", "completion_tokens", "total_tokens")},
         "max_prompt_tokens": max(((q.usage or {}).get("prompt_tokens") or 0
-                                  for q in result.model_requests), default=0),
+                                  for q in requests), default=0),
     }
 
 

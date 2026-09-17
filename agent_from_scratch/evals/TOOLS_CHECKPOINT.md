@@ -1,5 +1,11 @@
 # Stage 2 tools checkpoint — 2026-09-15
 
+Status reviewed September 16, 2026: **167/167 deterministic tests pass** on the current
+checkout in `transformer-practice`. Sections below retain revision-specific test counts
+and model results; “unchanged” describes that individual change, not all later revisions.
+The structural refactor is recorded at the end. No fresh model or static-analysis run was
+performed for this documentation review. See [STAGE.md](../docs/STAGE.md) for the Stage 3 handoff.
+
 ## Sequential tool batches
 
 Run `2da9f836826345a1a5b05b1616c4f8f3` contained three syntactically valid calls in each
@@ -77,7 +83,8 @@ The default registry now includes `edit_file` alongside general read/write/list 
 `evals/legacy_files.py` for the original demo and evaluators.
 
 - Read uses 1-based line offsets, numbered content, optional encoding, versions and
-  lossless line/character continuation. Defaults: 2,000 lines, 16,000 output characters,
+  line/character continuation that preserves extracted line content, not original newline bytes.
+  Defaults: 2,000 lines, 16,000 content characters (metadata/serialization add overhead),
   100 MiB source-file ceiling. PDF ranges select up to 20 pages and return `next_pages`;
   `document_eof` distinguishes a completed page range from a completed PDF.
 - PDF, DOCX, XLSX and PPTX return extracted text with page/sheet/slide markers as applicable.
@@ -104,7 +111,8 @@ rerun in `nullable-followup/`. A separate directed edit also passed, with artifa
 confirming only the requested value changed. The initial script-repair case still stopped
 with an unexecuted repair in prose. This is an adaptive live smoke, not a new benchmark score.
 
-The system prompt and loop stop policy remain unchanged. Restart the REPL and use `/new`:
+At this filesystem revision, the system prompt and loop stop policy were unchanged.
+Restart the REPL and use `/new`:
 normal `read_file.offset` now means lines, while frozen evaluation offsets still mean bytes.
 Actual token budgeting/compaction remains Stage 3; character limits do not guarantee context fit.
 
@@ -121,10 +129,12 @@ to our synchronous loop and structured `ToolResult`/trace contract.
   4,096 bytes per output stream, process-group cleanup. It runs with local user permissions;
   the configured cwd and file-tool path checks do not sandbox general commands.
 - Fetch uses `httpx` with gzip/deflate, redirects and local `readability-lxml` extraction.
-  `extract_mode="text"` retains all visible text when main-content extraction omits a detail.
+  `extract_mode="text"` includes navigation when main-content extraction omits a detail;
+  it extracts downloaded HTML text without evaluating CSS visibility or rendering JavaScript.
   Defaults: 20 seconds, 5 redirects, 262,144 retained decoded body bytes plus lookahead,
   4,096 returned characters. Results include retrieval time, extractor and truncation.
-- Search uses `ddgs` without an API key: 1–10 source records, bounded titles/snippets,
+- Search uses `ddgs` without an API key: up to the requested 1–10 source records
+  (possibly none), bounded titles/snippets,
   retrieval time and untrusted-content metadata. A search snippet is not a live reading.
   No browser execution, login, remote reader or provider configuration framework is added.
 
@@ -157,7 +167,8 @@ saved. The directed follow-up closed the model explicitly and exited cleanly. Bo
 entry points now release the model in `finally` through `LLM.close()`.
 
 These are live diagnostics, not a replacement benchmark or a general success-rate estimate.
-The system prompt, one-call protocol and final-answer stop policy were not changed.
+At this general-tool revision, the system prompt, one-call protocol and final-answer stop
+policy were unchanged. The sequential-batch section above records the later protocol change.
 The earlier 12/17 remains the restricted fixture-tool baseline. See [README](README.md)
 for installation, fresh-session startup and the general-tools demo.
 
@@ -241,8 +252,9 @@ download/text truncation. The page is live, so this is not a frozen benchmark.
 
 All three returned `final_response` after two model requests; **0/3 task outcomes passed**.
 The untouched fixture remained intact. Raw traces show the difference between a tool
-that executed and a tool-call block embedded in prose. The reviewed parser intentionally
-does not execute such prose examples. No runtime verifier, forced continuation, or prompt
+that executed and a tool-call block embedded in prose. That revision's parser did not
+execute narrated blocks; the current parser accepts unquoted blocks with surrounding narration.
+No runtime verifier, forced continuation, or prompt
 patch was added to turn these failures into apparent successes.
 
 A separate five-turn conversation in `outputs/stage2a-conversation-20260915/` reloads
@@ -257,9 +269,10 @@ Logs: `outputs/stage2a-tests-20260915.log`, `outputs/stage2a-pyright-cli-2026091
 `outputs/stage2a-smoke-20260915.log`. Metadata records settings, prompts, source hashes,
 schemas, final artifacts, and full run traces. Earlier runs are retained separately.
 
-## September 16 structural refactor (no behavior change)
+## September 16 structural refactor
 
-Module paths moved ahead of Stage 3; no runtime logic was changed.
+Module paths moved ahead of Stage 3; ordinary agent entry points retain their decoding
+defaults and loop behavior. The standalone `llm.py` demo default changed as noted below.
 
 - `ToolCall` (with its wire `to_dict`) and `ToolRegistry` now live in `tools/base.py`,
   which holds the whole tool contract. `tools/register.py` keeps only the default wiring.
@@ -269,6 +282,9 @@ Module paths moved ahead of Stage 3; no runtime logic was changed.
   `Agent` takes `limits`; evaluations override per task with `dataclasses.replace`.
   `TurnResult.settings` is now `{**llm.settings(), **asdict(limits)}` — the same keys and
   values as before, built in one place so Stage 3's budgets appear without another edit.
+  Caveat: `max_tool_calls_per_response` is recorded from `AgentLimits`, but parsing uses
+  `config.MAX_TOOL_CALLS_PER_RESPONSE` directly. Both default to 8; overriding just the
+  dataclass field does not alter the parser cap. Reconcile this during budget wiring.
 - `LLM.__init__` defaults now come from `config.py`, so the five entry points call `LLM()`
   instead of retyping `temperature=0, max_tokens=2048, n_ctx=8000`. This also changes
   `llm.py`'s own `__main__` demo, which previously used the unused `0.7 / 512 / 2048` defaults.
@@ -276,7 +292,8 @@ Module paths moved ahead of Stage 3; no runtime logic was changed.
 Verified: **167/167 deterministic tests pass**, unchanged from before the refactor, with no
 test assertion edited (only import lines and the `replace(...)` budget overrides). Pyflakes
 reports no new findings; all runtime, eval and example modules import cleanly.
-**Not re-verified:** the real-model two-task eval could not run on the current host
+**Not re-verified at that refactor checkpoint:** the real-model two-task eval could not
+run on its execution host
 (3 GB RAM, no GPU; the Q4_K_M checkpoint is ~4.7 GB and the process was OOM-killed).
 Rerun `python -m agent_from_scratch.evals.run --output outputs/refactor-check
 --tasks check_fix_clean,check_fix_fault` on the benchmark host before Stage 8 freezes settings.

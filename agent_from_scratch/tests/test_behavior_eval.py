@@ -70,6 +70,10 @@ class BehavioralEvaluationTests(unittest.TestCase):
 
     def run_script(self, task_id, responses):
         model = Mock(spec=LLM)
+        model.measure_context.return_value = {  # Scripted fitting budget; no real tokenizer.
+            "count_method": "exact", "prompt_tokens": 100, "window_tokens": 8000,
+            "response_reserve": 512, "remaining_tokens": 7388,
+        }
         model.settings.return_value = {"backend": "scripted-test"}
         model.generate.side_effect = responses
         self.sequence += 1
@@ -186,6 +190,10 @@ class BehavioralEvaluationTests(unittest.TestCase):
             return next(responses)
 
         model = Mock(spec=LLM)
+        model.measure_context.return_value = {  # Scripted fitting budget; no real tokenizer.
+            "count_method": "exact", "prompt_tokens": 100, "window_tokens": 8000,
+            "response_reserve": 512, "remaining_tokens": 7388,
+        }
         model.settings.return_value = {}
         model.generate.side_effect = generate
         outputs = [self.root / name for name in ("first", "second")]
