@@ -8,7 +8,8 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from agent_from_scratch.context import ContextBuilder, InstructionConfig, InstructionLoadError, load_instructions
+from agent_from_scratch.context import (InstructionConfig, InstructionLoadError, build_messages,
+                                        load_instructions)
 
 if TYPE_CHECKING:
     from llama_cpp import ChatCompletionRequestMessage
@@ -32,7 +33,7 @@ class ContextTests(unittest.TestCase):
             {"role": "user", "content": "[Runtime feedback] Retry."},
         ]
         expected = deepcopy(instructions + history + current_turn)
-        prepared = ContextBuilder().build_messages(
+        prepared = build_messages(
             instructions=instructions, history=history, current_turn=current_turn,
         )
         self.assertEqual(prepared, expected)

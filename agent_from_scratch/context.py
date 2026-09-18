@@ -108,16 +108,14 @@ def load_instructions(config: InstructionConfig) -> tuple[str, dict[str, Any]]:
     return assembled, metadata
 
 
-class ContextBuilder:
-    def build_messages(
-        self,
-        *,
-        instructions: list[ChatCompletionRequestMessage],
-        history: list[ChatCompletionRequestMessage],
-        current_turn: list[ChatCompletionRequestMessage],
-    ) -> list[ChatCompletionRequestMessage]:
-        """Assemble an independent view, including nested tool-call dictionaries."""
-        return deepcopy([*instructions, *history, *current_turn])
+def build_messages(
+    *,
+    instructions: list[ChatCompletionRequestMessage],
+    history: list[ChatCompletionRequestMessage],
+    current_turn: list[ChatCompletionRequestMessage],
+) -> list[ChatCompletionRequestMessage]:
+    """Assemble an independent view, including nested tool-call dictionaries."""
+    return deepcopy([*instructions, *history, *current_turn])
 
 
 @dataclass
@@ -149,8 +147,7 @@ class ContextState:
             # Pin the request even when older exchanges in this turn compact.
             pinned = [self.raw[self.turn_start]] if self.covered > self.turn_start else []
             current = [*pinned, *self.raw[self.covered:]]
-        return ContextBuilder().build_messages(instructions=self.raw[:1], history=history,
-                                              current_turn=current)
+        return build_messages(instructions=self.raw[:1], history=history, current_turn=current)
 
     def compact_boundary(self) -> int:
         """Keep two recent batches and all unsent events; only cut between whole batches."""
