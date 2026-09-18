@@ -116,7 +116,7 @@ class Agent:
             interrupted = False
 
     def _block_on_budget(self, result: TurnResult, request: ModelRequest) -> bool:
-        """Record a hard context-budget block on this request; True when blocked."""
+        """Record a hard context-budget block on this request for later compact; True when blocked."""
         blocked = context_blocker(request.budget, self.limits.context_margin_tokens)
         if blocked is None:
             return False
@@ -248,7 +248,7 @@ class Agent:
             raw_messages.append(response.to_message())
             if response.type == ResponseType.tool_call:
                 if response.content and on_progress is not None:
-                    on_progress(response.content)
+                    on_progress(response.content) # print out assistant's any extra content other than just calling tools
                 for call in response.tool_calls:
                     if tool_attempts >= self.limits.max_tool_calls:
                         self._finish_pending_tools(result, "Turn tool-call budget exhausted.")

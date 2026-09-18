@@ -45,8 +45,9 @@ class ModelRequest:
     error_code: str | None = None
     error_message: str | None = None
 
-    # Pre-generation measurement for later action like compact, distinct from the backend's post-generation usage.
-    context: dict[str, Any] | None = None
+    # Pre-generation measurement for later action like compact, distinct from the backend's
+    # post-generation usage. Recorded as "context" in schema_version 4 and earlier records.
+    budget: dict[str, Any] | None = None
     purpose: str = "agent"
     input_messages: list | None = None  # None in legacy records: use the raw prefix.
     tools: dict | None = None
@@ -70,7 +71,7 @@ class TurnResult:
     run_id: str = ""
     elapsed_seconds: float = 0.0
     model_requests: list[ModelRequest] = field(default_factory=list)
-    schema_version: int = 4
+    schema_version: int = 5  # 5 renamed ModelRequest.context to budget.
     session_id: str | None = None
     input: str = ""
     started_at: str = ""

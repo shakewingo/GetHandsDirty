@@ -184,7 +184,7 @@ class ContextState:
                 safe.add(index + 1)
         # Policy. A ceiling, not a legal cut: each term withholds evidence this attempt
         # is unwilling to summarize -- what the actor has never seen, and the two most
-        # recent batches it still needs for continuity.
+        # recent batches (tool calling + execution) it still needs for continuity.
         cutoff = min(self.last_sent, starts[-2] if len(starts) >= 2 else
                      starts[0] if starts else len(self.raw))
         # First replace old turns; ongoing-turn exchanges can compact on a later attempt.
