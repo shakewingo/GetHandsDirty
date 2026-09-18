@@ -58,11 +58,12 @@ class ToolWorkflowTests(unittest.TestCase):
             self.assertEqual(json.loads((workspace / "config.json").read_text()),
                              {"output": "report.txt", "retries": 3})
             saved = TraceStore(root / "state/runs").load_run(result.run_id)
+            assert saved is not None
             requests = [m["tool_calls"][0]["id"] for m in saved["messages"] if m.get("tool_calls")]
             observations = [m for m in saved["messages"] if m["role"] == "tool"]
             self.assertEqual(requests, [m["tool_call_id"] for m in observations])
             self.assertEqual(len(set(requests)), 4)
-            self.assertEqual([json.loads(m["content"])["ok"] for m in observations], [False, True, True, True])
+            self.assertEqual([json.loads(m.get("content") or "")["ok"] for m in observations], [False, True, True, True])
 
     def test_demo_refuses_to_put_trusted_command_inside_writable_workspace(self):
         with self.assertRaisesRegex(ValueError, "outside"):

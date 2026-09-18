@@ -27,7 +27,7 @@ class WebTests(unittest.TestCase):
         page = (Path(__file__).parent / "fixtures/page.html").read_bytes()
 
         class Handler(BaseHTTPRequestHandler):
-            def log_message(self, *args):
+            def log_message(self, format, *args):
                 pass
 
             def do_GET(self):
@@ -232,6 +232,7 @@ class WebTests(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertEqual(result.output["status"], 403)
         self.assertEqual(result.output["text"], "")
+        assert result.error_message is not None
         self.assertIn("another source", result.error_message)
         self.assertTrue(all(c.closed for c in self.connections))
 
@@ -240,6 +241,7 @@ class WebTests(unittest.TestCase):
         try:
             result = self.fetch("/plain")
             self.assertFalse(result.ok)
+            assert result.error_message is not None
             self.assertIn("existing real-time timer", result.error_message)
             self.assertGreater(signal.getitimer(signal.ITIMER_REAL)[0], 20)
             self.connect.assert_not_called()
@@ -273,7 +275,7 @@ class WebTests(unittest.TestCase):
             result = Agent(model, registry=ToolRegistry([self.tool, WriteFileTool(directory)])).run_turn("Fetch and save the page")
             self.assertEqual(result.stop_reason, "final_response")
             self.assertIn("Release: 2A & tools.", (Path(directory) / "note.txt").read_text())
-            self.assertEqual([json.loads(m["content"])["ok"] for m in result.messages if m["role"] == "tool"],
+            self.assertEqual([json.loads(m.get("content") or "")["ok"] for m in result.messages if m["role"] == "tool"],
                              [False, True, True])
 
 

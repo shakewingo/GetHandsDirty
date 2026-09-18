@@ -234,7 +234,12 @@ Output must be outside the workspace. File hashes detect side effects, and a cha
 target aborts the remaining comparison. `--read-bytes` changes the default while
 retaining the 8192-byte schema ceiling; record explicitly requested sizes when comparing.
 
-Each run is a single `state/runs/<run_id>.jsonl` file (run schema version 3).
+Each run is a single `state/runs/<run_id>.jsonl` file (run schema version 4).
+Requests record `purpose` (`agent`/`compact`), actual `input_messages` and `tools`,
+plus covered/last-sent raw boundaries. Summary requests include before/after budgets.
+For older traces without actual inputs, use the raw `input_message_count` prefix.
+The full raw transcript still supplies session deltas and outcome-verifier evidence;
+summary calls count in request/usage metrics and never create tool observations.
 `ModelRequest.call_ids` links all calls in a batch; older schema-2 traces use singular `call_id`.
 Its model_requests include raw_response, status, error_code/error_message,
 finish_reason and reported usage. Each model request also records pre-generation `context`:

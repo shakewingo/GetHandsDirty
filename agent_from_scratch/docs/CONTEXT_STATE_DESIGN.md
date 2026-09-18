@@ -1,15 +1,15 @@
 # Context semantics and state ownership
 
-Updated September 17, 2026. Stage 3A is implemented; compaction and checkpoint mechanisms
-below are planned. Stage 2's 167-test handoff and
+Updated September 18, 2026. Stage 3A and Stage 3B item 1 are implemented; checkpoints
+remain planned. Stage 2's 167-test handoff and
 historical model-score boundary are recorded in [STAGE.md](STAGE.md).
 
 ## Implemented: one preparation path
 
-`ContextBuilder.build_messages` in `context.py` accepts explicit instruction, completed
-history and current-turn message lists. It deep-copies the assembled view before every
-generation, including after tool results or parser feedback. It performs no storage access,
-model calls, selection or summarization. Memory/summary inputs will be added with those features.
+`ContextBuilder.build_messages` in `context.py` accepts explicit instruction, history
+and current-turn message lists and deep-copies the assembled view. `ContextState.messages()`
+selects raw history or summary + retained suffix before using that builder. The builder
+performs no storage access or model calls; `compact_context()` generates summaries.
 
 `Agent` appends all events to raw `TurnResult.messages`; the prepared list is used only for
 generation. The existing raw layout and public `run_turn` signature are preserved, so
@@ -200,19 +200,21 @@ For Stage 3, introduce only the live state needed by context construction:
 | State | Owner and purpose |
 |---|---|
 | Existing result/request records | Tool/model/turn evidence, linked by call ID and run ID |
-| Small `LoopState`, when needed | Agent owns iteration, repeated-failure and summary-attempt counters; compact cannot reset them |
-| `ContextState` | Context builder owns summary, covered raw boundary, last-sent boundary and prepared view/budget |
+| Agent local variables | Iteration, tool attempts, repeated failures and call IDs remain local; no `LoopState` class |
+| `ContextState` | Owns raw messages, summary, covered and last-sent boundaries, summary-call count and attempted boundary; builds independent inputs |
 | Versioned summary checkpoint | Session store persists summary + raw boundary + source digest/configuration for restart |
 
-The first separation is in place: **raw transcript versus an independent model-facing view**.
-The builder currently preserves all messages, so traces can still reconstruct inputs from
-`input_message_count`, and session saving still slices the raw list using history length.
-Before introducing selection or compaction, preserve an explicit raw turn delta and record
-the actual inputs/schemas for each model request, including purpose (`agent` or `compact`).
-The current prefix-based trace representation cannot describe a shortened or summarized input.
-Update the existing consumers together: `Agent._save_session` in `agent.py`, trace input
-prefixes in `trace.py`, `measure` in `evals/foundation.py`, and `exchanges` in `evals/verify.py`.
-Outcome checks must still see the complete raw current-turn calls/results after compact.
+The separation is in place: **raw transcript versus an independent model-facing view**.
+Stage 3B item 1 adds `ContextState`: summary, covered raw boundary and last actor-sent raw
+boundary. `compact_context()` tracks bounded attempts in that state and builds a candidate
+without editing raw messages, publishing it only after a smaller, fitting prompt is measured.
+Run schema 4 records actual
+inputs/schemas and purpose (`agent`/`compact`); the old raw-prefix
+interpretation remains valid only for older records without `input_messages`.
+Session saving still slices the **raw** list using history length, never a compacted view.
+`measure` in `evals/foundation.py` and `exchanges` in `evals/verify.py` still consume unchanged
+raw evidence; their request/usage accounting includes summary calls. Explicit persisted
+deltas/checkpoints remain Stage 3C. See [implementation and evidence](context-memory.md).
 
 The runtime now stores `LLMResponse.tool_calls: list[ToolCall]` and
 `ModelRequest.call_ids` (run trace schema 3). A model request can yield several ordered

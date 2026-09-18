@@ -1,3 +1,6 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 import json
 import unittest
 from pathlib import Path
@@ -6,6 +9,9 @@ from unittest.mock import patch
 
 from agent_from_scratch.session import SessionStore
 from agent_from_scratch.trace import RunStopReason, TraceStore
+
+if TYPE_CHECKING:
+    from llama_cpp import ChatCompletionRequestMessage
 
 
 class SessionTests(unittest.TestCase):
@@ -47,7 +53,7 @@ class SessionTests(unittest.TestCase):
     def test_failed_append_preserves_previous_session(self):
         with TemporaryDirectory() as directory:
             store = SessionStore(directory)
-            messages = [{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "Hello"}]
+            messages: list[ChatCompletionRequestMessage] = [{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "Hello"}]
             store.append("session_1", "first", messages)
             path = Path(directory) / "session_1.jsonl"
             original = path.read_bytes()
@@ -56,7 +62,7 @@ class SessionTests(unittest.TestCase):
                     store.append("session_1", "second", messages)
             self.assertEqual(path.read_bytes(), original)
             with self.assertRaises(ValueError):
-                store.append("session_1", "bad", [{"role": "user", "content": 42}])
+                store.append("session_1", "bad", json.loads('[{"role": "user", "content": 42}]'))
             self.assertEqual(path.read_bytes(), original)
             self.assertEqual(SessionStore(directory).load_records("session_1")[0]["messages"], messages)
             store.reset("session_1")
@@ -70,7 +76,7 @@ class SessionTests(unittest.TestCase):
             path.write_text(json.dumps(old) + "\n")
             store.append("mixed", "failed", [], stop_reason=RunStopReason.MODEL_ERROR)
             store.append("mixed", "interrupted", [], stop_reason=RunStopReason.INTERRUPTED)
-            latest = [{"role": "assistant", "content": "Blue"}]
+            latest: list[ChatCompletionRequestMessage] = [{"role": "assistant", "content": "Blue"}]
             store.append("mixed", "new", latest, started_at="2026-09-12T00:00:00+00:00")
             self.assertEqual(store.load_history("mixed"), old["messages"] + latest)
             self.assertEqual(len(store.load_records("mixed")), 4)

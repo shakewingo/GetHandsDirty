@@ -31,9 +31,11 @@ MAX_TOOL_CALLS_PER_RESPONSE = 8
 class AgentLimits:
     """Per-turn budgets recorded in `TurnResult.settings`; override with `replace`."""
 
-    max_iterations: int = 20  # max number of model iterations per turn
+    max_iterations: int = 20  # total model calls per turn, including summaries
     max_same_failures: int = 3
     max_tool_calls: int = 40  # max number of tool calls per turn
     max_tool_calls_per_response: int = MAX_TOOL_CALLS_PER_RESPONSE
 
     context_margin_tokens: int = 256  # token margin to reserve in the context window
+    compact_headroom_tokens: int = 512  # try before the actor reaches the hard fit gate
+    max_compact_calls: int = 4  # also charged against max_iterations; one call per attempt

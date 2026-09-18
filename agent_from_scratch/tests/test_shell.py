@@ -27,7 +27,7 @@ class ShellTests(unittest.TestCase):
         self.workspace = self.root / "workspace"
         self.workspace.mkdir()
 
-    def tool(self, code, *, timeout=2, max_bytes=128):
+    def tool(self, code, *, timeout: float = 2, max_bytes=128):
         # Test code is a trusted fixed command, never supplied as a tool argument.
         return ShellTool(self.workspace, {
             "check": Command((sys.executable, "-I", "-c", code), "Check the fixture", timeout),
@@ -122,6 +122,7 @@ class ShellTests(unittest.TestCase):
         self.assertEqual([r["stop_reason"] for r in records], ["interrupted", "final_response"])
         self.assertEqual(records[0]["messages"], [])
         trace = TraceStore(self.root / "state/runs").load_run(records[0]["run_id"])
+        assert trace is not None
         observation = json.loads(trace["messages"][-1]["content"])
         self.assertEqual(observation["error_code"], "interrupted")
         self.assertTrue(observation["output"]["interrupted"])

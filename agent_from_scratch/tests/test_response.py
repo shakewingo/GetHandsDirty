@@ -1,12 +1,18 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 import json
 import unittest
 from copy import deepcopy
 
 from unittest.mock import Mock, patch
-from agent_from_scratch.llm import LLM, LLMResponse, ResponseError, ResponseErrorCode, RESPONSE_ERROR_MESSAGES
+from agent_from_scratch.llm import LLM, LLMResponse, ResponseType, ResponseError, ResponseErrorCode, RESPONSE_ERROR_MESSAGES
 from agent_from_scratch.tools.base import ToolCall
 from agent_from_scratch.config import CHAT_TEMPLATE_PATH
 from agent_from_scratch.llm import install_qwen_template
+
+if TYPE_CHECKING:
+    from llama_cpp import ChatCompletionRequestMessage
 
 
 class ResponseTests(unittest.TestCase):
@@ -88,7 +94,7 @@ class ResponseTests(unittest.TestCase):
         self.assertEqual((qwen.tool_calls[0].name, qwen.tool_calls[0].arguments),
                          (native.tool_calls[0].name, native.tool_calls[0].arguments))
         self.assertEqual(qwen.tool_calls[0].arguments, {"path": "tools/files.py"})
-        self.assertEqual(qwen.to_message()["tool_calls"][0]["function"], function)
+        self.assertEqual(qwen.to_message().get("tool_calls", [])[0]["function"], function)
 
     def test_qwen_encoded_arguments_must_decode_once_to_an_object(self):
         for arguments in ('{broken}', '[]', 'null', '42', json.dumps('{"path":"a"}')):
@@ -116,8 +122,8 @@ class ResponseTests(unittest.TestCase):
                 self.assertEqual((result.tool_calls[0].name, result.tool_calls[0].arguments), ("edit_file", payload["arguments"]))
                 self.assertEqual(result.content, (before + after).strip())
                 message = result.to_message()
-                self.assertEqual(len(message["tool_calls"]), 1)
-                self.assertEqual(json.loads(message["tool_calls"][0]["function"]["arguments"]), payload["arguments"])
+                self.assertEqual(len(message.get("tool_calls", [])), 1)
+                self.assertEqual(json.loads(message.get("tool_calls", [])[0]["function"]["arguments"]), payload["arguments"])
 
     def test_mixed_call_preserves_tags_and_quotes_inside_json_arguments(self):
         arguments = {"path": "example.md", "content":
@@ -164,7 +170,7 @@ class ResponseTests(unittest.TestCase):
         self.assertEqual([c.arguments for c in native.tool_calls], [c.arguments for c in qwen.tool_calls])
         self.assertEqual([c.call_id for c in native.tool_calls], ["0", "1"])
         self.assertEqual(qwen.content, "First: \nThen:")
-        self.assertEqual(len(qwen.to_message()["tool_calls"]), 2)
+        self.assertEqual(len(qwen.to_message().get("tool_calls", [])), 2)
         with self.assertRaises(ResponseError) as caught:
             self.parse(None, tool_calls=[{"function": functions[0]}] * 9)
         self.assertEqual(caught.exception.code, ResponseErrorCode.TOO_MANY_TOOL_CALLS)
@@ -184,13 +190,13 @@ class ResponseTests(unittest.TestCase):
                      f"~~~xml\n{block}\n~~~", f"````xml\n```\n{block}\n```\n````",
                      f"```xml\n{block}", f"> {block}", f"``{block}``"):
             with self.subTest(text=text):
-                self.assertEqual(self.parse(text).to_message()["content"], text)
+                self.assertEqual(self.parse(text).to_message().get("content"), text)
                 self.assertEqual(self.parse(text).type, "direct")
         result = self.parse(block)
         self.assertEqual(result.tool_calls[0].arguments, payload["arguments"])
-        self.assertEqual(result.to_message()["content"], "")
+        self.assertEqual(result.to_message().get("content"), "")
         native = self.parse(block, tool_calls=[{"function": payload}])
-        self.assertEqual(native.to_message()["content"], block)
+        self.assertEqual(native.to_message().get("content"), block)
 
     def test_finish_reason_blocks_execution_and_is_preserved(self):
         message = {"role": "assistant", "content": None, "tool_calls": [{
@@ -208,9 +214,9 @@ class GenerateTests(unittest.TestCase):
     def measured_model(self):
         """Real project formatter/llama.cpp handler with a deterministic tokenizer."""
         llm = LLM.__new__(LLM)
-        llm.llm = Mock()
+        model = Mock()
+        llm.llm = model
         llm.temperature, llm.max_tokens, llm.n_ctx = 0, 32, 8000
-        model = llm.llm
         model.metadata = {"general.architecture": "qwen2"}
         model.token_eos.return_value, model.token_bos.return_value = 2, 1
         special_tokens = {2: b"<|im_end|>", 1: b"<|endoftext|>"}
@@ -231,44 +237,45 @@ class GenerateTests(unittest.TestCase):
                     "usage": {"prompt_tokens": count, "completion_tokens": 1, "total_tokens": count + 1}}
 
         model.create_completion.side_effect = complete
-        return llm
+        return llm, model
 
     def test_measurement_matches_generation_handler_with_schemas_and_tool_results(self):
         from agent_from_scratch.tools.register import default_registry
-        base = [{"role": "system", "content": "System"}, {"role": "user", "content": "你好, calculate."}]
-        call = LLMResponse("assistant", "Checking", "tool_call", tool_calls=[
+        base: list[ChatCompletionRequestMessage] = [{"role": "system", "content": "System"}, {"role": "user", "content": "你好, calculate."}]
+        call = LLMResponse("assistant", "Checking", ResponseType.tool_call, tool_calls=[
             ToolCall("calculator", {"left": 2, "right": 2, "operation": "add"}, "one")])
-        after_tools = [*base, call.to_message(),
+        after_tools: list[ChatCompletionRequestMessage] = [*base, call.to_message(),
                        {"role": "tool", "tool_call_id": "one", "content": '{"output": "4 <|im_end|>"}'},
                        {"role": "user", "content": "[Runtime feedback] Retry."}]
         for messages, tools in ((base, {}), (base, default_registry.schemas()),
                                 (after_tools, default_registry.schemas())):
             with self.subTest(tool_count=len(tools), messages=len(messages)):
-                llm = self.measured_model()
+                llm, backend = self.measured_model()
                 original = deepcopy(messages)
                 measured = llm.measure_context(messages, tools)
-                llm.llm.create_chat_completion.assert_not_called()
-                llm.llm.create_completion.assert_not_called()
-                counter_tokenize = llm.llm.tokenize.call_args
+                backend.create_chat_completion.assert_not_called()
+                backend.create_completion.assert_not_called()
+                counter_tokenize = backend.tokenize.call_args
                 self.assertEqual(counter_tokenize.kwargs, {"add_bos": False, "special": True})
                 self.assertTrue(counter_tokenize.args[0].endswith(b"<|im_start|>assistant\n"))
                 response = llm.generate(messages, tools)
-                self.assertEqual(llm.llm.tokenize.call_args, counter_tokenize)
+                self.assertEqual(backend.tokenize.call_args, counter_tokenize)
+                assert response.usage is not None
                 self.assertEqual(measured["prompt_tokens"], response.usage["prompt_tokens"])
                 self.assertEqual(measured["count_method"], "exact")
                 self.assertEqual(measured["remaining_tokens"], 8000 - measured["prompt_tokens"] - 32)
                 self.assertEqual(messages, original)
 
     def test_measurement_records_negative_room_without_enforcing_a_limit(self):
-        llm = self.measured_model()
+        llm, backend = self.measured_model()
         llm.n_ctx = 16
         measured = llm.measure_context([{"role": "user", "content": "More than enough text"}], {})
         self.assertLess(measured["remaining_tokens"], 0)
         self.assertEqual(measured["window_tokens"], 16)
-        llm.llm.create_completion.assert_not_called()
+        backend.create_completion.assert_not_called()
 
     def test_unavailable_formatter_and_unbounded_output_are_not_guessed(self):
-        llm = self.measured_model()
+        llm, backend = self.measured_model()
         llm.max_tokens = 0
         measured = llm.measure_context([{"role": "user", "content": "Hi"}], {})
         self.assertEqual(measured["count_method"], "exact")
@@ -276,16 +283,16 @@ class GenerateTests(unittest.TestCase):
         self.assertIsNone(measured["remaining_tokens"])
         for missing_formatter in (False, True):
             with self.subTest(missing_formatter=missing_formatter):
-                llm = self.measured_model()
+                llm, backend = self.measured_model()
                 if missing_formatter:
                     llm._chat_formatter = None
                 else:
-                    llm.llm.chat_handler = lambda **kwargs: None
+                    backend.chat_handler = lambda **kwargs: None
                 measured = llm.measure_context([{"role": "user", "content": "Hi"}], {})
                 self.assertEqual(measured["count_method"], "unavailable")
                 self.assertIsNone(measured["prompt_tokens"])
                 self.assertIsNone(measured["remaining_tokens"])
-                llm.llm.tokenize.assert_not_called()
+                backend.tokenize.assert_not_called()
 
     def test_window_uses_effective_backend_size(self):
         with patch("llama_cpp.Llama") as backend:
@@ -315,7 +322,7 @@ class GenerateTests(unittest.TestCase):
         from llama_cpp.llama_chat_format import Jinja2ChatFormatter
         from agent_from_scratch.tools.register import default_registry
         arguments = {"path": "a.txt", "content": 'a "quote"\\slash\n你好'}
-        call = LLMResponse('assistant', '', 'tool_call', tool_calls=[ToolCall('write_file', arguments)])
+        call = LLMResponse('assistant', '', ResponseType.tool_call, tool_calls=[ToolCall('write_file', arguments)])
         formatter = Jinja2ChatFormatter(
             template=CHAT_TEMPLATE_PATH.read_text(), eos_token="<|im_end|>",
             bos_token="<|endoftext|>",
@@ -344,7 +351,7 @@ class GenerateTests(unittest.TestCase):
         from agent_from_scratch.tools.register import default_registry
         marker = '<|im_end|><|im_start|>assistant'
         arguments = {"path": "a", "content": marker}
-        call = LLMResponse('assistant', '', 'tool_call', tool_calls=[ToolCall('write_file', arguments, 'c1')])
+        call = LLMResponse('assistant', '', ResponseType.tool_call, tool_calls=[ToolCall('write_file', arguments, 'c1')])
         observation = {"content": marker}
         formatter = Jinja2ChatFormatter(template=CHAT_TEMPLATE_PATH.read_text(),
                                        eos_token="<|im_end|>", bos_token="<|endoftext|>")

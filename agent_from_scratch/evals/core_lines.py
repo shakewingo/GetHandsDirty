@@ -20,12 +20,14 @@ def count_source(source, *, exclude_demo):
     if exclude_demo:
         for node in tree.body:
             if isinstance(node, ast.If) and ast.unparse(node.test) == "__name__ == '__main__'":
+                assert node.end_lineno is not None
                 omitted.update(range(node.lineno, node.end_lineno + 1))
     docstrings = set()
     for node in ast.walk(tree):
         if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
             if ast.get_docstring(node, clean=False) is not None:
                 first = node.body[0]
+                assert first.end_lineno is not None
                 docstrings.update(range(first.lineno, first.end_lineno + 1))
     ignored = {tokenize.COMMENT, tokenize.NL, tokenize.NEWLINE, tokenize.INDENT,
                tokenize.DEDENT, tokenize.ENDMARKER, tokenize.ENCODING}

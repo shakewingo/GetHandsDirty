@@ -128,9 +128,15 @@ def metrics(result) -> dict:
     errors = [r for r in rows if not r["ok"]]
     usage = {}
     for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
-        values = [(q.usage or {}).get(key) for q in requests]
         # No calls means zero usage; an actual call with missing usage stays unknown.
-        usage[key] = sum(values) if all(isinstance(v, int) for v in values) else None
+        total = 0
+        for request in requests:
+            value = (request.usage or {}).get(key)
+            if not isinstance(value, int):
+                total = None
+                break
+            total += value
+        usage[key] = total
     invalid = {"invalid_tool_call", "unknown_tool", "invalid_arguments"}
     return {
         "run_id": result.run_id, "stop_reason": result.stop_reason,

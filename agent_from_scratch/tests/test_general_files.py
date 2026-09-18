@@ -121,6 +121,7 @@ class GeneralFileTests(unittest.TestCase):
                            (self.edit, {"old_text": "external", "new_text": "bad"})]:
             result = tool.invoke({"path": "config.txt", "expected_version": version, **args})
             self.assertFalse(result.ok)
+            assert result.error_message is not None
             self.assertIn("version", result.error_message)
         self.assertEqual(target.read_text(), "external")
 
@@ -138,6 +139,7 @@ class GeneralFileTests(unittest.TestCase):
         with patch("agent_from_scratch.tools.files.os.fsync", side_effect=lambda fd: target.write_text("external")):
             result = self.write.invoke({"path": "config.txt", "content": "new"})
         self.assertFalse(result.ok)
+        assert result.error_message is not None
         self.assertIn("changed before replacement", result.error_message)
         self.assertEqual(target.read_text(), "external")
         self.assertEqual(list(self.workspace.iterdir()), [target])
@@ -236,7 +238,7 @@ class GeneralFileTests(unittest.TestCase):
             LLMResponse("assistant", "Updated", ResponseType.direct),
         ]
         result = Agent(model, registry=ToolRegistry([self.read, self.edit])).run_turn("Update the value")
-        observations = [json.loads(m["content"]) for m in result.messages if m["role"] == "tool"]
+        observations = [json.loads(m.get("content") or "") for m in result.messages if m["role"] == "tool"]
         self.assertEqual([o["ok"] for o in observations], [True, True, True])
         self.assertNotEqual(observations[0]["output"]["version"], observations[2]["output"]["version"])
         self.assertEqual(observations[2]["output"]["content"], "1| value=2")
@@ -258,7 +260,7 @@ class DocumentReadTests(unittest.TestCase):
         table.cell(0, 0).text = "command"
         table.cell(0, 1).text = "python app.py"
         document.add_paragraph("End here")
-        document.save(self.root / "guide.docx")
+        document.save(str(self.root / "guide.docx"))
         first = self.read.invoke({"path": "guide.docx", "limit": 2}).output
         self.assertEqual(first["content"], "1| Start here\n2| command | python app.py")
         self.assertFalse(first["eof"])
@@ -271,6 +273,7 @@ class DocumentReadTests(unittest.TestCase):
 
         workbook = Workbook()
         sheet = workbook.active
+        assert sheet is not None
         sheet.title = "Data"
         sheet.append(["name", "value"])
         sheet.append(["alpha", 3])
@@ -292,7 +295,7 @@ class DocumentReadTests(unittest.TestCase):
         slide.shapes.add_textbox(Inches(1), Inches(1), Inches(4), Inches(1)).text = "Tool design"
         table = slide.shapes.add_table(1, 2, Inches(1), Inches(2), Inches(4), Inches(1)).table
         table.cell(0, 0).text, table.cell(0, 1).text = "loop", "trace"
-        presentation.save(self.root / "slides.pptx")
+        presentation.save(str(self.root / "slides.pptx"))
         result = self.read.invoke({"path": "slides.pptx"})
         self.assertTrue(result.ok, result.error_message)
         self.assertIn("Slide 1", result.output["content"])

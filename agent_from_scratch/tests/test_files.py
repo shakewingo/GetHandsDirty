@@ -142,7 +142,9 @@ class FileToolTests(unittest.TestCase):
                 result = self.registry.invoke("read_file", {"path": "a.txt", **extra})
                 self.assertEqual(result.error_code, ToolErrorCode.INVALID_ARGUMENTS)
                 opened.assert_not_called()
+        assert result.error_message is not None
         self.assertIn("Allowed fields", result.error_message)
+        assert result.error_message is not None
         self.assertIn("chunk_size", result.error_message)
         result = self.registry.invoke("read_file", {"path": "a.txt", "chunk_size": 4})
         self.assertEqual(result.output["content"], "1234")
@@ -173,6 +175,7 @@ class FileToolTests(unittest.TestCase):
         with patch("agent_from_scratch.evals.legacy_files.fstat", side_effect=[before, changed]):
             result = self.registry.invoke("read_file", {"path": "a.txt"})
         self.assertFalse(result.ok)
+        assert result.error_message is not None
         self.assertIn("changed", result.error_message)
         self.assertIsNone(result.output)
 
@@ -180,7 +183,12 @@ class FileToolTests(unittest.TestCase):
         content = "x" * 9562
         (self.workspace / "long.txt").write_text(content)
         tool = ReadFileTool(self.workspace)
-        schema = tool.to_schema()["function"]["parameters"]["properties"]["chunk_size"]
+        parameters = tool.to_schema()["function"]["parameters"]
+        assert isinstance(parameters, dict)
+        properties = parameters["properties"]
+        assert isinstance(properties, dict)
+        schema = properties["chunk_size"]
+        assert isinstance(schema, dict)
         first = tool.invoke({"path": "long.txt"}).output
         second = tool.invoke({"path": "long.txt", "offset": first["next_offset"]}).output
         self.assertEqual(schema["default"], len(first["content"].encode("utf-8")))

@@ -1,3 +1,6 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING, Any
+
 from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
@@ -7,13 +10,16 @@ from unittest.mock import patch
 
 from agent_from_scratch.context import ContextBuilder, InstructionConfig, InstructionLoadError, load_instructions
 
+if TYPE_CHECKING:
+    from llama_cpp import ChatCompletionRequestMessage
+
 
 class ContextTests(unittest.TestCase):
     def test_complete_components_are_independent_down_to_nested_calls(self):
-        instructions = [{"role": "system", "content": "System"}]
-        history = [{"role": "user", "content": "Earlier request"},
+        instructions: list[ChatCompletionRequestMessage] = [{"role": "system", "content": "System"}]
+        history: list[ChatCompletionRequestMessage] = [{"role": "user", "content": "Earlier request"},
                    {"role": "assistant", "content": "Earlier answer"}]
-        current_turn = [
+        current_turn: list[ChatCompletionRequestMessage] = [
             {"role": "user", "content": "Calculate"},
             {"role": "assistant", "content": "Checking", "tool_calls": [
                 {"id": "one", "type": "function", "function": {
@@ -32,7 +38,7 @@ class ContextTests(unittest.TestCase):
         self.assertEqual(prepared, expected)
         prepared[0]["content"] = "Changed instructions"
         prepared[1]["content"] = "Changed history"
-        prepared[4]["tool_calls"][0]["function"]["arguments"] = "{}"
+        prepared[4].get("tool_calls", [])[0]["function"]["arguments"] = "{}"
         prepared[5]["content"] = "Changed observation"
         prepared.pop()
         self.assertEqual(instructions + history + current_turn, expected)
@@ -133,8 +139,11 @@ class InstructionTests(unittest.TestCase):
             load_instructions(config)
 
     def test_configuration_is_fixed_to_resolved_paths_and_valid_caps(self):
-        for kwargs in ({"max_source_bytes": 0}, {"max_total_bytes": -1}, {"max_source_bytes": True},
-                       {"workspace": self.root / "missing"}):
+        invalid_configs: list[dict[str, Any]] = [
+            {"max_source_bytes": 0}, {"max_total_bytes": -1}, {"max_source_bytes": True},
+            {"workspace": self.root / "missing"},
+        ]
+        for kwargs in invalid_configs:
             with self.subTest(kwargs=kwargs), self.assertRaises(InstructionLoadError):
                 InstructionConfig(**kwargs)
         config = InstructionConfig(workspace=self.workspace / ".." / "workspace", user_path=self.user)

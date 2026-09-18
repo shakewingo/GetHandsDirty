@@ -1,3 +1,6 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 from dataclasses import replace
 import json
 import unittest
@@ -15,6 +18,9 @@ from agent_from_scratch.session import SessionStore
 from agent_from_scratch.trace import RunStopReason, TraceStore
 from agent_from_scratch.tools.files import ReadFileTool, WriteFileTool
 from agent_from_scratch.tools.shell import ShellTool
+
+if TYPE_CHECKING:
+    from llama_cpp import ChatCompletionRequestMessage
 
 
 def answer(text="Done"):
@@ -106,13 +112,14 @@ class TurnTests(unittest.TestCase):
                 self.assertEqual(result.model_requests[0].error_code, "context_unavailable")
 
     def test_context_overflow_after_tool_preserves_effects_trace_and_session_history(self):
+        self.agent.limits = replace(self.agent.limits, max_compact_calls=0)
         with TemporaryDirectory() as directory:
             workspace = Path(directory, "workspace")
             workspace.mkdir()
             self.agent.state_dir = directory
             self.agent.registry = ToolRegistry([WriteFileTool(workspace)])
             store = SessionStore(Path(directory, "sessions"))
-            history = [{"role": "user", "content": "Old"}, {"role": "assistant", "content": "Saved"}]
+            history: list[ChatCompletionRequestMessage] = [{"role": "user", "content": "Old"}, {"role": "assistant", "content": "Saved"}]
             store.append("budget", "old", history)
             self.model.measure_context.side_effect = [self.budget(1000), self.budget(-100)]
             self.script(LLMResponse("assistant", "Writing", ResponseType.tool_call, tool_calls=[
@@ -124,11 +131,12 @@ class TurnTests(unittest.TestCase):
             self.assertEqual(execute.call_count, 1)
             self.assertEqual((workspace / "evidence.txt").read_text(), "written")
             observation = result.messages[-1]
-            self.assertEqual(observation["role"], "tool")
-            self.assertTrue(json.loads(observation["content"])["ok"])
+            assert observation["role"] == "tool"
+            self.assertTrue(json.loads(observation.get("content") or "")["ok"])
             self.assertEqual(self.model.measure_context.call_args.args[0][-1], observation)
             self.assertEqual(store.load_history("budget"), history)
             trace = TraceStore(Path(directory, "runs")).load_run(result.run_id)
+            assert trace is not None
             self.assertEqual(trace["messages"], result.messages)
             blocked = trace["model_requests"][-1]
             self.assertEqual(blocked["status"], "blocked")
@@ -147,7 +155,7 @@ class TurnTests(unittest.TestCase):
         self.assertEqual(self.model.generate.call_count, 1)
         execute.assert_not_called()
         self.assertEqual([q.status for q in result.model_requests], ["parse_error", "blocked"])
-        self.assertIn("[Runtime feedback]", result.messages[-1]["content"])
+        self.assertIn("[Runtime feedback]", (result.messages[-1].get("content") or ""))
         self.assertEqual(self.model.measure_context.call_args.args[0][-1], result.messages[-1])
 
     def test_repl_explains_context_stop_without_claiming_rollback(self):
@@ -190,6 +198,7 @@ class TurnTests(unittest.TestCase):
             self.assertIn("[Runtime feedback]", measured_inputs[1][-1]["content"])
             self.assertEqual(measured_inputs[2][-1]["role"], "tool")
             trace = TraceStore(Path(directory) / "runs").load_run(result.run_id)
+            assert trace is not None
             self.assertEqual([r["context"] for r in trace["model_requests"]], stats)
             self.assertTrue(all(r["usage"] is None for r in trace["model_requests"]))
 
@@ -225,6 +234,7 @@ class TurnTests(unittest.TestCase):
             self.assertEqual(first_source["sha256"], sha256(b"Original rules").hexdigest())
             self.assertEqual(second_source["sha256"], sha256(b"Changed rules").hexdigest())
             trace = TraceStore(root / "state/runs").load_run(first.run_id)
+            assert trace is not None
             self.assertEqual(trace["settings"]["instructions"], first.settings["instructions"])
             self.assertEqual(trace["messages"][0], self.seen[0][0])
 
@@ -235,7 +245,7 @@ class TurnTests(unittest.TestCase):
             self.agent.state_dir = str(root / "state")
             self.agent.instruction_config = InstructionConfig(user_path=missing)
             store = SessionStore(root / "state/sessions")
-            history = [{"role": "user", "content": "Old"}, {"role": "assistant", "content": "Saved"}]
+            history: list[ChatCompletionRequestMessage] = [{"role": "user", "content": "Old"}, {"role": "assistant", "content": "Saved"}]
             store.append("rules", "old-run", history)
             before = (root / "state/sessions/rules.jsonl").read_bytes()
             with patch.object(self.agent, "execute_tool") as execute:
@@ -258,7 +268,7 @@ class TurnTests(unittest.TestCase):
             self.model.generate.assert_called_once()
             self.assertIn("Instructions unavailable", output.call_args_list[0].args[0])
             self.assertNotIn("Still rejected", json.dumps(store.load_history("rules")))
-            self.assertEqual(store.load_history("rules")[-1]["content"], "Recovered")
+            self.assertEqual(store.load_history("rules")[-1].get("content"), "Recovered")
 
     def test_prepared_inputs_stay_independent_across_feedback_tools_and_replay(self):
         received = []
@@ -272,7 +282,7 @@ class TurnTests(unittest.TestCase):
             return response
 
         self.model.generate.side_effect = generate
-        history = [{"role": "user", "content": "Earlier request"},
+        history: list[ChatCompletionRequestMessage] = [{"role": "user", "content": "Earlier request"},
                    {"role": "assistant", "content": "Earlier answer"}]
         original_history = deepcopy(history)
         with TemporaryDirectory() as directory:
@@ -292,12 +302,13 @@ class TurnTests(unittest.TestCase):
                 self.assertIsNot(messages, result.messages)
             self.assertEqual(store.load_history("context"), result.messages[1:])
             trace = TraceStore(Path(directory) / "runs").load_run(result.run_id)
+            assert trace is not None
             self.assertEqual(trace["messages"], result.messages)
             self.assertEqual(history, original_history)
 
     def test_backend_input_mutation_does_not_change_raw_history_or_next_request(self):
         received = []
-        history = [{"role": "user", "content": "Remember this"},
+        history: list[ChatCompletionRequestMessage] = [{"role": "user", "content": "Remember this"},
                    {"role": "assistant", "content": "Remembered"}]
 
         def generate(messages, tools):
@@ -313,9 +324,9 @@ class TurnTests(unittest.TestCase):
         self.assertEqual(result.final_answer, "4")
         self.assertEqual(result.messages[1:3], history)
         self.assertEqual(received[1][1:3], history)
-        self.assertEqual(result.messages[3]["content"], "2+2")
+        self.assertEqual(result.messages[3].get("content"), "2+2")
         self.assertEqual(received[1][3]["content"], "2+2")
-        self.assertEqual(history[0]["content"], "Remember this")
+        self.assertEqual(history[0].get("content"), "Remember this")
 
     def test_source_examples_never_reach_tool_execution(self):
         with TemporaryDirectory() as directory:
@@ -369,13 +380,13 @@ class TurnTests(unittest.TestCase):
             self.assertFalse((workspace / "test.py").exists())
             self.assertEqual((workspace / "test.text").read_text(), text)
             observations = [m for m in result.messages if m["role"] == "tool"]
-            self.assertEqual([json.loads(m["content"])["ok"] for m in observations], [True] * 3)
-            self.assertIn(text, json.loads(observations[-1]["content"])["output"]["content"])
+            self.assertEqual([json.loads(m.get("content") or "")["ok"] for m in observations], [True] * 3)
+            self.assertIn(text, json.loads(observations[-1].get("content") or "")["output"]["content"])
             calls = [m for m in result.messages if m.get("tool_calls")]
-            self.assertEqual([m["tool_calls"][0]["id"] for m in calls],
+            self.assertEqual([m.get("tool_calls", [])[0]["id"] for m in calls],
                              [m["tool_call_id"] for m in observations])
-            self.assertIn("Now I will rename it.", calls[1]["content"])
-            self.assertNotIn("<tool_call>", calls[1]["content"])
+            self.assertIn("Now I will rename it.", (calls[1].get("content") or ""))
+            self.assertNotIn("<tool_call>", (calls[1].get("content") or ""))
             trace = json.loads((Path(directory) / "runs" / f"{result.run_id}.jsonl").read_text())
             self.assertEqual(trace["model_requests"][1]["raw_response"], raw(rename))
             self.assertEqual(SessionStore(Path(directory) / "sessions").load_history("rename"), result.messages[1:])
@@ -401,13 +412,14 @@ class TurnTests(unittest.TestCase):
             result = agent.run_turn("Change the output filename", session_id="files")
             self.assertEqual(result.stop_reason, RunStopReason.FINAL_RESPONSE)
             self.assertEqual((workspace / "config.txt").read_text(), "new.txt")
-            observations = [json.loads(m["content"]) for m in result.messages if m["role"] == "tool"]
+            observations = [json.loads(m.get("content") or "") for m in result.messages if m["role"] == "tool"]
             self.assertEqual(observations[0]["output"]["content"], "1| old.txt")
             self.assertTrue(all(item["ok"] for item in observations))
             for request, observation in ((result.messages[2], result.messages[3]),
                                          (result.messages[4], result.messages[5])):
-                self.assertEqual(request["tool_calls"][0]["id"], observation["tool_call_id"])
+                self.assertEqual(request.get("tool_calls", [])[0]["id"], observation.get("tool_call_id"))
             saved = TraceStore(Path(directory, "runs")).load_run(result.run_id)
+            assert saved is not None
             self.assertEqual(saved["messages"], result.messages)
             self.assertEqual(SessionStore(Path(directory, "sessions")).load_history("files"),
                              result.messages[1:])
@@ -434,7 +446,7 @@ class TurnTests(unittest.TestCase):
             self.script(read(limit=4), read(chunk_size=4), read(offset=4, chunk_size=4),
                         read(offset=8, chunk_size=4), answer("Read all notes."))
             result = self.agent.run_turn("Read notes.txt in chunks without asking questions")
-            observations = [json.loads(m["content"]) for m in result.messages if m["role"] == "tool"]
+            observations = [json.loads(m.get("content") or "") for m in result.messages if m["role"] == "tool"]
             self.assertEqual(observations[0]["error_code"], "invalid_arguments")
             self.assertIn("chunk_size", observations[0]["error_message"])
             chunks = [o["output"] for o in observations[1:]]
@@ -458,7 +470,7 @@ class TurnTests(unittest.TestCase):
                 assert "tool_calls" in request
                 self.assertEqual(request["tool_calls"][0]["id"], expected_id)
                 self.assertEqual(observation["tool_call_id"], expected_id)
-                self.assertEqual(json.loads(observation["content"])["call_id"], expected_id)
+                self.assertEqual(json.loads(observation.get("content") or "")["call_id"], expected_id)
                 self.assertNotIn("<tool_call>", request.get("content") or "")
 
     def test_bad_arguments_are_observed_once_then_corrected(self):
@@ -582,37 +594,38 @@ class TurnTests(unittest.TestCase):
     def test_success_and_parse_errors_share_one_run_trace_without_entering_history(self):
         with TemporaryDirectory() as directory:
             self.agent.state_dir = directory
-            self.model = LLM.__new__(LLM)
-            self.model.measure_context = Mock(return_value={  # Scripted fitting budget.
+            model = LLM.__new__(LLM)
+            model.measure_context = Mock(return_value={  # Scripted fitting budget.
                 "count_method": "exact", "prompt_tokens": 100, "window_tokens": 2048,
                 "response_reserve": 512, "remaining_tokens": 1436,
             })
-            self.model.llm = Mock()
-            self.model.temperature = 0.0
-            self.model.max_tokens = 32
-            self.model.model_path = "fake-model"
-            self.model.n_ctx = 2048
-            self.model.n_gpu_layers = 0
-            self.agent.llm = self.model
+            backend = Mock()
+            model.llm = backend
+            model.temperature = 0.0
+            model.max_tokens = 32
+            model.model_path = "fake-model"
+            model.n_ctx = 2048
+            model.n_gpu_layers = 0
+            self.agent.llm = model
             raw = {"choices": [{"message": {"role": "assistant", "content":
                    '<tool_call>{"name":"calculator","arguments":{"left":2**2}}</tool_call>'}}],
                    "usage": {"prompt_tokens": 10, "completion_tokens": 12}}
             runs = Path(directory) / "runs"
 
             def generate(**kwargs):
-                attempt = self.model.llm.create_chat_completion.call_count
+                attempt = backend.create_chat_completion.call_count
                 if attempt < 3:
                     return raw
                 return {"choices": [{"message": {"role": "assistant", "content": "Done"}}]}
 
-            self.model.llm.create_chat_completion.side_effect = generate
+            backend.create_chat_completion.side_effect = generate
             with patch.object(self.agent, "execute_tool") as execute:
                 result = self.agent.run_turn("calculate", [], session_id="trace-test")
             execute.assert_not_called()
             self.assertEqual(result.final_answer, "Done")
             self.assertEqual(len(list(runs.glob("*.jsonl"))), 1)
             trace = json.loads((runs / f"{result.run_id}.jsonl").read_text())
-            self.assertEqual(trace["schema_version"], 3)
+            self.assertEqual(trace["schema_version"], 4)
             self.assertEqual(trace["final_answer"], "Done")
             self.assertEqual(trace["model_requests"][-1]["raw_response"]["choices"][0]
                              ["message"]["content"], "Done")
@@ -798,13 +811,14 @@ class TurnTests(unittest.TestCase):
                              ["final_response", "model_error", "max_iterations", "interrupted", "final_response"])
             for index, record in enumerate(records):
                 trace = traces.load_run(record["run_id"])
+                assert trace is not None
                 self.assertEqual(trace["session_id"], "demo")
                 self.assertEqual(trace["settings"]["model_path"], f"model-{index}")
                 self.assertEqual(trace["started_at"], record["started_at"])
                 self.assertEqual(trace["stop_reason"], record["stop_reason"])
                 if record["stop_reason"] != RunStopReason.FINAL_RESPONSE:
                     self.assertEqual(record["messages"], [])
-            self.assertEqual([m["content"] for m in store.load_history("demo")],
+            self.assertEqual([m.get("content") for m in store.load_history("demo")],
                              ["request-0", "Blue", "request-4", "Still blue"])
             self.assertEqual([m["content"] for m in self.seen[-1]],
                              ["System", "request-0", "Blue", "request-4"])
@@ -824,7 +838,7 @@ class TurnTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             self.agent.state_dir = directory
             store = SessionStore(Path(directory) / "sessions")
-            old = [{"role": "user", "content": "Old"}, {"role": "assistant", "content": "Saved"}]
+            old: list[ChatCompletionRequestMessage] = [{"role": "user", "content": "Old"}, {"role": "assistant", "content": "Saved"}]
             store.append("demo", "old", old)
             original = (Path(directory) / "sessions" / "demo.jsonl").read_bytes()
             self.script(answer("New"))
@@ -833,7 +847,9 @@ class TurnTests(unittest.TestCase):
                 result = self.agent.run_turn("Hi", old, session_id="demo")
             errors.assert_called_once()
             self.assertEqual((Path(directory) / "sessions" / "demo.jsonl").read_bytes(), original)
-            self.assertEqual(TraceStore(Path(directory) / "runs").load_run(result.run_id)["session_id"], "demo")
+            trace = TraceStore(Path(directory) / "runs").load_run(result.run_id)
+            assert trace is not None
+            self.assertEqual(trace["session_id"], "demo")
 
 
 if __name__ == "__main__":

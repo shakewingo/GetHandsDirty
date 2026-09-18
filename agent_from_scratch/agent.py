@@ -14,7 +14,8 @@ from loguru import logger
 from .config import AgentLimits
 from .llm import LLM, ResponseError, ResponseErrorCode, ResponseType
 from .session import SessionStore
-from .context import ContextBuilder, InstructionConfig, InstructionLoadError, load_instructions
+from .context import (ContextState, InstructionConfig, InstructionLoadError,
+                      compact_context, context_fits, load_instructions)
 from .tools.base import ToolErrorCode, ToolRegistry, ToolResult
 from .tools.register import default_registry, workspace as default_workspace
 from .trace import ModelRequest, ModelRequestStatus, RunStopReason, TraceStore, TurnResult
@@ -62,8 +63,12 @@ class Agent:
 
     def run_turn(self, user_input: str, history: list[ChatCompletionRequestMessage] | None = None,
                  *, session_id: str | None = None,
+                 compact: bool = False,
                  on_progress: Callable[[str], None] | None = None) -> TurnResult:
-        """Execute supplied history; session_id associates and saves this run, not loads history."""
+        """Execute supplied history; compact=True requests the same path used under pressure.
+
+        session_id associates and saves this run, not loads history.
+        """
         started = monotonic()
         instructions, instruction_metadata = load_instructions(self.instruction_config)
         result = TurnResult(
@@ -76,7 +81,8 @@ class Agent:
         trace = TraceStore(Path(self.state_dir, "runs") if self.state_dir is not None else None)
 
         try:
-            self._run_turn(result, history_length=len(history or []), on_progress=on_progress)
+            self._run_turn(result, history_length=len(history or []), compact=compact,
+                           on_progress=on_progress)
         except KeyboardInterrupt as error:
             # A completed model request can still be followed by an interrupted tool.
             if result.model_requests and result.model_requests[-1].status == ModelRequestStatus.STARTED:
@@ -149,13 +155,13 @@ class Agent:
             logger.error("Could not save session for run {}; this turn will not be remembered: {}",
                          result.run_id, error)
 
-    def _run_turn(self, result: TurnResult, *, history_length: int,
+    def _run_turn(self, result: TurnResult, *, history_length: int, compact: bool = False,
                   on_progress: Callable[[str], None] | None = None) -> None:
         # Keep the original layout for tracing, session saving and evaluators.
         # Only raw_messages receives new events; prepared views are disposable.
         raw_messages = result.messages
         turn_start = 1 + history_length
-        context_builder = ContextBuilder()
+        context = ContextState(raw_messages, turn_start, last_sent=turn_start)
         last_failure, failure_count = None, 0
         tool_attempts = 0
         used_ids = {call["id"] for m in raw_messages for call in m.get("tool_calls", [])}
@@ -171,21 +177,44 @@ class Agent:
             return True
 
         for iteration in range(1, self.limits.max_iterations + 1):
+            if sum(q.status != ModelRequestStatus.BLOCKED for q in result.model_requests) >= self.limits.max_iterations:
+                return
             request = ModelRequest(iteration, len(raw_messages))
+            request.covered_boundary = context.covered
+            request.last_sent_boundary = context.last_sent
             result.model_requests.append(request)
             try:
-                prepared_messages = context_builder.build_messages(
-                    instructions=raw_messages[:1],
-                    history=raw_messages[1:turn_start],
-                    current_turn=raw_messages[turn_start:],
-                )
+                prepared_messages = context.messages()
                 schemas = self.registry.schemas()
-
                 request.context = self.llm.measure_context(prepared_messages, schemas)
+                pressure = not context_fits(request.context,
+                    self.limits.context_margin_tokens + self.limits.compact_headroom_tokens)
+                if compact or pressure:
+                    result.model_requests.pop()  # Summary request precedes the waiting actor.
+                    previous_attempt = context.attempted_boundary
+                    changed = compact_context(context, self.llm, schemas, self.limits,
+                                              result.model_requests, iteration)
+                    result.model_requests.append(request)
+                    compact = False
+                    if changed:
+                        prepared_messages = context.messages()
+                        request.context = self.llm.measure_context(prepared_messages, schemas)
+                    elif context.attempted_boundary != previous_attempt:
+                        request.status = ModelRequestStatus.BLOCKED
+                        result.stop_reason = RunStopReason.CONTEXT_LIMIT
+                        result.error_message = "Compaction failed; raw evidence and completed tool effects were preserved."
+                        request.error_code, request.error_message = "context_limit", result.error_message
+                        request.input_messages, request.tools = deepcopy(prepared_messages), deepcopy(schemas)
+                        return
+                request.input_messages, request.tools = deepcopy(prepared_messages), deepcopy(schemas)
+                request.covered_boundary = context.covered
                 result, request = self._measure_context_limit(result, request)
                 if request.status == ModelRequestStatus.BLOCKED:
                     return
 
+                # Parsing may fail, but the actor still received this input. Fresh feedback
+                # and subsequent tool results remain beyond this boundary until its next call.
+                context.last_sent = len(raw_messages)
                 response = self.llm.generate(prepared_messages, schemas)
 
             except ResponseError as error:

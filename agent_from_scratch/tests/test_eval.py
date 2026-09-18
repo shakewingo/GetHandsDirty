@@ -16,7 +16,7 @@ from agent_from_scratch.trace import ModelRequest, ModelRequestStatus, TurnResul
 
 class ReadEvaluationTests(unittest.TestCase):
     def test_blocked_requests_do_not_count_as_model_calls_or_missing_usage(self):
-        usage = {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110}
+        usage: dict[str, int | None] = {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110}
         completed = ModelRequest(1, 2, status=ModelRequestStatus.COMPLETED, usage=usage)
         blocked = ModelRequest(2, 4, status=ModelRequestStatus.BLOCKED,
                                context={"count_method": "exact", "prompt_tokens": 9000})

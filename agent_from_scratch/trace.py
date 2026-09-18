@@ -47,6 +47,13 @@ class ModelRequest:
 
     # Pre-generation measurement for later action like compact, distinct from the backend's post-generation usage.
     context: dict[str, Any] | None = None
+    purpose: str = "agent"
+    input_messages: list | None = None  # None in legacy records: use the raw prefix.
+    tools: dict | None = None
+    covered_boundary: int = 1
+    last_sent_boundary: int = 0
+    compact_before: dict | None = None
+    compact_after: dict | None = None
 
 
 @dataclass
@@ -58,7 +65,7 @@ class TurnResult:
     run_id: str = ""
     elapsed_seconds: float = 0.0
     model_requests: list[ModelRequest] = field(default_factory=list)
-    schema_version: int = 3
+    schema_version: int = 4
     session_id: str | None = None
     input: str = ""
     started_at: str = ""
@@ -80,7 +87,7 @@ class TraceStore:
             logger.error("Could not save {}: {}", description, error)
 
     def save_run(self, result: TurnResult) -> None:
-        # Full messages remain available for ModelRequest.input_message_count prefixes.
+        # Raw evidence is unchanged; requests record their actual model-facing inputs.
         self._write(f"{result.run_id}.jsonl", asdict(result), "run trace")
 
     def load_run(self, run_id: str) -> dict | None:

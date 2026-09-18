@@ -41,7 +41,8 @@ class BatchTests(unittest.TestCase):
             "count_method": "exact", "prompt_tokens": 100, "window_tokens": 2048,
             "response_reserve": 512, "remaining_tokens": 1436,
         })
-        self.model.llm = Mock()
+        self.backend = Mock()
+        self.model.llm = self.backend
         self.model.model_path, self.model.temperature, self.model.max_tokens = "fake", 0, 512
         self.model.n_ctx, self.model.n_gpu_layers = 2048, 0
         self.agent = Agent(self.model, str(self.root / "state"), registry=ToolRegistry([
@@ -49,12 +50,12 @@ class BatchTests(unittest.TestCase):
         ]))
 
     def run_script(self, *responses):
-        self.model.llm.create_chat_completion.side_effect = responses
+        self.backend.create_chat_completion.side_effect = responses
         return self.agent.run_turn("Complete the file task.", session_id="batch")
 
     def observations(self, result):
         calls = [call for message in result.messages for call in message.get("tool_calls", [])]
-        observations = [json.loads(m["content"]) for m in result.messages if m["role"] == "tool"]
+        observations = [json.loads(m.get("content") or "") for m in result.messages if m["role"] == "tool"]
         self.assertEqual([c["id"] for c in calls], [o["call_id"] for o in observations])
         self.assertEqual(len({c["id"] for c in calls}), len(calls))
         return observations
@@ -75,7 +76,7 @@ class BatchTests(unittest.TestCase):
         self.assertEqual(result.model_requests[0].raw_response, raw(batch))
         history = SessionStore(self.root / "state/sessions").load_history("batch")
         self.assertEqual(history, result.messages[1:])
-        self.assertEqual(len(history[1]["tool_calls"]), 3)
+        self.assertEqual(len(history[1].get("tool_calls", [])), 3)
         from llama_cpp.llama_chat_format import Jinja2ChatFormatter
         from agent_from_scratch.config import CHAT_TEMPLATE_PATH
         formatter = Jinja2ChatFormatter(template=CHAT_TEMPLATE_PATH.read_text(), eos_token="<|im_end|>", bos_token="<|endoftext|>")
@@ -97,14 +98,14 @@ class BatchTests(unittest.TestCase):
         from agent_from_scratch.evals.verify import metrics
         counts = metrics(result)
         self.assertEqual((counts["tool_calls"], counts["tool_attempts"], counts["skipped_calls"]), (4, 3, 1))
-        second = self.model.llm.create_chat_completion.call_args_list[1].kwargs["messages"]
+        second = self.backend.create_chat_completion.call_args_list[1].kwargs["messages"]
         # Agent keeps one mutable transcript; request prefixes record the exact input boundary.
         prefix = second[:result.model_requests[1].input_message_count]
         self.assertEqual(json.loads(prefix[-1]["content"])["error_code"], "skipped")
 
     def test_repl_shows_narration_before_rename_and_final_path_after(self):
         original, renamed = self.workspace / "test.py", self.workspace / "test.text"
-        self.model.llm.create_chat_completion.side_effect = [
+        self.backend.create_chat_completion.side_effect = [
             raw(block("write_file", path="test.py", content="keep")),
             raw(f"Created {original}.\n" + block("shell", command="mv test.py test.text")),
             raw(f"Renamed to {renamed}."),

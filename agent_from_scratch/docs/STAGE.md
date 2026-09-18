@@ -40,7 +40,7 @@ as pilots; mark missing required outcomes incomplete instead of silently extendi
 | Carried in | **0.5 — complete** | One user request → model/tool/result loop, validated contracts and error feedback |
 | Completed | **1 — complete** | Multiple user turns, persisted Session history, structured per-turn state and traces |
 | Completed | **2 — implementation complete** | General filesystem/shell/search/fetch; restricted 2B baseline 8/17 → 12/17 |
-| In progress | **3 — required** | Stage 3A context assembly, measurement and fit enforcement complete; compact and checkpoint next |
+| In progress | **3 — required** | Stage 3A complete; 3B item 1 automatic/manual compact implemented; continuation hardening and checkpoint next |
 | Next | **4A–4B — required** | Bounded durable memory, search/read, correction/forget, fresh-session recall |
 | Before training | **8 — required** | Resettable benchmark, isolated splits, measured baseline, frozen harness |
 | Research | **9 — draft, required outcome** | Verified trajectories → adapter update/reload → base/adapter comparison |
@@ -278,8 +278,8 @@ the book's token constants and vendor-specific recovery paths are not our config
 Design decisions: [tool-result semantics and state ownership](CONTEXT_STATE_DESIGN.md).
 All four 3A items are implemented: each generation receives an independent prepared
 view with a bounded instruction snapshot loaded at turn start, and its prompt tokens and
-remaining room are recorded and checked before generation. Automatic compaction and
-summary checkpoints remain planned. Defer new CLI commands;
+remaining room are recorded and checked before generation. Stage 3B item 1 now adds
+automatic/manual compaction; summary checkpoints remain planned. Defer new CLI commands;
 a future `/status` may expose usage, reported cache data, session ID and context statistics.
 
 ### 3A — one prompt path and a visible budget
@@ -323,11 +323,21 @@ a future `/status` may expose usage, reported cache data, session ID and context
 
 ### 3B — compact and continue the same task
 
-- [ ] Implement automatic compact and a callable manual compact path with one function and
+- [x] Implement automatic compact and a callable manual compact path with one function and
   `prompts/compact.md`. Summarize goal, constraints, observed progress, errors/corrections,
   and next steps; keep instructions, current request, recent complete tool pairs, and every
   observation not yet sent to the actor. Track that last-sent boundary separately.
   Expose manual compaction through tests/library calls initially; defer a CLI command.
+  `compact_context()` is shared by automatic recovery and `run_turn(..., compact=True)`.
+  Retain two recent tool batches and the unsent raw suffix; one bounded summary call per
+  attempt, at most four per run, charged to the existing request limit. Publish only a
+  smaller fitting view; raw evidence/session deltas stay unchanged. **203 deterministic
+  tests pass**. Real-model retained/lost facts and scope limits: [compact evidence](context-memory.md).
+  September 18 core: **2,473 physical / 2,094 code lines** (+177 physical from 3A),
+  excluding the untracked memory stub. This is a partial item, not a stage-completion audit.
+  There are 27 physical lines before the 2,500-line design alarm.
+  Review fixes resolved TypedDict access and test-fixture typing; 41 Python files pass
+  Pyright with zero errors/warnings. The subsequent class refactor was reverted.
 - [ ] Compact old turns first, then older complete exchanges within a long ongoing turn.
   Never split a call/result pair. Rebuild the prompt with summary + retained suffix + fresh
   observations, reload stable rules and bounded memory, then recheck fit before publishing it.
@@ -495,7 +505,8 @@ Our synchronous loop, optional fixed-command evaluation mode and explicit failur
 are smaller implementations of selected ideas, not claims of identical behavior.
 The capped memory index remains planned Stage 4 work.
 
-**Next coding session:** Stage 3B: design bounded compaction and preserve continuation evidence.
+**Next coding session:** Stage 3B remaining items: rule reload at compact boundaries,
+separate summary budgets and broader long-turn continuation evidence; then Stage 3C checkpoints.
 Complete Stage 3's context/compact/replay block and Stage 4A–4B memory before the
 Stage 8 freeze. For each session record: what I built, what I broke, what the evidence shows,
 what I can explain unaided, and the next smallest gap.
