@@ -117,7 +117,7 @@ class Agent:
 
     def _block_on_budget(self, result: TurnResult, request: ModelRequest) -> bool:
         """Record a hard context-budget block on this request; True when blocked."""
-        blocked = context_blocker(request.context, self.limits.context_margin_tokens)
+        blocked = context_blocker(request.budget, self.limits.context_margin_tokens)
         if blocked is None:
             return False
         request.status = ModelRequestStatus.BLOCKED
@@ -145,7 +145,7 @@ class Agent:
         # Only raw_messages receives new events; prepared views are disposable.
         raw_messages = result.messages
         turn_start = 1 + history_length
-        context = ContextState(raw_messages, turn_start, last_sent=turn_start)
+        state = ContextState(raw_messages, turn_start, last_sent=turn_start)
         compactor = Compactor(self.llm, self.limits)
         last_failure, failure_count = None, 0
         tool_attempts = 0
@@ -166,7 +166,7 @@ class Agent:
                 return
             outcome = CompactOutcome.SKIPPED
             try:
-                prepared_messages = context.messages()
+                prepared_messages = state.messages()
                 schemas = self.registry.schemas()
                 budget = self.llm.measure_context(prepared_messages, schemas)
                 if compact or not context_fits(budget, self.limits.context_margin_tokens
@@ -175,14 +175,14 @@ class Agent:
                     # The actor's request is deliberately not appended yet: it precedes no
                     # summary in the trace, and the compactor reserves the turn's last slot
                     # for it, so counting it here would spend that reserve on itself.
-                    outcome = compactor.attempt(context, schemas, result.model_requests,
+                    outcome = compactor.attempt(state, schemas, result.model_requests,
                                                 iteration, before=budget)
                     if outcome is CompactOutcome.APPLIED:
-                        prepared_messages = context.messages()
+                        prepared_messages = state.messages()
                         budget = self.llm.measure_context(prepared_messages, schemas)
             except Exception as error:
-                request = ModelRequest(iteration, len(raw_messages), covered_boundary=context.covered,
-                                       last_sent_boundary=context.last_sent,
+                request = ModelRequest(iteration, len(raw_messages), covered_boundary=state.covered,
+                                       last_sent_boundary=state.last_sent,
                                        status=ModelRequestStatus.MODEL_ERROR)
                 result.model_requests.append(request)
                 result.stop_reason = RunStopReason.MODEL_ERROR
@@ -191,9 +191,9 @@ class Agent:
                 logger.error("Could not prepare the actor input: {}", error)
                 return
 
-            request = ModelRequest(iteration, len(raw_messages), context=budget,
-                                   covered_boundary=context.covered,
-                                   last_sent_boundary=context.last_sent,
+            request = ModelRequest(iteration, len(raw_messages), budget=budget,
+                                   covered_boundary=state.covered,
+                                   last_sent_boundary=state.last_sent,
                                    input_messages=deepcopy(prepared_messages),
                                    tools=deepcopy(schemas))
             result.model_requests.append(request)
@@ -208,7 +208,7 @@ class Agent:
 
             # Parsing may fail, but the actor still received this input. Fresh feedback
             # and subsequent tool results remain beyond this boundary until its next call.
-            context.last_sent = len(raw_messages)
+            state.last_sent = len(raw_messages)
             try:
                 response = self.llm.generate(prepared_messages, schemas)
             except ResponseError as error:
