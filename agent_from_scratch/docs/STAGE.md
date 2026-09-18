@@ -279,8 +279,9 @@ Design decisions: [tool-result semantics and state ownership](CONTEXT_STATE_DESI
 All four 3A items are implemented: each generation receives an independent prepared
 view with a bounded instruction snapshot loaded at turn start, and its prompt tokens and
 remaining room are recorded and checked before generation. Stage 3B item 1 now adds
-automatic/manual compaction; summary checkpoints remain planned. Defer new CLI commands;
-a future `/status` may expose usage, reported cache data, session ID and context statistics.
+automatic/manual compaction; summary checkpoints remain planned. The REPL gained `/compact`
+for the manual path; other new CLI commands stay deferred, and a future `/status` may expose
+usage, reported cache data, session ID and context statistics.
 
 ### 3A — one prompt path and a visible budget
 
@@ -323,21 +324,34 @@ a future `/status` may expose usage, reported cache data, session ID and context
 
 ### 3B — compact and continue the same task
 
-- [x] Implement automatic compact and a callable manual compact path with one function and
-  `prompts/compact.md`. Summarize goal, constraints, observed progress, errors/corrections,
-  and next steps; keep instructions, current request, recent complete tool pairs, and every
-  observation not yet sent to the actor. Track that last-sent boundary separately.
-  Expose manual compaction through tests/library calls initially; defer a CLI command.
-  `compact_context()` is shared by automatic recovery and `run_turn(..., compact=True)`.
+- [x] Implement automatic compact and a callable manual compact path sharing one
+  implementation and `prompts/compact.md`. Summarize goal, constraints, observed progress,
+  errors/corrections, and next steps; keep instructions, current request, recent complete
+  tool pairs, and every observation not yet sent to the actor. Track that last-sent boundary
+  separately. `Compactor.attempt()` in `compact.py` is shared by automatic recovery and
+  `run_turn(..., compact=True)`; it returns `CompactOutcome` so the loop can distinguish a
+  spent failed attempt from a free refusal without inspecting compaction state.
   Retain two recent tool batches and the unsent raw suffix; one bounded summary call per
   attempt, at most four per run, charged to the existing request limit. Publish only a
-  smaller fitting view; raw evidence/session deltas stay unchanged. **203 deterministic
+  smaller fitting view; raw evidence/session deltas stay unchanged. **204 deterministic
   tests pass**. Real-model retained/lost facts and scope limits: [compact evidence](context-memory.md).
-  September 18 core: **2,473 physical / 2,094 code lines** (+177 physical from 3A),
-  excluding the untracked memory stub. This is a partial item, not a stage-completion audit.
-  There are 27 physical lines before the 2,500-line design alarm.
-  Review fixes resolved TypedDict access and test-fixture typing; 41 Python files pass
-  Pyright with zero errors/warnings. The subsequent class refactor was reverted.
+  The REPL now reaches the manual path as `/compact`, which marks the next request rather
+  than acting alone: compaction runs inside a turn against that turn's own view, so there is
+  no earlier point at which it can take effect. It is deliberately a user command and not a
+  model-facing tool, which would run one request too late to relieve the pressure it answers.
+  Trace records renamed `ModelRequest.context` to `budget` at `schema_version` 5; records at
+  4 and earlier carry the old key, which matters for the 3C eval-export item below.
+  September 18 core after the compaction refactor: **2,582 physical / 2,139 code lines**
+  across 15 nonempty core files (+109 physical / +45 code over `eef064a`), excluding the
+  untracked memory stub. Source fingerprint
+  `0dd3018c110c6c0eceb893b3b8622ecef5745fa114a7b5056818f0359936a40c`.
+  This is a partial item, not a stage-completion audit.
+  **This crosses the 2,500-line design alarm by 82 physical lines.** The design-boundary
+  review that the audit section requires is therefore due before 3B grows further; do not
+  compress readable code merely to return under the line.
+  Review fixes resolved TypedDict access and test-fixture typing; 42 Python files pass
+  Pyright with zero errors/warnings. An earlier class refactor was reverted; the present one
+  landed as twelve reviewed commits, `9802c90`..`b060096`.
 - [ ] Compact old turns first, then older complete exchanges within a long ongoing turn.
   Never split a call/result pair. Rebuild the prompt with summary + retained suffix + fresh
   observations, reload stable rules and bounded memory, then recheck fit before publishing it.
