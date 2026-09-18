@@ -164,41 +164,52 @@ class Agent:
         for iteration in range(1, self.limits.max_iterations + 1):
             if used_model_calls(result.model_requests) >= self.limits.max_iterations:
                 return
-            request = ModelRequest(iteration, len(raw_messages))
-            request.covered_boundary = context.covered
-            request.last_sent_boundary = context.last_sent
-            result.model_requests.append(request)
+            outcome = CompactOutcome.SKIPPED
             try:
                 prepared_messages = context.messages()
                 schemas = self.registry.schemas()
-                request.context = self.llm.measure_context(prepared_messages, schemas)
-                pressure = not context_fits(request.context,
-                    self.limits.context_margin_tokens + self.limits.compact_headroom_tokens)
-                if compact or pressure:
-                    result.model_requests.pop()  # Summary request precedes the waiting actor.
-                    outcome = compactor.attempt(context, schemas, result.model_requests, iteration)
-                    result.model_requests.append(request)
+                budget = self.llm.measure_context(prepared_messages, schemas)
+                if compact or not context_fits(budget, self.limits.context_margin_tokens
+                                               + self.limits.compact_headroom_tokens):
                     compact = False
+                    # The actor's request is deliberately not appended yet: it precedes no
+                    # summary in the trace, and the compactor reserves the turn's last slot
+                    # for it, so counting it here would spend that reserve on itself.
+                    outcome = compactor.attempt(context, schemas, result.model_requests, iteration)
                     if outcome is CompactOutcome.APPLIED:
                         prepared_messages = context.messages()
-                        request.context = self.llm.measure_context(prepared_messages, schemas)
-                    elif outcome is CompactOutcome.FAILED:
-                        request.status = ModelRequestStatus.BLOCKED
-                        result.stop_reason = RunStopReason.CONTEXT_LIMIT
-                        result.error_message = "Compaction failed; raw evidence and completed tool effects were preserved."
-                        request.error_code, request.error_message = "context_limit", result.error_message
-                        request.input_messages, request.tools = deepcopy(prepared_messages), deepcopy(schemas)
-                        return
-                request.input_messages, request.tools = deepcopy(prepared_messages), deepcopy(schemas)
-                request.covered_boundary = context.covered
-                if self._block_on_budget(result, request):
-                    return
+                        budget = self.llm.measure_context(prepared_messages, schemas)
+            except Exception as error:
+                request = ModelRequest(iteration, len(raw_messages), covered_boundary=context.covered,
+                                       last_sent_boundary=context.last_sent,
+                                       status=ModelRequestStatus.MODEL_ERROR)
+                result.model_requests.append(request)
+                result.stop_reason = RunStopReason.MODEL_ERROR
+                result.error_message = f"{type(error).__name__}: {error}"
+                request.error_message = result.error_message
+                logger.error("Could not prepare the actor input: {}", error)
+                return
 
-                # Parsing may fail, but the actor still received this input. Fresh feedback
-                # and subsequent tool results remain beyond this boundary until its next call.
-                context.last_sent = len(raw_messages)
+            request = ModelRequest(iteration, len(raw_messages), context=budget,
+                                   covered_boundary=context.covered,
+                                   last_sent_boundary=context.last_sent,
+                                   input_messages=deepcopy(prepared_messages),
+                                   tools=deepcopy(schemas))
+            result.model_requests.append(request)
+            if outcome is CompactOutcome.FAILED:
+                request.status = ModelRequestStatus.BLOCKED
+                result.stop_reason = RunStopReason.CONTEXT_LIMIT
+                result.error_message = "Compaction failed; raw evidence and completed tool effects were preserved."
+                request.error_code, request.error_message = "context_limit", result.error_message
+                return
+            if self._block_on_budget(result, request):
+                return
+
+            # Parsing may fail, but the actor still received this input. Fresh feedback
+            # and subsequent tool results remain beyond this boundary until its next call.
+            context.last_sent = len(raw_messages)
+            try:
                 response = self.llm.generate(prepared_messages, schemas)
-
             except ResponseError as error:
                 request.status = ModelRequestStatus.PARSE_ERROR
                 request.raw_response = error.raw_response
