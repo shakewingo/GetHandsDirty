@@ -18,7 +18,8 @@ from .context import (ContextState, InstructionConfig, InstructionLoadError,
                       compact_context, context_blocker, context_fits, load_instructions)
 from .tools.base import ToolErrorCode, ToolRegistry, ToolResult
 from .tools.register import default_registry, workspace as default_workspace
-from .trace import ModelRequest, ModelRequestStatus, RunStopReason, TraceStore, TurnResult
+from .trace import (ModelRequest, ModelRequestStatus, RunStopReason, TraceStore, TurnResult,
+                    used_model_calls)
 from .utils import color_label
 
 if TYPE_CHECKING:
@@ -159,7 +160,7 @@ class Agent:
             return True
 
         for iteration in range(1, self.limits.max_iterations + 1):
-            if sum(q.status != ModelRequestStatus.BLOCKED for q in result.model_requests) >= self.limits.max_iterations:
+            if used_model_calls(result.model_requests) >= self.limits.max_iterations:
                 return
             request = ModelRequest(iteration, len(raw_messages))
             request.covered_boundary = context.covered

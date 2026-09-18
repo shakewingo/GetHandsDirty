@@ -219,13 +219,13 @@ def compact_context(state: ContextState, llm, schemas: dict, limits,
     The same model's configured output reserve bounds both actor and summary generation.
     """
     from .llm import LLM, ResponseError, ResponseType
-    from .trace import ModelRequest, ModelRequestStatus
+    from .trace import ModelRequest, ModelRequestStatus, used_model_calls
 
     boundary = state.compact_boundary()
-    calls_used = sum(q.status != ModelRequestStatus.BLOCKED for q in requests)
     if (boundary <= state.covered or boundary == state.attempted_boundary
             or state.summary_calls >= limits.max_compact_calls
-            or calls_used >= limits.max_iterations - 1):
+            # Leave the actor the last slot: a summary nobody can act on is wasted.
+            or used_model_calls(requests) >= limits.max_iterations - 1):
         return False
     state.attempted_boundary = boundary
     request = ModelRequest(iteration, len(state.raw), purpose="compact",

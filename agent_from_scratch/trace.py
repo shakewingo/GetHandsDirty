@@ -56,6 +56,11 @@ class ModelRequest:
     compact_after: dict | None = None
 
 
+def used_model_calls(requests: list[ModelRequest]) -> int:
+    """Count requests charged against the turn's budget; blocked ones never reached the model."""
+    return sum(request.status != ModelRequestStatus.BLOCKED for request in requests)
+
+
 @dataclass
 class TurnResult:
     messages: list[ChatCompletionRequestMessage]
