@@ -175,7 +175,8 @@ class Agent:
                     # The actor's request is deliberately not appended yet: it precedes no
                     # summary in the trace, and the compactor reserves the turn's last slot
                     # for it, so counting it here would spend that reserve on itself.
-                    outcome = compactor.attempt(context, schemas, result.model_requests, iteration)
+                    outcome = compactor.attempt(context, schemas, result.model_requests,
+                                                iteration, before=budget)
                     if outcome is CompactOutcome.APPLIED:
                         prepared_messages = context.messages()
                         budget = self.llm.measure_context(prepared_messages, schemas)

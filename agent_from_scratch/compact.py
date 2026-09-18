@@ -33,8 +33,12 @@ class Compactor:
         self._prompt: str | None = None
 
     def attempt(self, state: ContextState, schemas: dict, requests: list[ModelRequest],
-                iteration: int) -> CompactOutcome:
-        """Summarize one legal cut. The outcome, not a mutated field, tells the caller what happened."""
+                iteration: int, *, before: dict | None = None) -> CompactOutcome:
+        """Summarize one legal cut. The outcome, not a mutated field, tells the caller what happened.
+
+        `before` is the caller's own measurement of this same view and these same schemas;
+        supplying it avoids tokenizing the turn's largest input a second time.
+        """
         boundary = self._plan(state, requests)
         if boundary is None:
             return CompactOutcome.SKIPPED
@@ -46,7 +50,7 @@ class Compactor:
         summary = self._summarize(state, boundary, request)
         if summary is None:
             return CompactOutcome.FAILED
-        if self._publish(state, boundary, summary, schemas, request):
+        if self._publish(state, boundary, summary, schemas, request, before):
             return CompactOutcome.APPLIED
         return CompactOutcome.FAILED
 
@@ -96,12 +100,15 @@ class Compactor:
             return None
 
     def _publish(self, state: ContextState, boundary: int, summary: str, schemas: dict,
-                 request: ModelRequest) -> bool:
+                 request: ModelRequest, before: dict | None) -> bool:
         """Swap in the candidate only when it both fits and is strictly smaller."""
         try:
             candidate = ContextState(state.raw, state.turn_start, state.last_sent,
                                      covered=boundary, summary=summary)
-            before = self.llm.measure_context(state.messages(), schemas)
+            # Nothing touched by planning or summarizing feeds messages(), so a measurement
+            # the caller took of this same view still describes it exactly.
+            if before is None:
+                before = self.llm.measure_context(state.messages(), schemas)
             after = self.llm.measure_context(candidate.messages(), schemas)
             request.compact_before = before
             request.compact_after = after
