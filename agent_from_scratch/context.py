@@ -123,7 +123,15 @@ class ContextBuilder:
 
 @dataclass
 class ContextState:
-    """Raw offsets never move when the disposable model view shrinks."""
+    """Raw offsets never move when the disposable model view shrinks.
+
+    Every field except `summary` is an index into `raw`, which only ever grows:
+    `raw[1:covered]` is represented by `summary`, `raw[covered:]` is kept verbatim,
+    and `raw[last_sent:]` has never reached the actor. `turn_start` is fixed for the
+    turn, and a published compaction preserves
+    `1 <= covered <= boundary <= last_sent <= len(raw)`. `attempted_boundary` and
+    `summary_calls` only bound retries; they never select content.
+    """
 
     raw: list[ChatCompletionRequestMessage]
     turn_start: int

@@ -337,9 +337,3 @@ if __name__ == "__main__":
         agent.run_repl()
     finally:
         llm.close()
-
-
-# user: edit test.py with "Hello world"
-# assistant: <tool_call> {"tool_names": shell.py, "parameters": shell -pr("Hello world")}</tool_call>
-# role: {output: {"args": "123"}, tool_name: shell.py, ok}
-# assistant: "Executed"
