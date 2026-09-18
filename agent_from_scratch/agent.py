@@ -14,7 +14,7 @@ from loguru import logger
 from .config import AgentLimits
 from .llm import LLM, ResponseError, ResponseErrorCode, ResponseType
 from .session import SessionStore
-from .compact import compact_context
+from .compact import CompactOutcome, Compactor
 from .context import (ContextState, InstructionConfig, InstructionLoadError,
                       context_blocker, context_fits, load_instructions)
 from .tools.base import ToolErrorCode, ToolRegistry, ToolResult
@@ -146,6 +146,7 @@ class Agent:
         raw_messages = result.messages
         turn_start = 1 + history_length
         context = ContextState(raw_messages, turn_start, last_sent=turn_start)
+        compactor = Compactor(self.llm, self.limits)
         last_failure, failure_count = None, 0
         tool_attempts = 0
         used_ids = {call["id"] for m in raw_messages for call in m.get("tool_calls", [])}
@@ -175,15 +176,13 @@ class Agent:
                     self.limits.context_margin_tokens + self.limits.compact_headroom_tokens)
                 if compact or pressure:
                     result.model_requests.pop()  # Summary request precedes the waiting actor.
-                    previous_attempt = context.attempted_boundary
-                    changed = compact_context(context, self.llm, schemas, self.limits,
-                                              result.model_requests, iteration)
+                    outcome = compactor.attempt(context, schemas, result.model_requests, iteration)
                     result.model_requests.append(request)
                     compact = False
-                    if changed:
+                    if outcome is CompactOutcome.APPLIED:
                         prepared_messages = context.messages()
                         request.context = self.llm.measure_context(prepared_messages, schemas)
-                    elif context.attempted_boundary != previous_attempt:
+                    elif outcome is CompactOutcome.FAILED:
                         request.status = ModelRequestStatus.BLOCKED
                         result.stop_reason = RunStopReason.CONTEXT_LIMIT
                         result.error_message = "Compaction failed; raw evidence and completed tool effects were preserved."

@@ -13,7 +13,7 @@ from unittest.mock import Mock, patch
 
 from agent_from_scratch.agent import Agent
 from agent_from_scratch.config import AgentLimits
-from agent_from_scratch.compact import compact_context
+from agent_from_scratch.compact import CompactOutcome, Compactor
 from agent_from_scratch.context import ContextState
 from agent_from_scratch.evals.verify import metrics
 from agent_from_scratch.llm import LLM, ResponseError, ResponseErrorCode
@@ -59,7 +59,8 @@ class CompactTests(unittest.TestCase):
                 "remaining_tokens": remaining, "window_tokens": count + 512 + remaining}
 
     def compact(self):
-        return compact_context(self.state, self.model, {}, self.limits, self.requests, 1)
+        outcome = Compactor(self.model, self.limits).attempt(self.state, {}, self.requests, 1)
+        return outcome is CompactOutcome.APPLIED
 
     def test_manual_and_automatic_paths_share_summary_and_preserve_raw_session(self):
         for manual in (True, False):
