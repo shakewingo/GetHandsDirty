@@ -297,6 +297,7 @@ class Agent:
         user_label = color_label("User:", user_color)
         agent_label = color_label("Agent:", agent_color)
         store = SessionStore(Path(self.state_dir, "sessions")) if self.state_dir is not None else None
+        compact_next = False
         while True:
             try:
                 user_input = input(f"{user_label} ")
@@ -306,6 +307,12 @@ class Agent:
             command = user_input.strip()
             if command.lower() in {"exit", "quit", "/quit", "/exit"}:
                 break
+            if command == "/compact":
+                # Compaction runs inside a turn, against that turn's own view, so the
+                # request that follows is the earliest point this can take effect.
+                compact_next = True
+                print("The next request will summarize earlier history before acting.")
+                continue
             if command in {"/new", "/reset"} or command.startswith("/session "):
                 try:
                     session_id = self._session_command(command, session_id, store)
@@ -320,10 +327,12 @@ class Agent:
                 continue
             try:
                 result = self.run_turn(user_input, history, session_id=session_id,
+                                       compact=compact_next,
                                        on_progress=lambda text: print(f"{agent_label} {text}"))
             except InstructionLoadError as error:
                 print(f"Instructions unavailable: {error}")
-                continue
+                continue  # The turn never started, so a pending /compact still applies.
+            compact_next = False
             if result.stop_reason == RunStopReason.FINAL_RESPONSE:
                 print(f"{agent_label} {result.final_answer}")
             elif result.stop_reason == RunStopReason.MODEL_ERROR:

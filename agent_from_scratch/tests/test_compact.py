@@ -225,6 +225,21 @@ class CompactTests(unittest.TestCase):
                 if not parse_error:
                     self.assertEqual(Path(directory, "done.txt").read_text(), "once")
 
+    def test_repl_compact_command_applies_to_the_next_request_only(self):
+        agent = Agent(self.model, registry=ToolRegistry([]))
+        self.model.generate.side_effect = [answer("7"), answer("8")]
+        seen = []
+        original = agent.run_turn
+
+        def run_turn(user_input, history=None, **kwargs):
+            seen.append((user_input, kwargs.get("compact", False)))
+            return original(user_input, history, **kwargs)
+
+        with patch.object(agent, "run_turn", run_turn), patch("builtins.print"), \
+                patch("builtins.input", side_effect=["/compact", "Use 7, not 6.", "again", "/quit"]):
+            agent.run_repl()
+        self.assertEqual(seen, [("Use 7, not 6.", True), ("again", False)])
+
     def test_failed_summary_stops_actor_and_counts_reported_usage(self):
         self.pressure = True
         error = ResponseError(ResponseErrorCode.TRUNCATED_RESPONSE, raw_response={
