@@ -131,10 +131,10 @@ class ContextState:
     """
 
     raw: list[ChatCompletionRequestMessage]
-    turn_start: int
-    last_sent: int
-    covered: int = 1
-    summary: str = ""
+    turn_start: int  # the cursor where user input is in current turn, always be 1 + history_length
+    last_sent: int  # the furthest cursor that compact's actor's ever seen,  boundary must not beyond that
+    covered: int = 1   # the cursor where summary has covered up to
+    summary: str = ""  
     attempted_boundary: int = 0
     summary_calls: int = 0
 
@@ -150,10 +150,23 @@ class ContextState:
         return build_messages(instructions=self.raw[:1], history=history, current_turn=current)
 
     def compact_boundary(self) -> int:
-        """Keep two recent batches and all unsent events; only cut between whole batches."""
+        """Return the largest cut that is both structurally legal and policy-permitted.
+
+        Two independent constraints meet here. `safe` is structure: a batch's calls and
+        their results must stay together, so the only cuttable positions are the gaps
+        between whole batches. `cutoff` is policy: how far back this attempt is willing
+        to reach. The answer is the largest safe position at or below the cutoff.
+
+        Returns:
+            int: The exclusive end of the range to summarize, `raw[covered:boundary]`.
+                `self.covered` means nothing can be compacted; it is a no-op signal
+                rather than a legal cut, and the caller refuses the attempt on it.
+        """
+        # Structure. A position is cuttable only where no batch is left half-resolved,
+        # which keeps every announced call and its results on the same side of the cut.
         starts = []
         pending = set()
-        safe = {1}
+        safe = {1}  # Cutting nothing is always legal.
         for index, message in enumerate(self.raw[1:], 1):
             calls = message.get("tool_calls", [])
             if calls:
@@ -169,11 +182,15 @@ class ContextState:
                 return self.covered
             if not pending:
                 safe.add(index + 1)
+        # Policy. A ceiling, not a legal cut: each term withholds evidence this attempt
+        # is unwilling to summarize -- what the actor has never seen, and the two most
+        # recent batches it still needs for continuity.
         cutoff = min(self.last_sent, starts[-2] if len(starts) >= 2 else
                      starts[0] if starts else len(self.raw))
         # First replace old turns; ongoing-turn exchanges can compact on a later attempt.
         if self.covered < self.turn_start:
             cutoff = min(cutoff, self.turn_start)
+        # Boundary is the intersection of safe and cutoff, and the position actually cut at.
         boundary = max((n for n in safe if n <= cutoff), default=self.covered)
         if self.covered == self.turn_start and boundary <= self.turn_start + 1:
             return self.covered  # The pinned request alone cannot free any space.
