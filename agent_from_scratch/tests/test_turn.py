@@ -140,7 +140,7 @@ class TurnTests(unittest.TestCase):
             self.assertEqual(trace["messages"], result.messages)
             blocked = trace["model_requests"][-1]
             self.assertEqual(blocked["status"], "blocked")
-            self.assertEqual(blocked["context"], self.budget(-100))
+            self.assertEqual(blocked["budget"], self.budget(-100))
             self.assertEqual(blocked["input_message_count"], len(result.messages))
             self.assertEqual(trace["settings"]["context_margin_tokens"], 256)
             for field in ("usage", "raw_response", "finish_reason"):
@@ -199,7 +199,7 @@ class TurnTests(unittest.TestCase):
             self.assertEqual(measured_inputs[2][-1]["role"], "tool")
             trace = TraceStore(Path(directory) / "runs").load_run(result.run_id)
             assert trace is not None
-            self.assertEqual([r["context"] for r in trace["model_requests"]], stats)
+            self.assertEqual([r["budget"] for r in trace["model_requests"]], stats)
             self.assertTrue(all(r["usage"] is None for r in trace["model_requests"]))
 
     def test_instructions_reload_between_turns_but_not_after_tool_execution(self):
@@ -625,7 +625,7 @@ class TurnTests(unittest.TestCase):
             self.assertEqual(result.final_answer, "Done")
             self.assertEqual(len(list(runs.glob("*.jsonl"))), 1)
             trace = json.loads((runs / f"{result.run_id}.jsonl").read_text())
-            self.assertEqual(trace["schema_version"], 4)
+            self.assertEqual(trace["schema_version"], 5)
             self.assertEqual(trace["final_answer"], "Done")
             self.assertEqual(trace["model_requests"][-1]["raw_response"]["choices"][0]
                              ["message"]["content"], "Done")

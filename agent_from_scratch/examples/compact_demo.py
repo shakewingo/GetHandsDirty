@@ -52,7 +52,7 @@ def main():
                                     [] if name == "oversized" else history, compact=name == "manual")
             report["cases"][name] = asdict(result)
             print(name, result.stop_reason, repr(result.final_answer),
-                  [(q.purpose, q.status, (q.context or {}).get("prompt_tokens"))
+                  [(q.purpose, q.status, (q.budget or {}).get("prompt_tokens"))
                    for q in result.model_requests], flush=True)
         (args.output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2))
     finally:

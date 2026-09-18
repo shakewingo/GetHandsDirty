@@ -5,7 +5,6 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 from hashlib import sha256
-import json
 from pathlib import Path
 import stat
 from typing import Any, TYPE_CHECKING
@@ -109,27 +108,33 @@ def load_instructions(config: InstructionConfig) -> tuple[str, dict[str, Any]]:
     return assembled, metadata
 
 
-class ContextBuilder:
-    def build_messages(
-        self,
-        *,
-        instructions: list[ChatCompletionRequestMessage],
-        history: list[ChatCompletionRequestMessage],
-        current_turn: list[ChatCompletionRequestMessage],
-    ) -> list[ChatCompletionRequestMessage]:
-        """Assemble an independent view, including nested tool-call dictionaries."""
-        return deepcopy([*instructions, *history, *current_turn])
+def build_messages(
+    *,
+    instructions: list[ChatCompletionRequestMessage],
+    history: list[ChatCompletionRequestMessage],
+    current_turn: list[ChatCompletionRequestMessage],
+) -> list[ChatCompletionRequestMessage]:
+    """Assemble an independent view, including nested tool-call dictionaries."""
+    return deepcopy([*instructions, *history, *current_turn])
 
 
 @dataclass
 class ContextState:
-    """Raw offsets never move when the disposable model view shrinks."""
+    """Raw offsets never move when the disposable model view shrinks.
+
+    Every field except `summary` is an index into `raw`, which only ever grows:
+    `raw[1:covered]` is represented by `summary`, `raw[covered:]` is kept verbatim,
+    and `raw[last_sent:]` has never reached the actor. `turn_start` is fixed for the
+    turn, and a published compaction preserves
+    `1 <= covered <= boundary <= last_sent <= len(raw)`. `attempted_boundary` and
+    `summary_calls` only bound retries; they never select content.
+    """
 
     raw: list[ChatCompletionRequestMessage]
-    turn_start: int
-    last_sent: int
-    covered: int = 1
-    summary: str = ""
+    turn_start: int  # the cursor where user input is in current turn, always be 1 + history_length
+    last_sent: int  # the furthest cursor that compact's actor's ever seen,  boundary must not beyond that
+    covered: int = 1   # the cursor where summary has covered up to
+    summary: str = ""  
     attempted_boundary: int = 0
     summary_calls: int = 0
 
@@ -142,14 +147,26 @@ class ContextState:
             # Pin the request even when older exchanges in this turn compact.
             pinned = [self.raw[self.turn_start]] if self.covered > self.turn_start else []
             current = [*pinned, *self.raw[self.covered:]]
-        return ContextBuilder().build_messages(instructions=self.raw[:1], history=history,
-                                              current_turn=current)
+        return build_messages(instructions=self.raw[:1], history=history, current_turn=current)
 
     def compact_boundary(self) -> int:
-        """Keep two recent batches and all unsent events; only cut between whole batches."""
+        """Return the largest cut that is both structurally legal and policy-permitted.
+
+        Two independent constraints meet here. `safe` is structure: a batch's calls and
+        their results must stay together, so the only cuttable positions are the gaps
+        between whole batches. `cutoff` is policy: how far back this attempt is willing
+        to reach. The answer is the largest safe position at or below the cutoff.
+
+        Returns:
+            int: The exclusive end of the range to summarize, `raw[covered:boundary]`.
+                `self.covered` means nothing can be compacted; it is a no-op signal
+                rather than a legal cut, and the caller refuses the attempt on it.
+        """
+        # Structure. A position is cuttable only where no batch is left half-resolved,
+        # which keeps every announced call and its results on the same side of the cut.
         starts = []
         pending = set()
-        safe = {1}
+        safe = {1}  # Cutting nothing is always legal.
         for index, message in enumerate(self.raw[1:], 1):
             calls = message.get("tool_calls", [])
             if calls:
@@ -165,95 +182,43 @@ class ContextState:
                 return self.covered
             if not pending:
                 safe.add(index + 1)
+        # Policy. A ceiling, not a legal cut: each term withholds evidence this attempt
+        # is unwilling to summarize -- what the actor has never seen, and the two most
+        # recent batches (tool calling + execution) it still needs for continuity.
         cutoff = min(self.last_sent, starts[-2] if len(starts) >= 2 else
                      starts[0] if starts else len(self.raw))
         # First replace old turns; ongoing-turn exchanges can compact on a later attempt.
         if self.covered < self.turn_start:
             cutoff = min(cutoff, self.turn_start)
+        # Boundary is the intersection of safe and cutoff, and the position actually cut at.
         boundary = max((n for n in safe if n <= cutoff), default=self.covered)
         if self.covered == self.turn_start and boundary <= self.turn_start + 1:
             return self.covered  # The pinned request alone cannot free any space.
         return boundary
 
 
-def context_fits(budget: dict | None, margin: int) -> bool:
-    return bool(budget and budget.get("count_method") == "exact"
-                and budget.get("remaining_tokens") is not None
-                and budget["remaining_tokens"] >= margin)
+def context_blocker(budget: dict | None, margin: int) -> tuple[str, str] | None:
+    """Return (error_code, detail) when a measurement cannot support a request at margin.
 
-
-def compact_context(state: ContextState, llm, schemas: dict, limits,
-                    requests: list, iteration: int) -> bool:
-    """One bounded attempt shared by manual calls and automatic pressure recovery.
-
-    Publish only a smaller, fitting view. No raw edits, tool execution or checkpoint IO.
-    The same model's configured output reserve bounds both actor and summary generation.
+    Single definition of the fit rule: both the soft compaction trigger and the hard
+    request gate read it, so the two can never drift apart.
     """
-    from .llm import LLM, ResponseError, ResponseType
-    from .trace import ModelRequest, ModelRequestStatus
+    if (not budget or budget.get("count_method") != "exact"
+            or budget.get("remaining_tokens") is None):
+        return ("context_unavailable",
+                "Cannot establish request fit: exact prompt measurement "
+                "and a bounded output reserve are required.")
+    if budget["remaining_tokens"] < margin:
+        # Read the reported fields defensively: this predicate must stay total for
+        # partial measurements, which a complete `measure_context` result never is.
+        return ("context_limit",
+                "Request exceeds the context budget: "
+                f"prompt={budget.get('prompt_tokens')}, "
+                f"output_reserve={budget.get('response_reserve')}, "
+                f"margin={margin}, "
+                f"window={budget.get('window_tokens')}.")
+    return None
 
-    boundary = state.compact_boundary()
-    calls_used = sum(q.status != ModelRequestStatus.BLOCKED for q in requests)
-    if (boundary <= state.covered or boundary == state.attempted_boundary
-            or state.summary_calls >= limits.max_compact_calls
-            or calls_used >= limits.max_iterations - 1):
-        return False
-    state.attempted_boundary = boundary
-    request = ModelRequest(iteration, len(state.raw), purpose="compact",
-                           covered_boundary=boundary, last_sent_boundary=state.last_sent)
-    requests.append(request)
-    generated = False
-    try:
-        prompt = (PROMPTS_DIR / "compact.md").read_text(encoding="utf-8")
-        request.input_messages = [
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": json.dumps({
-                "previous_summary": state.summary,
-                "messages": state.raw[state.covered:boundary],
-                "current_request": state.raw[state.turn_start].get("content"),
-            }, ensure_ascii=False)},
-        ]
-        request.tools = {}
-        request.context = llm.measure_context(request.input_messages, {})
-        if not context_fits(request.context, limits.context_margin_tokens):
-            request.status = ModelRequestStatus.BLOCKED
-            request.error_message = "Summary input does not fit; raw evidence was preserved."
-            return False
-        state.summary_calls += 1
-        generated = True
-        response = llm.generate(deepcopy(request.input_messages), {})
-        request.raw_response = response.raw_response
-        request.usage = LLM.read_usage(response.usage)
-        request.finish_reason = response.finish_reason
-        request.status = ModelRequestStatus.COMPLETED
-        if response.type != ResponseType.direct or not response.content.strip():
-            request.error_message = "Compaction requires a nonempty text summary without tool calls."
-            return False
-        candidate = ContextState(state.raw, state.turn_start, state.last_sent,
-                                 covered=boundary, summary=response.content)
-        before = llm.measure_context(state.messages(), schemas)
-        after = llm.measure_context(candidate.messages(), schemas)
-        request.compact_before = before
-        request.compact_after = after
-        if (not context_fits(after, limits.context_margin_tokens)
-                or not before or before.get("prompt_tokens") is None
-                or after["prompt_tokens"] >= before["prompt_tokens"]):
-            request.error_message = "Summary did not produce a smaller fitting actor input."
-            return False
-        state.covered, state.summary = boundary, response.content
-        return True
-    except Exception as error:
-        request.status = (ModelRequestStatus.PARSE_ERROR if isinstance(error, ResponseError)
-                          else ModelRequestStatus.MODEL_ERROR)
-        if not generated:
-            request.status = ModelRequestStatus.BLOCKED
-        request.error_message = f"{type(error).__name__}: {error}"
-        if isinstance(error, ResponseError):
-            request.error_code = error.code
-            request.raw_response = error.raw_response
-            if isinstance(error.raw_response, dict):
-                request.usage = LLM.read_usage(error.raw_response.get("usage"))
-                choices = error.raw_response.get("choices")
-                if isinstance(choices, list) and choices and isinstance(choices[0], dict):
-                    request.finish_reason = choices[0].get("finish_reason")
-        return False
+
+def context_fits(budget: dict | None, margin: int) -> bool:
+    return context_blocker(budget, margin) is None

@@ -19,7 +19,7 @@ class ReadEvaluationTests(unittest.TestCase):
         usage: dict[str, int | None] = {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110}
         completed = ModelRequest(1, 2, status=ModelRequestStatus.COMPLETED, usage=usage)
         blocked = ModelRequest(2, 4, status=ModelRequestStatus.BLOCKED,
-                               context={"count_method": "exact", "prompt_tokens": 9000})
+                               budget={"count_method": "exact", "prompt_tokens": 9000})
         for requests, count, expected_usage in (
             ([blocked], 0, dict.fromkeys(usage, 0)),
             ([completed, blocked], 1, usage),

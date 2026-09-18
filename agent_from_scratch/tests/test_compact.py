@@ -13,7 +13,8 @@ from unittest.mock import Mock, patch
 
 from agent_from_scratch.agent import Agent
 from agent_from_scratch.config import AgentLimits
-from agent_from_scratch.context import ContextState, compact_context
+from agent_from_scratch.compact import CompactOutcome, Compactor
+from agent_from_scratch.context import ContextState
 from agent_from_scratch.evals.verify import metrics
 from agent_from_scratch.llm import LLM, ResponseError, ResponseErrorCode
 from agent_from_scratch.session import SessionStore
@@ -58,7 +59,8 @@ class CompactTests(unittest.TestCase):
                 "remaining_tokens": remaining, "window_tokens": count + 512 + remaining}
 
     def compact(self):
-        return compact_context(self.state, self.model, {}, self.limits, self.requests, 1)
+        outcome = Compactor(self.model, self.limits).attempt(self.state, {}, self.requests, 1)
+        return outcome is CompactOutcome.APPLIED
 
     def test_manual_and_automatic_paths_share_summary_and_preserve_raw_session(self):
         for manual in (True, False):
@@ -222,6 +224,21 @@ class CompactTests(unittest.TestCase):
                 self.assertEqual(result.model_requests[1].last_sent_boundary, 4)
                 if not parse_error:
                     self.assertEqual(Path(directory, "done.txt").read_text(), "once")
+
+    def test_repl_compact_command_applies_to_the_next_request_only(self):
+        agent = Agent(self.model, registry=ToolRegistry([]))
+        self.model.generate.side_effect = [answer("7"), answer("8")]
+        seen = []
+        original = agent.run_turn
+
+        def run_turn(user_input, history=None, **kwargs):
+            seen.append((user_input, kwargs.get("compact", False)))
+            return original(user_input, history, **kwargs)
+
+        with patch.object(agent, "run_turn", run_turn), patch("builtins.print"), \
+                patch("builtins.input", side_effect=["/compact", "Use 7, not 6.", "again", "/quit"]):
+            agent.run_repl()
+        self.assertEqual(seen, [("Use 7, not 6.", True), ("again", False)])
 
     def test_failed_summary_stops_actor_and_counts_reported_usage(self):
         self.pressure = True
