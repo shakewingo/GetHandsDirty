@@ -14,8 +14,9 @@ from loguru import logger
 from .config import AgentLimits
 from .llm import LLM, ResponseError, ResponseErrorCode, ResponseType
 from .session import SessionStore
+from .compact import compact_context
 from .context import (ContextState, InstructionConfig, InstructionLoadError,
-                      compact_context, context_blocker, context_fits, load_instructions)
+                      context_blocker, context_fits, load_instructions)
 from .tools.base import ToolErrorCode, ToolRegistry, ToolResult
 from .tools.register import default_registry, workspace as default_workspace
 from .trace import (ModelRequest, ModelRequestStatus, RunStopReason, TraceStore, TurnResult,

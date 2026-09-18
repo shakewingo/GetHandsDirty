@@ -13,7 +13,8 @@ from unittest.mock import Mock, patch
 
 from agent_from_scratch.agent import Agent
 from agent_from_scratch.config import AgentLimits
-from agent_from_scratch.context import ContextState, compact_context
+from agent_from_scratch.compact import compact_context
+from agent_from_scratch.context import ContextState
 from agent_from_scratch.evals.verify import metrics
 from agent_from_scratch.llm import LLM, ResponseError, ResponseErrorCode
 from agent_from_scratch.session import SessionStore
