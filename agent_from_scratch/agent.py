@@ -15,7 +15,7 @@ from .config import AgentLimits
 from .llm import LLM, ResponseError, ResponseErrorCode, ResponseType
 from .session import SessionStore
 from .context import (ContextState, InstructionConfig, InstructionLoadError,
-                      compact_context, context_fits, load_instructions)
+                      compact_context, context_blocker, context_fits, load_instructions)
 from .tools.base import ToolErrorCode, ToolRegistry, ToolResult
 from .tools.register import default_registry, workspace as default_workspace
 from .trace import ModelRequest, ModelRequestStatus, RunStopReason, TraceStore, TurnResult
@@ -113,34 +113,16 @@ class Agent:
             result.messages.append(observation.to_message())
             interrupted = False
 
-    def _measure_context_limit(self, result: TurnResult, request: ModelRequest) -> tuple[TurnResult, ModelRequest]:
-        budget = request.context or {}
-        remaining = budget.get("remaining_tokens")
-        margin = self.limits.context_margin_tokens
-        if budget.get("count_method") != "exact" or remaining is None:
-            detail = (
-                "Cannot establish request fit: exact prompt measurement "
-                "and a bounded output reserve are required."
-            )
-            error_code = "context_unavailable"
-        elif remaining < margin:
-            detail = (
-                "Request exceeds the context budget: "
-                f"prompt={budget['prompt_tokens']}, "
-                f"output_reserve={budget['response_reserve']}, "
-                f"margin={margin}, "
-                f"window={budget['window_tokens']}."
-            )
-            error_code = "context_limit"
-        else:
-            detail, error_code = None, None
-        if detail is not None:
-            request.status = ModelRequestStatus.BLOCKED
-            request.error_code = error_code
-            request.error_message = detail
-            result.stop_reason = RunStopReason.CONTEXT_LIMIT
-            result.error_message = detail
-        return result, request
+    def _block_on_budget(self, result: TurnResult, request: ModelRequest) -> bool:
+        """Record a hard context-budget block on this request; True when blocked."""
+        blocked = context_blocker(request.context, self.limits.context_margin_tokens)
+        if blocked is None:
+            return False
+        request.status = ModelRequestStatus.BLOCKED
+        request.error_code, request.error_message = blocked
+        result.stop_reason = RunStopReason.CONTEXT_LIMIT
+        result.error_message = blocked[1]
+        return True
 
     def _save_session(self, result: TurnResult, history_length: int) -> None:
         if self.state_dir is None or result.session_id is None:
@@ -208,8 +190,7 @@ class Agent:
                         return
                 request.input_messages, request.tools = deepcopy(prepared_messages), deepcopy(schemas)
                 request.covered_boundary = context.covered
-                result, request = self._measure_context_limit(result, request)
-                if request.status == ModelRequestStatus.BLOCKED:
+                if self._block_on_budget(result, request):
                     return
 
                 # Parsing may fail, but the actor still received this input. Fresh feedback

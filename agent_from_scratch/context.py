@@ -176,10 +176,31 @@ class ContextState:
         return boundary
 
 
+def context_blocker(budget: dict | None, margin: int) -> tuple[str, str] | None:
+    """Return (error_code, detail) when a measurement cannot support a request at margin.
+
+    Single definition of the fit rule: both the soft compaction trigger and the hard
+    request gate read it, so the two can never drift apart.
+    """
+    if (not budget or budget.get("count_method") != "exact"
+            or budget.get("remaining_tokens") is None):
+        return ("context_unavailable",
+                "Cannot establish request fit: exact prompt measurement "
+                "and a bounded output reserve are required.")
+    if budget["remaining_tokens"] < margin:
+        # Read the reported fields defensively: this predicate must stay total for
+        # partial measurements, which a complete `measure_context` result never is.
+        return ("context_limit",
+                "Request exceeds the context budget: "
+                f"prompt={budget.get('prompt_tokens')}, "
+                f"output_reserve={budget.get('response_reserve')}, "
+                f"margin={margin}, "
+                f"window={budget.get('window_tokens')}.")
+    return None
+
+
 def context_fits(budget: dict | None, margin: int) -> bool:
-    return bool(budget and budget.get("count_method") == "exact"
-                and budget.get("remaining_tokens") is not None
-                and budget["remaining_tokens"] >= margin)
+    return context_blocker(budget, margin) is None
 
 
 def compact_context(state: ContextState, llm, schemas: dict, limits,
