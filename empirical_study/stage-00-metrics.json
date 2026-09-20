@@ -1,0 +1,59 @@
+{
+  "passed": 10,
+  "total": 17,
+  "families": {
+    "dependent_inspection": {
+      "passed": 1,
+      "total": 3
+    },
+    "appropriate_stopping": {
+      "passed": 5,
+      "total": 7
+    },
+    "constrained_change": {
+      "passed": 1,
+      "total": 2
+    },
+    "recovery": {
+      "passed": 2,
+      "total": 4
+    },
+    "calculator": {
+      "passed": 1,
+      "total": 1
+    }
+  },
+  "invalid_calls": 6,
+  "parse_errors": 6,
+  "unintended_change_tasks": 1,
+  "model_requests": 44,
+  "elapsed_seconds": 93.66,
+  "usage": {
+    "prompt_tokens": 53560,
+    "completion_tokens": 1432,
+    "total_tokens": 54992
+  },
+  "matched_recovery": [
+    {
+      "pair_id": "check_fix_pair",
+      "complete_pair": true,
+      "clean_passed": true,
+      "fault_passed": true,
+      "fault_encountered": true,
+      "recovered": true
+    },
+    {
+      "pair_id": "web_release_pair",
+      "complete_pair": true,
+      "clean_passed": false,
+      "fault_passed": false,
+      "fault_encountered": false,
+      "recovered": false
+    }
+  ],
+  "false_completion": {
+    "count": 0,
+    "reviewed": 0,
+    "unreviewed": 17
+  }
+}
