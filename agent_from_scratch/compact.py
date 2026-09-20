@@ -79,14 +79,16 @@ class Compactor:
                 }, ensure_ascii=False)},
             ]
             request.tools = {}
-            request.budget = self.llm.measure_context(request.input_messages, {})
+            request.budget = self.llm.measure_context(
+                request.input_messages, {}, max_tokens=self.limits.summary_max_tokens)
             if not context_fits(request.budget, self.limits.context_margin_tokens):
                 request.status = ModelRequestStatus.BLOCKED
                 request.error_message = "Summary input does not fit; raw evidence was preserved."
                 return None
             state.summary_calls += 1
             generated = True
-            response = self.llm.generate(deepcopy(request.input_messages), {})
+            response = self.llm.generate(deepcopy(request.input_messages), {},
+                                         max_tokens=self.limits.summary_max_tokens)
             request.raw_response = response.raw_response
             request.usage = LLM.read_usage(response.usage)
             request.finish_reason = response.finish_reason

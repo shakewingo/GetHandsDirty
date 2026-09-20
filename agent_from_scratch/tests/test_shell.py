@@ -99,7 +99,7 @@ class ShellTests(unittest.TestCase):
             LLMResponse("assistant", "REPL recovered", ResponseType.direct),
         ])
 
-        def generate(messages, tools):
+        def generate(messages, tools, **kwargs):
             seen.append(list(messages))
             return next(responses)
 

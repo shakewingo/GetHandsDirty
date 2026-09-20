@@ -184,7 +184,7 @@ class BehavioralEvaluationTests(unittest.TestCase):
         responses = iter(solution(task["id"]) + solution(task["id"]))
         initial_inputs = []
 
-        def generate(messages, schemas):
+        def generate(messages, schemas, **kwargs):
             if len(messages) == 2:
                 initial_inputs.append(deepcopy(messages))
             return next(responses)

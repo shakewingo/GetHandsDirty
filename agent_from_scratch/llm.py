@@ -130,13 +130,21 @@ class LLM:
 
     def measure_context(
         self, messages: List[ChatCompletionRequestMessage], tools: Dict[str, ChatCompletionTool],
+        *, max_tokens: int | None = None,
     ) -> dict[str, Any]:
         """Measure the next input without generation or changing the model's KV cache.
 
-        Remaining room reserves the configured output maximum, before any safety
-        margin.
+        Args:
+            messages: the exact model-facing view to be sent.
+            tools: the schemas that will accompany it.
+            max_tokens: output reserve for this one request; None uses the instance default.
+
+        Returns:
+            dict: count method, prompt tokens, window, reserve and remaining room, before
+                any safety margin.
         """
-        reserve = self.max_tokens if self.max_tokens is not None and self.max_tokens > 0 else None
+        configured = self.max_tokens if max_tokens is None else max_tokens
+        reserve = configured if configured is not None and configured > 0 else None
         measurement = {"count_method": "unavailable", "prompt_tokens": None,
                        "window_tokens": self.n_ctx, "response_reserve": reserve,
                        "remaining_tokens": None}
@@ -263,13 +271,15 @@ class LLM:
         self,
         messages: List[ChatCompletionRequestMessage],
         tools: Dict[str, ChatCompletionTool],
+        *,
+        max_tokens: int | None = None,
     ) -> LLMResponse:
         response = self.llm.create_chat_completion(
             messages=messages,
             tools=list(tools.values()),
             tool_choice="auto",
             temperature=self.temperature,
-            max_tokens=self.max_tokens,
+            max_tokens=self.max_tokens if max_tokens is None else max_tokens,
             stream=False,
         )
         try:

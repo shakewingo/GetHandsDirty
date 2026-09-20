@@ -49,7 +49,7 @@ class CompactTests(unittest.TestCase):
         self.state = ContextState(self.raw, turn_start=3, last_sent=3)
         self.requests = []
 
-    def measure(self, messages, schemas):
+    def measure(self, messages, schemas, **kwargs):
         # Deliberately scripted budget: these tests make no tokenizer claims.
         summarized = any(m.get("content", "").startswith("[Conversation summary:") for m in messages)
         summary_request = messages[0]["content"].startswith("Summarize the supplied")
@@ -61,6 +61,17 @@ class CompactTests(unittest.TestCase):
     def compact(self):
         outcome = Compactor(self.model, self.limits).attempt(self.state, {}, self.requests, 1)
         return outcome is CompactOutcome.APPLIED
+
+    def test_summary_uses_its_own_output_reserve(self):
+        self.limits = replace(AgentLimits(), summary_max_tokens=128)
+        self.assertTrue(self.compact())
+        summary_reserve = [call.kwargs.get("max_tokens")
+                           for call in self.model.generate.call_args_list]
+        self.assertEqual(summary_reserve, [128])
+        measured = [call.kwargs.get("max_tokens")
+                    for call in self.model.measure_context.call_args_list
+                    if call.args[0][0]["content"].startswith("Summarize the supplied")]
+        self.assertEqual(measured, [128])
 
     def test_manual_and_automatic_paths_share_summary_and_preserve_raw_session(self):
         for manual in (True, False):
@@ -125,7 +136,7 @@ class CompactTests(unittest.TestCase):
 
     def test_compaction_does_not_reset_repeated_failure_counter(self):
         replies = iter([call(left="bad"), answer("summary"), call(left="bad"), call(left="bad")])
-        def generate(messages, schemas):
+        def generate(messages, schemas, **kwargs):
             self.pressure = True
             return next(replies)
         self.model.generate.side_effect = generate
@@ -206,7 +217,7 @@ class CompactTests(unittest.TestCase):
                     first = call()
                     first.tool_calls = [ToolCall("write_file", {"path": "done.txt", "content": "once"})]
                 replies = iter([first, answer("summary"), answer("Done")])
-                def generate(messages, schemas):
+                def generate(messages, schemas, **kwargs):
                     seen.append(deepcopy(messages))
                     self.pressure = True
                     reply = next(replies)
