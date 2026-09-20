@@ -345,6 +345,60 @@ class CompactTests(unittest.TestCase):
         self.assertIn("cut off", str(feedback[0]["content"]))
         self.assertFalse(any(m.get("role") == "tool" for m in result.messages))
 
+    def test_completed_compacted_turn_saves_a_checkpoint_after_its_raw_delta(self):
+        with TemporaryDirectory() as directory:
+            self.pressure = True
+            self.model.generate.side_effect = [answer("Goal: report 7."), answer("7")]
+            agent = Agent(self.model, directory, registry=ToolRegistry([]))
+            # A checkpoint may only cover messages the session itself holds, so replay the
+            # REPL's flow: earlier turns are on disk before this one runs.
+            store = SessionStore(Path(directory, "sessions"))
+            store.append("cp", "earlier", deepcopy(self.raw[1:3]))
+            result = agent.run_turn("Use 7, not 6.", store.load_history("cp"), session_id="cp")
+            lines = Path(directory, "sessions", "cp.jsonl").read_text().splitlines()
+            earlier, turn, checkpoint = (json.loads(line) for line in lines)
+            self.assertNotIn("kind", turn)
+            self.assertEqual(checkpoint["kind"], "checkpoint")
+            self.assertEqual(checkpoint["run_id"], result.run_id)
+            # covered counts session messages: one less than ContextState.covered.
+            self.assertEqual(checkpoint["covered"], 2)
+            self.assertEqual(store.load_checkpoint("cp", store.load_history("cp")), checkpoint)
+            self.assertEqual(len(checkpoint["config"]["compact_prompt_sha256"]), 64)
+
+    def test_checkpoint_is_refused_when_history_was_never_saved(self):
+        with TemporaryDirectory() as directory:
+            self.pressure = True
+            self.model.generate.side_effect = [answer("Goal: report 7."), answer("7")]
+            agent = Agent(self.model, directory, registry=ToolRegistry([]))
+            # Library callers may pass history the store does not hold; a checkpoint over it
+            # could never be replayed, so none is written and the raw turn is still saved.
+            result = agent.run_turn("Use 7, not 6.", deepcopy(self.raw[1:3]), session_id="cp")
+            self.assertEqual(result.stop_reason, "final_response")
+            store = SessionStore(Path(directory, "sessions"))
+            self.assertEqual(len(store.load_history("cp")), 2)
+            self.assertIsNone(store.load_checkpoint("cp", store.load_history("cp")))
+
+    def test_incomplete_turn_saves_no_checkpoint(self):
+        with TemporaryDirectory() as directory:
+            self.pressure = True
+            self.model.generate.side_effect = ResponseError(ResponseErrorCode.EMPTY_RESPONSE)
+            Agent(self.model, directory, registry=ToolRegistry([])).run_turn(
+                "Use 7, not 6.", deepcopy(self.raw[1:3]), session_id="cp")
+            self.assertIsNone(SessionStore(Path(directory, "sessions")).load_checkpoint("cp", []))
+
+    def test_checkpoint_write_failure_leaves_the_saved_turn_intact(self):
+        with TemporaryDirectory() as directory:
+            self.pressure = True
+            self.model.generate.side_effect = [answer("Goal: report 7."), answer("7")]
+            agent = Agent(self.model, directory, registry=ToolRegistry([]))
+            with patch("agent_from_scratch.session.SessionStore.append_checkpoint",
+                       side_effect=OSError("disk full")):
+                result = agent.run_turn("Use 7, not 6.", deepcopy(self.raw[1:3]), session_id="cp")
+            self.assertEqual(result.stop_reason, "final_response")
+            store = SessionStore(Path(directory, "sessions"))
+            self.assertEqual(len(store.load_history("cp")), 2)
+            self.assertIsNone(store.load_checkpoint("cp", store.load_history("cp")))
+
     def test_failed_compaction_with_room_left_does_not_end_the_turn(self):
         """A manual compact must not kill a turn that the budget can still serve."""
         self.model.measure_context.side_effect = None

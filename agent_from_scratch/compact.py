@@ -5,12 +5,18 @@ from __future__ import annotations
 from collections.abc import Callable
 from copy import deepcopy
 from enum import StrEnum
+from hashlib import sha256
 import json
 
 from .config import AgentLimits, PROMPTS_DIR
 from .context import ContextState, context_fits
 from .llm import LLM, ResponseError, ResponseType
 from .trace import ModelRequest, ModelRequestStatus, used_model_calls
+
+
+def compact_prompt_digest() -> str:
+    """Identify the summarizer instructions a checkpoint was produced under."""
+    return sha256((PROMPTS_DIR / "compact.md").read_bytes()).hexdigest()
 
 
 class CompactOutcome(StrEnum):

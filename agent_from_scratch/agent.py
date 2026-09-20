@@ -14,7 +14,7 @@ from loguru import logger
 from .config import AgentLimits
 from .llm import LLM, ResponseError, ResponseErrorCode, ResponseType
 from .session import SessionStore
-from .compact import CompactOutcome, Compactor
+from .compact import CompactOutcome, Compactor, compact_prompt_digest
 from .context import (ContextState, InstructionConfig, InstructionLoadError,
                       context_blocker, context_fits, load_instructions)
 from .tools.base import ToolErrorCode, ToolRegistry, ToolResult
@@ -82,9 +82,10 @@ class Agent:
         )
         trace = TraceStore(Path(self.state_dir, "runs") if self.state_dir is not None else None)
 
+        turn_start = 1 + len(history or [])
+        state = ContextState(raw=result.messages, turn_start=turn_start, last_sent=turn_start)
         try:
-            self._run_turn(result, history_length=len(history or []), compact=compact,
-                           on_progress=on_progress)
+            self._run_turn(result, state, compact=compact, on_progress=on_progress)
         except KeyboardInterrupt as error:
             # A completed model request can still be followed by an interrupted tool.
             if result.model_requests and result.model_requests[-1].status == ModelRequestStatus.STARTED:
@@ -95,7 +96,7 @@ class Agent:
             result.stop_reason = RunStopReason.INTERRUPTED
         result.elapsed_seconds = round(monotonic() - started, 2)
         trace.save_run(result)
-        self._save_session(result, len(history or []))
+        self._save_session(result, turn_start - 1, state)
         return result
 
     @staticmethod
@@ -141,26 +142,43 @@ class Agent:
             logger.error("Keeping the turn's instruction snapshot: {}", error)
             return None, {"status": "error", "detail": str(error)}
 
-    def _save_session(self, result: TurnResult, history_length: int) -> None:
+    def _save_session(self, result: TurnResult, history_length: int, state: ContextState) -> None:
+        """Append this turn's raw delta, then a checkpoint that references it.
+
+        The two writes are ordered and separately atomic: a checkpoint never names messages
+        that are not already on disk. An incomplete turn contributes neither.
+        """
         if self.state_dir is None or result.session_id is None:
             return
-        messages = result.messages[1 + history_length:] if result.stop_reason == RunStopReason.FINAL_RESPONSE else []
+        completed = result.stop_reason == RunStopReason.FINAL_RESPONSE
+        store = SessionStore(Path(self.state_dir, "sessions"))
         try:
-            SessionStore(Path(self.state_dir, "sessions")).append(
-                result.session_id, result.run_id, messages,
-                started_at=result.started_at, stop_reason=result.stop_reason,
-            )
+            store.append(result.session_id, result.run_id,
+                         result.messages[1 + history_length:] if completed else [],
+                         started_at=result.started_at, stop_reason=result.stop_reason)
         except (OSError, ValueError) as error:
             logger.error("Could not save session for run {}; this turn will not be remembered: {}",
                          result.run_id, error)
+            return
+        if not completed or not state.summary or state.covered <= 1:
+            return
+        try:
+            # covered indexes raw, whose system message is at 0; session history is raw[1:].
+            store.append_checkpoint(
+                result.session_id, result.run_id, covered=state.covered - 1,
+                summary=state.summary, history=result.messages[1:],
+                config={"compact_prompt_sha256": compact_prompt_digest(),
+                        "summary_max_tokens": self.limits.summary_max_tokens,
+                        "model": self.llm.settings()})
+        except (OSError, ValueError) as error:
+            logger.error("Could not save the summary checkpoint for run {}; "
+                         "the next turn replays raw history: {}", result.run_id, error)
 
-    def _run_turn(self, result: TurnResult, *, history_length: int, compact: bool = False,
+    def _run_turn(self, result: TurnResult, state: ContextState, *, compact: bool = False,
                   on_progress: Callable[[str], None] | None = None) -> None:
         # Keep the original layout for tracing, session saving and evaluators.
         # Only raw_messages receives new events; prepared views are disposable.
         raw_messages = result.messages
-        turn_start = 1 + history_length
-        state = ContextState(raw=raw_messages, turn_start=turn_start, last_sent=turn_start)
         compactor = Compactor(self.llm, self.limits,
                               reload_instructions=self._reload_instructions)
         last_failure, failure_count = None, 0
