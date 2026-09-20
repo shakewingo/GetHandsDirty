@@ -14,7 +14,7 @@ from unittest.mock import Mock, patch
 from agent_from_scratch.agent import Agent
 from agent_from_scratch.config import AgentLimits
 from agent_from_scratch.compact import CompactOutcome, Compactor
-from agent_from_scratch.context import ContextState
+from agent_from_scratch.context import ContextState, InstructionConfig
 from agent_from_scratch.evals.verify import metrics
 from agent_from_scratch.llm import LLM, ResponseError, ResponseErrorCode
 from agent_from_scratch.session import SessionStore
@@ -93,6 +93,43 @@ class CompactTests(unittest.TestCase):
         self.assertFalse(self.compact())
         self.assertEqual(len(self.requests), 1)
         self.model.generate.assert_not_called()
+
+    def test_compact_publishes_reloaded_rules_without_editing_raw(self):
+        with TemporaryDirectory() as directory:
+            rules = Path(directory, "AGENTS.md")
+            rules.write_text("Original workspace rule.")
+            agent = Agent(self.model, None, registry=ToolRegistry([]),
+                          instruction_config=InstructionConfig(workspace=Path(directory)))
+            self.model.generate.side_effect = [answer("Goal: report 7."), answer("7")]
+            seen_first = False
+
+            def rewrite(messages, schemas, **kwargs):
+                nonlocal seen_first
+                if not seen_first:
+                    seen_first = True
+                    rules.write_text("Revised workspace rule.")
+                return self.measure(messages, schemas)
+
+            self.pressure = True
+            self.model.measure_context.side_effect = rewrite
+            result = agent.run_turn("Use 7, not 6.",
+                                    [message("user", "old"), message("assistant", "x" * 400)])
+            summary, actor = result.model_requests
+            assert actor.input_messages is not None
+            self.assertIn("Revised workspace rule.", actor.input_messages[0]["content"])
+            self.assertIn("Original workspace rule.", result.messages[0]["content"])
+            assert summary.instructions is not None
+            self.assertEqual(summary.instructions["sources"][-1]["status"], "loaded")
+
+    def test_failed_reload_keeps_the_turn_snapshot_and_records_the_error(self):
+        compactor = Compactor(self.model, self.limits,
+                              reload_instructions=lambda: (None, {"status": "error",
+                                                                  "detail": "unreadable"}))
+        self.assertIs(compactor.attempt(self.state, {}, self.requests, 1),
+                      CompactOutcome.APPLIED)
+        self.assertIsNone(self.state.instructions)
+        assert self.requests[0].instructions is not None
+        self.assertEqual(self.requests[0].instructions["status"], "error")
 
     def test_summary_uses_its_own_output_reserve(self):
         self.limits = replace(AgentLimits(), summary_max_tokens=128)

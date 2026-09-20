@@ -203,6 +203,7 @@ For Stage 3, introduce only the live state needed by context construction:
 | Existing result/request records | Tool/model/turn evidence, linked by call ID and run ID |
 | Agent local variables | Iteration, tool attempts, repeated failures and call IDs remain local; no `LoopState` class |
 | `ContextState` | Owns raw messages, summary, covered and last-sent boundaries, summary-call count and attempted boundary; builds independent inputs |
+| Reloaded rules | `ContextState.instructions` overrides `raw[0]` from a compact boundary onward; raw is never edited. Stage 4A's bounded memory index will attach at the same point and is not implemented here. |
 | Versioned summary checkpoint | Session store persists summary + raw boundary + source digest/configuration for restart |
 
 The separation is in place: **raw transcript versus an independent model-facing view**.

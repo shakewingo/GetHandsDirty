@@ -137,6 +137,9 @@ class ContextState:
     summary: str = ""  
     attempted_boundary: int = 0
     summary_calls: int = 0
+    # Rules republished at a compact boundary. None keeps raw[0], the turn-start snapshot;
+    # raw itself is never edited, so trace evidence of earlier requests stays exact.
+    instructions: ChatCompletionRequestMessage | None = None
 
     def messages(self) -> list[ChatCompletionRequestMessage]:
         history: list[ChatCompletionRequestMessage] = self.raw[1:self.turn_start]
@@ -147,7 +150,8 @@ class ContextState:
             # Pin the request even when older exchanges in this turn compact.
             pinned = [self.raw[self.turn_start]] if self.covered > self.turn_start else []
             current = [*pinned, *self.raw[self.covered:]]
-        return build_messages(instructions=self.raw[:1], history=history, current_turn=current)
+        rules = self.raw[:1] if self.instructions is None else [self.instructions]
+        return build_messages(instructions=rules, history=history, current_turn=current)
 
     def compact_boundary(self) -> int:
         """Return the largest cut that is both structurally legal and policy-permitted.

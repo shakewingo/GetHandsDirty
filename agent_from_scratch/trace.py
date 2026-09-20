@@ -55,6 +55,7 @@ class ModelRequest:
     last_sent_boundary: int = 0
     compact_before: dict | None = None
     compact_after: dict | None = None
+    instructions: dict | None = None  # Rule provenance when a compact boundary reloaded them.
 
 
 def used_model_calls(requests: list[ModelRequest]) -> int:
@@ -71,7 +72,7 @@ class TurnResult:
     run_id: str = ""
     elapsed_seconds: float = 0.0
     model_requests: list[ModelRequest] = field(default_factory=list)
-    schema_version: int = 5  # 5 renamed ModelRequest.context to budget.
+    schema_version: int = 5  # 5 renamed ModelRequest.context to budget; later fields are additive.
     session_id: str | None = None
     input: str = ""
     started_at: str = ""

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
 from enum import StrEnum
 import json
@@ -27,9 +28,11 @@ class Compactor:
     The same model's configured output reserve bounds both actor and summary generation.
     """
 
-    def __init__(self, llm: LLM, limits: AgentLimits):
+    def __init__(self, llm: LLM, limits: AgentLimits, *,
+                 reload_instructions: Callable[[], tuple[str | None, dict]] | None = None):
         self.llm = llm
         self.limits = limits
+        self.reload_instructions = reload_instructions
         self._prompt: str | None = None
 
     def attempt(self, state: ContextState, schemas: dict, requests: list[ModelRequest],
@@ -146,9 +149,16 @@ class Compactor:
                  request: ModelRequest, before: dict | None) -> bool:
         """Swap in the candidate only when it both fits and is strictly smaller."""
         try:
+            # The boundary is the one point in a turn that already rebuilds the prompt, so
+            # stable rules are reread here and measured as part of the candidate.
+            instructions = state.instructions
+            if self.reload_instructions is not None:
+                text, request.instructions = self.reload_instructions()
+                if text is not None:
+                    instructions = {"role": "system", "content": text}
             candidate = ContextState(raw=state.raw, turn_start=state.turn_start,
                                      last_sent=state.last_sent, covered=boundary,
-                                     summary=summary)
+                                     summary=summary, instructions=instructions)
             # Nothing touched by planning or summarizing feeds messages(), so a measurement
             # the caller took of this same view still describes it exactly.
             if before is None:
@@ -162,6 +172,7 @@ class Compactor:
                 request.error_message = "Summary did not produce a smaller fitting actor input."
                 return False
             state.covered, state.summary = boundary, summary
+            state.instructions = instructions
             return True
         except Exception as error:
             self._record_error(request, error, generated=True)

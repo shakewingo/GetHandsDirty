@@ -126,6 +126,21 @@ class Agent:
         result.error_message = blocked[1]
         return True
 
+    def _reload_instructions(self) -> tuple[str | None, dict[str, Any]]:
+        """Reread rule sources at a compact boundary; keep the turn snapshot on failure.
+
+        Returns:
+            tuple: the reloaded system text, or None to keep the current snapshot, and the
+                provenance recorded on the compact request either way.
+        """
+        try:
+            return load_instructions(self.instruction_config)
+        except InstructionLoadError as error:
+            # Mid-turn this must not end a turn already recovering from context pressure;
+            # turn start still refuses to run at all on the same error.
+            logger.error("Keeping the turn's instruction snapshot: {}", error)
+            return None, {"status": "error", "detail": str(error)}
+
     def _save_session(self, result: TurnResult, history_length: int) -> None:
         if self.state_dir is None or result.session_id is None:
             return
@@ -146,7 +161,8 @@ class Agent:
         raw_messages = result.messages
         turn_start = 1 + history_length
         state = ContextState(raw=raw_messages, turn_start=turn_start, last_sent=turn_start)
-        compactor = Compactor(self.llm, self.limits)
+        compactor = Compactor(self.llm, self.limits,
+                              reload_instructions=self._reload_instructions)
         last_failure, failure_count = None, 0
         tool_attempts = 0
         used_ids = {call["id"] for m in raw_messages for call in m.get("tool_calls", [])}
