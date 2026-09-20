@@ -16,6 +16,7 @@ from .llm import LLM, ResponseError, ResponseErrorCode, ResponseType
 from .session import SessionStore
 from .compact import CompactOutcome, Compactor
 from .elision import elide_old_outputs
+from .planning import PLAN_RULES, PlanState, UpdatePlanTool
 from .context import (ContextState, InstructionConfig, InstructionLoadError,
                       context_blocker, context_fits, load_instructions)
 from .tools.base import ToolErrorCode, ToolRegistry, ToolResult
@@ -74,6 +75,8 @@ class Agent:
         """
         started = monotonic()
         instructions, instruction_metadata = load_instructions(self.instruction_config)
+        if self.limits.planning_enabled:
+            instructions += '\n' + PLAN_RULES
         result = TurnResult(
             messages=[{"role": "system", "content": instructions},
                       *deepcopy(history or []), {"role": "user", "content": user_input}],
@@ -148,6 +151,8 @@ class Agent:
         turn_start = 1 + history_length
         state = ContextState(raw=raw_messages, turn_start=turn_start, last_sent=turn_start)
         compactor = Compactor(self.llm, self.limits)
+        plan = PlanState()
+        plan_tool = UpdatePlanTool(plan) if self.limits.planning_enabled else None
         last_failure, failure_count = None, 0
         tool_attempts = 0
         used_ids = {call["id"] for m in raw_messages for call in m.get("tool_calls", [])}
@@ -169,6 +174,8 @@ class Agent:
             try:
                 prepared_messages = state.messages()
                 schemas = self.registry.schemas()
+                if plan_tool is not None:
+                    schemas[plan_tool.name] = plan_tool.to_schema()
                 budget = self.llm.measure_context(prepared_messages, schemas)
                 if self.limits.elision_enabled:
                     budget = elide_old_outputs(state, self.llm, schemas, self.limits, budget)
@@ -264,7 +271,11 @@ class Agent:
                         return
                     tool_attempts += 1
                     logger.debug("Tool call detected: {} {}", call.name, call.arguments)
-                    tool_result = self.execute_tool(call.name, call.arguments, call.call_id)
+                    if plan_tool is not None and call.name == plan_tool.name:
+                        tool_result = plan_tool.invoke(call.arguments, call.call_id)
+                        state.plan_text = plan.render()
+                    else:
+                        tool_result = self.execute_tool(call.name, call.arguments, call.call_id)
                     if tool_result.ok:
                         logger.debug("Tool executed successfully: {} ({})", tool_result.tool_name, tool_result.call_id)
                     else:

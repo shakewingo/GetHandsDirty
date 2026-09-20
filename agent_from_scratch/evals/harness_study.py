@@ -23,7 +23,9 @@ from .verify import exchanges, metrics, snapshot
 
 CASE_IDS = ('direct', 'no_op', 'nested', 'search', 'json_repair', 'missing_path',
             'history_retain', 'history_edit')
-PROFILES = {'baseline': {}, 'elision': {'elision_enabled': True}}
+PROFILES = {'baseline': {}, 'elision': {'elision_enabled': True},
+            'planning': {'planning_enabled': True},
+            'elision_planning': {'elision_enabled': True, 'planning_enabled': True}}
 ROOT = Path(__file__).resolve().parents[1]
 
 

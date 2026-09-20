@@ -138,6 +138,7 @@ class ContextState:
     attempted_boundary: int = 0
     summary_calls: int = 0
     elided: dict[str, str] = field(default_factory=dict)
+    plan_text: str = ''
 
     def messages(self) -> list[ChatCompletionRequestMessage]:
         history: list[ChatCompletionRequestMessage] = self.raw[1:self.turn_start]
@@ -152,6 +153,8 @@ class ContextState:
         for message in messages:
             if message['role'] == 'tool' and message.get('tool_call_id') in self.elided:
                 message['content'] = self.elided[message['tool_call_id']]
+        if self.plan_text:
+            messages.append({'role': 'user', 'content': self.plan_text})
         return messages
 
     def compact_boundary(self) -> int:

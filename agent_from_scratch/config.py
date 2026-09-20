@@ -43,6 +43,7 @@ class AgentLimits:
     elision_enabled: bool = False
     elision_soft_ratio: float = 0.6
     elision_min_chars: int = 1024
+    planning_enabled: bool = False
 
     def __post_init__(self):
         if not 0 < self.elision_soft_ratio < 1:

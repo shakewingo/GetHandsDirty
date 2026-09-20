@@ -39,3 +39,10 @@
 - Ruling: complete re-readable outputs only; partial reads and transient shell/web
   outputs are excluded. This trades compression coverage for evidence preservation.
 - Real-model comparisons remain scheduled for the common frozen Stage 05 revision.
+
+## Stage 03 implementation complete
+
+- Three focused tests and 221 full-suite tests pass.
+- Plans live only for a user turn; no cross-turn memory or shared registry mutation.
+- Ruling: allow zero active steps when all are completed; insisting on exactly one
+  forever would prevent representing completion. Completion still requires evidence.
