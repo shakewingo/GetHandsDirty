@@ -302,8 +302,48 @@ class CompactTests(unittest.TestCase):
                 self.assertEqual([q.purpose for q in result.model_requests], ["agent", "compact", "agent"])
                 self.assertEqual(seen[-1][-1], result.messages[-2])
                 self.assertEqual(result.model_requests[1].last_sent_boundary, 4)
+                # Compaction changes the view, never the turn's identity or its counters.
+                self.assertEqual([q.iteration for q in result.model_requests], [1, 2, 2])
+                self.assertIs(agent.registry, agent.registry)
+                self.assertTrue(all(i.startswith(result.run_id)
+                                    for q in result.model_requests for i in q.call_ids))
                 if not parse_error:
                     self.assertEqual(Path(directory, "done.txt").read_text(), "once")
+
+    def test_parser_feedback_survives_compaction_and_stays_unsent(self):
+        self.raw.extend(exchange("old") + exchange("recent"))
+        self.raw.append(message("user", "[Runtime feedback] The output was cut off."))
+        self.state.last_sent = len(self.raw) - 1
+        self.assertTrue(self.compact())
+        self.assertIn(self.raw[-1], self.state.messages())
+        self.assertGreaterEqual(self.state.last_sent, self.state.covered)
+
+    def test_failing_summarizer_preserves_raw_evidence_and_saves_no_session(self):
+        with TemporaryDirectory() as directory:
+            self.pressure = True
+            self.model.generate.side_effect = ResponseError(ResponseErrorCode.EMPTY_RESPONSE)
+            agent = Agent(self.model, directory, registry=ToolRegistry([]))
+            raw_before = deepcopy(self.raw[1:3])
+            result = agent.run_turn("Use 7, not 6.", raw_before, session_id="failing")
+            self.assertEqual(result.stop_reason, "context_limit")
+            self.assertEqual(result.messages[1:3], raw_before)
+            self.assertEqual(self.state.summary, "")
+            self.assertEqual(SessionStore(Path(directory, "sessions")).load_history("failing"), [])
+
+    def test_truncated_response_under_pressure_executes_nothing(self):
+        self.pressure = True
+        self.model.generate.side_effect = [
+            answer("Goal: continue."),
+            ResponseError(ResponseErrorCode.TRUNCATED_RESPONSE),
+            answer("Done."),
+        ]
+        registry = ToolRegistry([])
+        result = Agent(self.model, None, registry=registry).run_turn(
+            "Use 7, not 6.", deepcopy(self.raw[1:3]))
+        feedback = [m for m in result.messages if "[Runtime feedback]" in str(m.get("content"))]
+        self.assertEqual(len(feedback), 1)
+        self.assertIn("cut off", str(feedback[0]["content"]))
+        self.assertFalse(any(m.get("role") == "tool" for m in result.messages))
 
     def test_failed_compaction_with_room_left_does_not_end_the_turn(self):
         """A manual compact must not kill a turn that the budget can still serve."""
