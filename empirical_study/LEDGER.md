@@ -23,3 +23,11 @@
 ## Stage 00 complete
 
 - Unchanged real-model regression: 10/17, 44 requests, 93.66 s; see STAGE-00.md.
+
+## Stage 01 implementation complete
+
+- Runner/verifier: 7 focused tests pass; initial missing-module RED followed by GREEN.
+- Independent reviewer reproduced 3 important verifier/metric flaws; new tests failed
+  before fixes and pass afterward. No review finding remains outstanding.
+- Ruling: final real-model panel uses one frozen runtime for all profiles, after all
+  opt-in components are implemented. Current partial v1 pilot is excluded.

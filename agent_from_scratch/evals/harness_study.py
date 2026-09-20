@@ -80,6 +80,7 @@ def make_case(case_id: str, workspace: Path) -> dict:
         p = workspace / name
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding='utf-8')
+    case['source_text'] = {name: files[name].strip() for name in case['required_reads']}
     if case_id.startswith('history_'):
         # Supplied history is actually executed against these fixtures; no invented outputs.
         reader = ReadFileTool(workspace, restrict_to_workspace=True)
@@ -99,18 +100,44 @@ def score_case(case, result, workspace, before):
     changed = {p for p in before.keys() | after.keys() if before.get(p) != after.get(p)}
     writes = [r for r in rows if r['tool_name'] in {'write_file', 'edit_file'}]
     written = {(r.get('output') or {}).get('path') for r in writes if r['ok']}
-    observed = [(r.get('output') or {}).get('path') for r in rows if r['ok'] and r['tool_name'] == 'read_file']
-    if case.get('allow_search'):
-        observed.extend(m['path'] for r in rows if r['ok'] and r['tool_name'] == 'search_files'
-                        for m in (r.get('output') or {}).get('matches', []))
+    first_write = next((i for i, r in enumerate(rows) if r['tool_name'] in {'write_file', 'edit_file'}), len(rows))
+    cursor = 0
+    sources_ok = True
+    for path in case['required_reads']:
+        expected = case['source_text'][path]
+        for i in range(cursor, first_write):
+            r, output = rows[i], rows[i].get('output') or {}
+            read_match = (r['tool_name'] == 'read_file' and output.get('path') == path
+                          and expected in output.get('content', ''))
+            search_match = (case.get('allow_search') and r['tool_name'] == 'search_files'
+                            and any(m.get('path') == path and expected in m.get('text', '')
+                                    for m in output.get('matches', [])))
+            if r['ok'] and (read_match or search_match):
+                cursor = i + 1
+                break
+        else:
+            sources_ok = False
+            break
     checks = {'normal_finish': result.stop_reason == 'final_response',
               'answer': (result.final_answer or '').strip() == case['answer'],
-              'required_sources': set(case['required_reads']) <= set(observed),
+              'required_sources': sources_ok,
               'allowed_changes': (changed | (written - {None})) <= set(case['allowed_changes'])}
     if not case['allowed_changes']:
         checks['no_write_attempts'] = not writes
     if case['id'] == 'direct':
         checks['no_tools'] = not rows
+    fault_seen = False
+    if case['id'] == 'missing_path':
+        phase = 0
+        for row in rows:
+            args = json.loads((row.get('function') or {}).get('arguments', '{}'))
+            if phase == 0 and row['tool_name'] == 'read_file' and args.get('path') == 'profiles/active.txt' and not row['ok']:
+                fault_seen, phase = True, 1
+            elif phase == 1 and row['tool_name'] == 'list_files' and row['ok'] and (row.get('output') or {}).get('path') == 'profiles':
+                phase = 2
+            elif phase == 2 and row['tool_name'] == 'read_file' and row['ok'] and (row.get('output') or {}).get('path') == 'profiles/current.txt':
+                phase = 3
+        checks['recovered_in_order'] = phase == 3
     if case['artifact']:
         path, expected = case['artifact']
         try:
@@ -119,6 +146,7 @@ def score_case(case, result, workspace, before):
         except (ValueError, OSError):
             checks['artifact'] = False
     return {'passed': all(checks.values()), 'checks': checks, 'changed_paths': sorted(changed),
+            'fault_encountered': fault_seen if case['id'] == 'missing_path' else None,
             'failed_checks': [k for k, v in checks.items() if not v]}
 
 
@@ -143,6 +171,11 @@ def registry_for(workspace):
                         (ListFilesTool, ReadFileTool, WriteFileTool, EditFileTool))
 
 
+def turn_metrics(result, history_length):
+    """Charge current execution only; request token usage still includes replayed history."""
+    return metrics(replace(result, messages=result.messages[1 + history_length:]))
+
+
 def run_case(model, case_id, out, limits):
     out.mkdir(parents=True, exist_ok=False)
     with TemporaryDirectory(prefix='harness-study-') as directory:
@@ -156,7 +189,7 @@ def run_case(model, case_id, out, limits):
             case['prompt'], case['history'], session_id=case_id)
         score = score_case(case, result, root, before)
         rows = exchanges(result)
-        record = {'id': case_id, **metrics(result), **score,
+        record = {'id': case_id, **turn_metrics(result, len(case['history'])), **score,
                   'summary_requests': sum(q.purpose == 'compact' and q.status != 'blocked' for q in result.model_requests),
                   'elided_observations': len({i for q in result.model_requests for i in getattr(q, 'elided_call_ids', [])}),
                   'plan_calls': sum(r['tool_name'] == 'update_plan' and r['ok'] for r in rows),
@@ -189,7 +222,7 @@ def main():
     limits = replace(AgentLimits(), **PROFILES[args.profile])
     source = {p.relative_to(ROOT).as_posix(): sha256(p.read_bytes()).hexdigest() for p in ROOT.rglob('*')
               if p.is_file() and p.suffix in {'.py', '.md', '.jinja'} and '__pycache__' not in p.parts}
-    save(out/'manifest.json', {'suite': 'harness-study-dev-v1', 'profile': args.profile,
+    save(out/'manifest.json', {'suite': 'harness-study-dev-v2', 'profile': args.profile,
          'limits': asdict(limits), 'tasks': tasks, 'seed': args.seed, 'settings': model.settings(),
          'started_at': datetime.now(timezone.utc).isoformat(), 'source_sha256': source,
          'git_revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
