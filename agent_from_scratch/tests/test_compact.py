@@ -62,6 +62,38 @@ class CompactTests(unittest.TestCase):
         outcome = Compactor(self.model, self.limits).attempt(self.state, {}, self.requests, 1)
         return outcome is CompactOutcome.APPLIED
 
+    def test_unusable_summary_retries_once_at_the_same_cut_then_gives_up(self):
+        self.model.generate.side_effect = [answer(""), answer("Goal: report 7. Next: answer.")]
+        self.assertTrue(self.compact())
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual({q.covered_boundary for q in self.requests}, {self.state.covered})
+        self.assertEqual(self.state.summary_calls, 2)
+        retry = self.requests[1].input_messages
+        assert retry is not None
+        self.assertIn("previous attempt was rejected", retry[0]["content"])
+
+    def test_attempt_never_exceeds_two_calls_or_the_run_budget(self):
+        self.model.generate.side_effect = [answer(""), answer(""), answer("Goal: unused.")]
+        self.assertFalse(self.compact())
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(self.model.generate.call_count, 2)
+        self.limits = replace(AgentLimits(), max_compact_calls=1)
+        self.state = ContextState(self.raw, turn_start=3, last_sent=3)
+        self.requests = []
+        self.model.generate.reset_mock()
+        self.model.generate.side_effect = [answer(""), answer("Goal: unused.")]
+        self.assertFalse(self.compact())
+        self.assertEqual(len(self.requests), 1)  # the run ceiling stops the retry
+        self.assertEqual(self.model.generate.call_count, 1)
+
+    def test_blocked_summary_input_does_not_retry(self):
+        self.model.measure_context.side_effect = lambda messages, schemas, **kwargs: {
+            "count_method": "exact", "prompt_tokens": 9000, "response_reserve": 512,
+            "remaining_tokens": -100, "window_tokens": 8192}
+        self.assertFalse(self.compact())
+        self.assertEqual(len(self.requests), 1)
+        self.model.generate.assert_not_called()
+
     def test_summary_uses_its_own_output_reserve(self):
         self.limits = replace(AgentLimits(), summary_max_tokens=128)
         self.assertTrue(self.compact())
@@ -164,12 +196,12 @@ class CompactTests(unittest.TestCase):
                 self.state = ContextState(self.raw, 3, 3)
                 self.requests = []
                 self.model.generate.reset_mock()
-                self.model.generate.side_effect = [reply]
+                self.model.generate.side_effect = [reply, reply]
                 before = self.state.messages()
                 self.assertFalse(self.compact())
                 self.assertEqual(self.state.messages(), before)
                 self.assertFalse(self.compact())
-                self.assertEqual(self.model.generate.call_count, 1)
+                self.assertEqual(self.model.generate.call_count, 2)
 
     def test_oversized_summary_input_never_generates(self):
         self.model.measure_context.side_effect = None
@@ -244,12 +276,13 @@ class CompactTests(unittest.TestCase):
             "remaining_tokens": 4000, "window_tokens": 5512}
         for reply in (ResponseError(ResponseErrorCode.TRUNCATED_RESPONSE), answer("   ")):
             with self.subTest(reply=reply):
-                self.model.generate.side_effect = [reply, answer("7")]
+                self.model.generate.side_effect = [reply, reply, answer("7")]
                 result = Agent(self.model, registry=ToolRegistry([])).run_turn(
                     "Use 7, not 6.", self.raw[1:3], compact=True)
                 self.assertEqual(result.stop_reason, "final_response")
                 self.assertEqual(result.final_answer, "7")
-                self.assertEqual([q.purpose for q in result.model_requests], ["compact", "agent"])
+                self.assertEqual([q.purpose for q in result.model_requests],
+                                 ["compact", "compact", "agent"])
 
     def test_unavailable_measurement_keeps_its_own_error_code(self):
         """A missing tokenizer is not a context limit, whatever compaction did."""
@@ -283,8 +316,9 @@ class CompactTests(unittest.TestCase):
         self.model.generate.side_effect = error
         result = Agent(self.model).run_turn("Finish", self.raw[1:3])
         self.assertEqual(result.stop_reason, "context_limit")
-        self.assertEqual(self.model.generate.call_count, 1)
-        self.assertEqual(metrics(result)["usage"]["total_tokens"], 612)
+        # Both calls of the one attempt are charged, and both report the same usage.
+        self.assertEqual(self.model.generate.call_count, 2)
+        self.assertEqual(metrics(result)["usage"]["total_tokens"], 1224)
         self.assertEqual(result.messages[1:3], self.raw[1:3])
 
 

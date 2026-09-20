@@ -34,44 +34,85 @@ class Compactor:
 
     def attempt(self, state: ContextState, schemas: dict, requests: list[ModelRequest],
                 iteration: int, *, before: dict | None = None) -> CompactOutcome:
-        """Summarize one legal cut. The outcome, not a mutated field, tells the caller what happened.
+        """Summarize one legal cut, with at most one corrective retry at that same cut.
 
-        `before` is the caller's own measurement of this same view and these same schemas;
-        supplying it avoids tokenizing the turn's largest input a second time.
+        Args:
+            state: the turn's context state; only `covered`, `summary`, `attempted_boundary`
+                and `summary_calls` may change, and only on success or on a spent call.
+            schemas: the tool schemas the actor's request will carry.
+            requests: the turn's request list; one entry is appended per summary call.
+            iteration: the agent loop iteration these calls belong to.
+            before: the caller's own measurement of this same view and these same schemas,
+                which avoids tokenizing the turn's largest input a second time.
+
+        Returns:
+            CompactOutcome: APPLIED when a smaller fitting view was published, SKIPPED when
+                a gate refused before anything was spent, FAILED when a call reached the
+                model and produced no usable view.
         """
         boundary = self._plan(state, requests)
         if boundary is None:
             return CompactOutcome.SKIPPED
-        # Record the attempt before spending anything: this exact cut is never retried.
+        # Record the attempt before spending anything: this exact cut is never retried by a
+        # *later* attempt, whatever the retry below does inside this one.
         state.attempted_boundary = boundary
-        request = ModelRequest(iteration, len(state.raw), purpose="compact",
-                               covered_boundary=boundary, last_sent_boundary=state.last_sent)
-        requests.append(request)
-        summary = self._summarize(state, boundary, request)
-        if summary is None:
-            return CompactOutcome.FAILED
-        if self._publish(state, boundary, summary, schemas, request, before):
-            return CompactOutcome.APPLIED
-        return CompactOutcome.FAILED
+        outcome = CompactOutcome.SKIPPED
+        retry: str | None = None
+        for _ in range(self.limits.max_summary_calls_per_attempt):
+            if outcome is not CompactOutcome.SKIPPED and self._exhausted(state, requests):
+                break
+            request = ModelRequest(iteration, len(state.raw), purpose="compact",
+                                   covered_boundary=boundary, last_sent_boundary=state.last_sent)
+            requests.append(request)
+            outcome = CompactOutcome.FAILED
+            summary = self._summarize(state, boundary, request, retry)
+            if summary is not None and self._publish(state, boundary, summary, schemas,
+                                                     request, before):
+                return CompactOutcome.APPLIED
+            if request.status is ModelRequestStatus.BLOCKED:
+                break  # The summarizer's own input does not fit; a retry cannot change that.
+            retry = request.error_message
+        return outcome
 
     def _plan(self, state: ContextState, requests: list[ModelRequest]) -> int | None:
         """Return the cut worth a model call, or None to refuse without spending one."""
         boundary = state.compact_boundary()
         if (boundary <= state.covered or boundary == state.attempted_boundary
-                or state.summary_calls >= self.limits.max_compact_calls
-                # Leave the actor the last slot: a summary nobody can act on is wasted.
-                or used_model_calls(requests) >= self.limits.max_iterations - 1):
+                or self._exhausted(state, requests)):
             return None
         return boundary
 
-    def _summarize(self, state: ContextState, boundary: int, request: ModelRequest) -> str | None:
-        """Generate the handoff for raw[covered:boundary]; None when nothing usable came back."""
+    def _exhausted(self, state: ContextState, requests: list[ModelRequest]) -> bool:
+        """True when another summary call would exceed its own or the turn's ceiling."""
+        return (state.summary_calls >= self.limits.max_compact_calls
+                # Leave the actor the last slot: a summary nobody can act on is wasted.
+                or used_model_calls(requests) >= self.limits.max_iterations - 1)
+
+    def _summarize(self, state: ContextState, boundary: int, request: ModelRequest,
+                   retry: str | None = None) -> str | None:
+        """Generate the handoff for raw[covered:boundary]; None when nothing usable came back.
+
+        Args:
+            state: the turn's context state, read for the previous summary and raw messages.
+            boundary: the exclusive end of the range to summarize.
+            request: the record this call writes its input, budget, usage and errors into.
+            retry: why the previous call in this attempt was unusable, so the final call can
+                correct it instead of repeating it; None on the first call.
+
+        Returns:
+            str | None: the handoff text, or None when the call was blocked, failed or
+                returned something the actor cannot use.
+        """
         generated = False
         try:
             if self._prompt is None:
                 self._prompt = (PROMPTS_DIR / "compact.md").read_text(encoding="utf-8")
+            instructions = self._prompt
+            if retry:
+                instructions += (f"\n\nThe previous attempt was rejected: {retry}\n"
+                                 "Return only the plain-text handoff, and make it shorter.")
             request.input_messages = [
-                {"role": "system", "content": self._prompt},
+                {"role": "system", "content": instructions},
                 {"role": "user", "content": json.dumps({
                     "previous_summary": state.summary,
                     "messages": state.raw[state.covered:boundary],

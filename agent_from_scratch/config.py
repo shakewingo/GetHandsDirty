@@ -40,3 +40,4 @@ class AgentLimits:
     compact_headroom_tokens: int = 512  # try before the actor reaches the hard fit gate
     max_compact_calls: int = 4  # also charged against max_iterations; one call per attempt
     summary_max_tokens: int = 512  # summarizer output reserve, independent of the actor's
+    max_summary_calls_per_attempt: int = 2  # one corrective retry at the same cut
