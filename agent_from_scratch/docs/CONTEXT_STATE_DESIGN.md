@@ -6,10 +6,10 @@ historical model-score boundary are recorded in [STAGE.md](STAGE.md).
 
 ## Implemented: one preparation path
 
-`ContextBuilder.build_messages` in `context.py` accepts explicit instruction, history
+`build_messages()` in `context.py` accepts explicit instruction, history
 and current-turn message lists and deep-copies the assembled view. `ContextState.messages()`
 selects raw history or summary + retained suffix before using that builder. The builder
-performs no storage access or model calls; `compact_context()` generates summaries.
+performs no storage access or model calls; `Compactor` in `compact.py` generates summaries.
 
 `Agent` appends all events to raw `TurnResult.messages`; the prepared list is used only for
 generation. The existing raw layout and public `run_turn` signature are preserved, so
@@ -103,9 +103,10 @@ Evidence: `outputs/stage3a-token-count-20260917-g4zi2pyf/` contains `smoke.py`, 
 
 ## Implemented: request fit enforcement
 
-Immediately after measuring, `Agent._measure_context_limit` marks a request blocked when
+Immediately after measuring, `Agent._block_on_budget` marks a request blocked when
 `remaining_tokens < context_margin_tokens`, or when exact measurement / a bounded output
-reserve is unavailable. `_run_turn` then returns before `generate`. Marking a status alone
+reserve is unavailable. It and the soft compaction trigger read one rule,
+`context_blocker()`, so the two thresholds cannot drift apart. `_run_turn` then returns before `generate`. Marking a status alone
 does not exit the loop: review caught and fixed that missing return at the caller.
 `AgentLimits` defaults the margin to 256 tokens; like its other fields, values are caller-configured
 without constructor validation.
@@ -206,11 +207,12 @@ For Stage 3, introduce only the live state needed by context construction:
 
 The separation is in place: **raw transcript versus an independent model-facing view**.
 Stage 3B item 1 adds `ContextState`: summary, covered raw boundary and last actor-sent raw
-boundary. `compact_context()` tracks bounded attempts in that state and builds a candidate
+boundary. `Compactor.attempt()` tracks bounded attempts in that state and builds a candidate
 without editing raw messages, publishing it only after a smaller, fitting prompt is measured.
-Run schema 4 records actual
+Run schema 5 records actual
 inputs/schemas and purpose (`agent`/`compact`); the old raw-prefix
-interpretation remains valid only for older records without `input_messages`.
+interpretation remains valid only for older records without `input_messages`, and the
+per-request measurement is `budget`, named `context` in records at schema 4 and earlier.
 Session saving still slices the **raw** list using history length, never a compacted view.
 `measure` in `evals/foundation.py` and `exchanges` in `evals/verify.py` still consume unchanged
 raw evidence; their request/usage accounting includes summary calls. Explicit persisted

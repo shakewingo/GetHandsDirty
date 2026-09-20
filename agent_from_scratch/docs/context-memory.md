@@ -6,12 +6,14 @@ not all of Stage 3B/3C.
 `ContextState` owns a summary and three raw offsets: the current-turn start, covered
 prefix, and last prefix sent to the actor. Summary generation does **not** advance
 the last-sent offset. Parser feedback and tool observations beyond it stay verbatim.
-`ContextState.messages()` selects the model-facing view; `ContextBuilder` deep-copies it.
+`ContextState.messages()` selects the model-facing view; `build_messages()` deep-copies it.
 
-`compact_context()` in `context.py` is the shared function. Automatic attempts start when exact
+`Compactor.attempt()` in `compact.py` is the shared entry point, returning `CompactOutcome`
+(`APPLIED` / `SKIPPED` / `FAILED`). Automatic attempts start when exact
 remaining room falls below margin + headroom (256 + 512 tokens by default). Library
-callers can use `agent.run_turn(request, history, compact=True)`; no CLI command was
-added. It first selects old history, then older ongoing-turn exchanges on later
+callers can use `agent.run_turn(request, history, compact=True)`, and the REPL reaches the
+same path with `/compact`, which marks the next request. It first selects old history,
+then older ongoing-turn exchanges on later
 attempts. It keeps the current request, instructions, two recent tool batches and
 all unseen observations. A batch includes every result, including skipped calls.
 
@@ -30,7 +32,7 @@ Legacy trace loading remains unchanged; old records can use raw-prefix inputs.
 
 ## Deterministic evidence
 
-**203 tests pass** with the existing `transformer-practice` environment:
+**206 tests pass** with the existing `transformer-practice` environment:
 
 ```sh
 python -m unittest discover -s agent_from_scratch/tests -q
@@ -40,7 +42,7 @@ The 12 new tests cover manual/automatic paths, two compactions, recent batches,
 unseen parser/tool feedback, a failed/skipped batch boundary, malformed/empty/tool
 summaries, oversized input and output candidates, shared request limits, repeated
 failure counters, a write executed exactly once, raw session replay, and trace/cost
-accounting. All 41 Python files pass Pyright with zero errors/warnings after the
+accounting. All 42 Python files pass Pyright with zero errors/warnings after the
 TypedDict and fixture-typing review fixes. Scripted token counts test policy;
 they do not establish model accuracy.
 
@@ -80,17 +82,20 @@ loss/hallucination. The remaining unit omission is an observed answer-quality fa
 
 ## Scope review and next gap
 
-Core size is 2,473 physical / 2,094 code lines, excluding tests, demos and the
-existing untracked memory stub. This remains 27 physical lines below the 2,500-line
-review alarm. The September 18 class refactor was reverted; the first-item
-implementation and earlier type fixes are retained. No `LoopState` was added.
+Core size is 2,582 physical / 2,139 code lines across 15 core files, excluding tests,
+demos and the existing untracked memory stub. This is **82 physical lines above** the
+2,500-line review alarm, so the design-boundary review that alarm asks for is now due.
+An earlier class refactor was reverted on September 18; the September 20 one landed as
+`9802c90`..`ed29c05` with behaviour unchanged. No `LoopState` was added.
 
 Rules still use the turn-start snapshot. Separate summarizer decoding budgets,
 rule/memory reload at compact boundaries, broader real-model long-turn evidence,
 and durable summary checkpoints/restart remain later items. The 512-token early
 headroom cannot guarantee arbitrary tool outputs fit. Recent protected batches or
-an oversized unsent observation can still stop continuation. Raw session replay
-remains complete; a restarted run must compact again if necessary.
+an oversized unsent observation can still stop continuation. A failed attempt now ends
+the turn only when the request it was meant to relieve cannot be sent anyway, so a manual
+`/compact` that fails no longer discards a turn the budget can still serve. Raw session
+replay remains complete; a restarted run must compact again if necessary.
 
 ## September 18 handoff log
 
@@ -100,3 +105,22 @@ remains complete; a restarted run must compact again if necessary.
 - Reverted the subsequent class refactor; retained the reviewed first-item implementation.
 - Validation: 203 tests; 41 Python files with zero Pyright errors/warnings. The local-model
   diagnostic retained the corrected fact in the summary but still omitted its unit in the answer.
+
+## September 20 handoff log
+
+- Restructured compaction into `compact.py`: `Compactor` with `_plan` / `_summarize` /
+  `_publish`, and `CompactOutcome` replacing the bool-plus-mutated-field signalling the
+  agent loop previously had to decode. Thirteen single-concern commits, behaviour preserved;
+  `8672ec4` is a verbatim move readable with `--color-moved`.
+- One definition each for the context-fit rule (`context_blocker`) and for model calls
+  charged to the turn (`used_model_calls`); the actor request is built after compaction,
+  retiring a `pop()`/`append()` pair that also, undocumented, kept that request out of the
+  compaction budget.
+- Behaviour changes, both with regression tests: a failed attempt no longer ends a turn
+  the budget can still serve, and an unavailable measurement keeps `context_unavailable`
+  instead of being relabelled `context_limit`.
+- Naming: the turn's `ContextState` is `state`; `ModelRequest.context` is `budget` at
+  `schema_version` 5, with records at 4 and earlier carrying the old key.
+- The REPL gained `/compact`.
+- Validation: 206 tests; 42 Python files with zero Pyright errors/warnings. No new
+  real-model diagnostic was run for this structural change.
