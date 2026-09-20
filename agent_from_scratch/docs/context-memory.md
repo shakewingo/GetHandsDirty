@@ -97,6 +97,45 @@ the turn only when the request it was meant to relieve cannot be sent anyway, so
 `/compact` that fails no longer discards a turn the budget can still serve. Raw session
 replay remains complete; a restarted run must compact again if necessary.
 
+## Design-boundary review (2,584 physical lines)
+
+The 2,500-line alarm fired at Stage 3B item 1 and is answered here, before the rest of
+3B and 3C add roughly 120 more physical lines. STAGE.md requires this review before
+Stage 3B grows further.
+
+Distribution at HEAD (`evals/core_lines.py`, 15 core files): **2,584 physical / 2,138 code**.
+Tools account for **1,019 of 2,138 code lines (47.7%)**; the loop, model, context, session
+and support modules account for the other 1,119. The largest single file is `agent.py`
+(362 physical / 318 code), followed by `tools/files.py` (329/294) and `llm.py` (290/248).
+Growth since Stage 2 is concentrated in `context.py`, `compact.py` and `agent.py` — the
+mechanisms this sprint exists to learn — not in accidental structure.
+
+Decisions:
+
+- **Keep one `Compactor` class in `compact.py` (142 physical lines).** Its three phases
+  share one mutable subject, the turn's `ContextState`, and one budget, `self.limits`.
+  Neither is meaningful alone: planning cannot decide whether a cut was worth taking
+  without knowing whether publishing accepted it, and publishing cannot re-derive the cut.
+  A module boundary here would exist only to move lines across a file edge, and would
+  force that shared state through a parameter list to do it.
+- **Keep checkpoints inside `SessionStore`.** A checkpoint is only valid if the raw
+  messages it names are already on disk, so the component that decides whether to publish
+  one must be the component that knows what is saved. `SessionStore` already owns the
+  single-writer atomic replacement (`write_jsonl`) and the session-ID path resolution that
+  rejects escapes and symlinks. A separate `checkpoint.py` would either duplicate both
+  guarantees or reach back through `SessionStore` for them.
+- **Do not compress readable code to return under 2,500.** The audit section forbids it,
+  and the measure is a scope alarm, not a quality target. **Revised alarm: 3,000 physical
+  lines**, to be re-reviewed when reached. The rationale is that Stage 4A-4B's `memory.py`
+  is the last planned core addition on the required path and is budgeted at roughly 200-250
+  physical lines; 3C adds about 120. That puts the projected end of the required stages near
+  2,950. Passing 3,000 would mean something unplanned was added, which is exactly when a
+  review earns its cost. The original 1,500-2,000 target is recorded as missed, not moved:
+  roughly half the core is the general tool surface added in Stage 2, and shrinking it would
+  remove capability rather than structure.
+
+No module is split or merged as a result of this review.
+
 ## September 18 handoff log
 
 - Completed Stage 3B item 1: shared automatic/manual compaction, protected raw history
