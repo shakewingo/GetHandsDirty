@@ -63,6 +63,15 @@ def used_model_calls(requests: list[ModelRequest]) -> int:
     return sum(request.status != ModelRequestStatus.BLOCKED for request in requests)
 
 
+def request_budget(record: dict) -> dict | None:
+    """Read one request's pre-generation measurement across the schema-5 rename.
+
+    Records at schema_version 5 and later use `budget`; 4 and earlier use `context`.
+    """
+    budget = record.get("budget")
+    return record.get("context") if budget is None else budget
+
+
 @dataclass
 class TurnResult:
     messages: list[ChatCompletionRequestMessage]

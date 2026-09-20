@@ -11,7 +11,8 @@ from agent_from_scratch.evals.verify import metrics
 from agent_from_scratch.llm import LLM, LLMResponse, ResponseType
 from agent_from_scratch.tools.base import ToolCall, ToolRegistry
 from agent_from_scratch.evals.legacy_files import ReadFileTool
-from agent_from_scratch.trace import ModelRequest, ModelRequestStatus, TurnResult
+from agent_from_scratch.trace import (ModelRequest, ModelRequestStatus, RunStopReason,
+                                     TurnResult, request_budget)
 
 
 class ReadEvaluationTests(unittest.TestCase):
@@ -36,6 +37,30 @@ class ReadEvaluationTests(unittest.TestCase):
                 self.assertEqual(foundation["max_prompt_tokens"], 100 if count else 0)
                 self.assertEqual(behavior["requests_without_usage"], 0)
                 self.assertEqual(asdict(result), before)
+
+    def test_metrics_separate_actor_and_summary_requests(self):
+        result = TurnResult(messages=[], stop_reason=RunStopReason.FINAL_RESPONSE)
+        result.model_requests = [
+            ModelRequest(1, 4, purpose="compact", status=ModelRequestStatus.COMPLETED,
+                         compact_after={"prompt_tokens": 300}),
+            ModelRequest(1, 4, purpose="compact", status=ModelRequestStatus.COMPLETED,
+                         error_message="Summary did not produce a smaller fitting actor input."),
+            ModelRequest(1, 4, purpose="agent", status=ModelRequestStatus.COMPLETED,
+                         budget={"prompt_tokens": 900}),
+            ModelRequest(2, 6, purpose="agent", status=ModelRequestStatus.BLOCKED,
+                         budget={"prompt_tokens": 9000}),
+        ]
+        report = metrics(result)
+        self.assertEqual(report["model_requests"], 3)
+        self.assertEqual(report["actor_requests"], 1)
+        self.assertEqual(report["compact_requests"], 2)
+        self.assertEqual(report["compactions_applied"], 1)
+        self.assertEqual(report["max_actor_prompt_tokens"], 900)
+
+    def test_request_budget_reads_both_schema_names(self):
+        self.assertEqual(request_budget({"budget": {"prompt_tokens": 5}}), {"prompt_tokens": 5})
+        self.assertEqual(request_budget({"context": {"prompt_tokens": 7}}), {"prompt_tokens": 7})
+        self.assertIsNone(request_budget({}))
 
     def test_actual_request_with_missing_usage_remains_unknown(self):
         result = TurnResult(messages=[], model_requests=[
