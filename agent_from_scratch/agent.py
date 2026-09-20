@@ -145,7 +145,7 @@ class Agent:
         # Only raw_messages receives new events; prepared views are disposable.
         raw_messages = result.messages
         turn_start = 1 + history_length
-        state = ContextState(raw_messages, turn_start, last_sent=turn_start)
+        state = ContextState(raw=raw_messages, turn_start=turn_start, last_sent=turn_start)
         compactor = Compactor(self.llm, self.limits)
         last_failure, failure_count = None, 0
         tool_attempts = 0
@@ -197,13 +197,14 @@ class Agent:
                                    input_messages=deepcopy(prepared_messages),
                                    tools=deepcopy(schemas))
             result.model_requests.append(request)
-            if outcome is CompactOutcome.FAILED:
-                request.status = ModelRequestStatus.BLOCKED
-                result.stop_reason = RunStopReason.CONTEXT_LIMIT
+            # A failed attempt only ends the turn when the request it was meant to relieve
+            # cannot be sent anyway. A manual compact still has a working turn behind it.
+            blocked = self._block_on_budget(result, request)
+            if blocked and outcome is CompactOutcome.FAILED and request.error_code == "context_limit":
+                # Name the real cause; an unavailable measurement keeps its own code.
                 result.error_message = "Compaction failed; raw evidence and completed tool effects were preserved."
-                request.error_code, request.error_message = "context_limit", result.error_message
-                return
-            if self._block_on_budget(result, request):
+                request.error_message = result.error_message
+            if blocked:
                 return
 
             # Parsing may fail, but the actor still received this input. Fresh feedback

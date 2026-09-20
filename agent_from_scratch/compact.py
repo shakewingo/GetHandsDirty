@@ -103,8 +103,9 @@ class Compactor:
                  request: ModelRequest, before: dict | None) -> bool:
         """Swap in the candidate only when it both fits and is strictly smaller."""
         try:
-            candidate = ContextState(state.raw, state.turn_start, state.last_sent,
-                                     covered=boundary, summary=summary)
+            candidate = ContextState(raw=state.raw, turn_start=state.turn_start,
+                                     last_sent=state.last_sent, covered=boundary,
+                                     summary=summary)
             # Nothing touched by planning or summarizing feeds messages(), so a measurement
             # the caller took of this same view still describes it exactly.
             if before is None:

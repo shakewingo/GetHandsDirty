@@ -225,6 +225,31 @@ class CompactTests(unittest.TestCase):
                 if not parse_error:
                     self.assertEqual(Path(directory, "done.txt").read_text(), "once")
 
+    def test_failed_compaction_with_room_left_does_not_end_the_turn(self):
+        """A manual compact must not kill a turn that the budget can still serve."""
+        self.model.measure_context.side_effect = None
+        self.model.measure_context.return_value = {
+            "count_method": "exact", "prompt_tokens": 1000, "response_reserve": 512,
+            "remaining_tokens": 4000, "window_tokens": 5512}
+        for reply in (ResponseError(ResponseErrorCode.TRUNCATED_RESPONSE), answer("   ")):
+            with self.subTest(reply=reply):
+                self.model.generate.side_effect = [reply, answer("7")]
+                result = Agent(self.model, registry=ToolRegistry([])).run_turn(
+                    "Use 7, not 6.", self.raw[1:3], compact=True)
+                self.assertEqual(result.stop_reason, "final_response")
+                self.assertEqual(result.final_answer, "7")
+                self.assertEqual([q.purpose for q in result.model_requests], ["compact", "agent"])
+
+    def test_unavailable_measurement_keeps_its_own_error_code(self):
+        """A missing tokenizer is not a context limit, whatever compaction did."""
+        self.model.measure_context.side_effect = None
+        self.model.measure_context.return_value = {"count_method": "unavailable",
+                                                   "prompt_tokens": None, "remaining_tokens": None}
+        result = Agent(self.model, registry=ToolRegistry([])).run_turn("Finish", self.raw[1:3])
+        self.assertEqual(result.stop_reason, "context_limit")
+        self.assertEqual(result.model_requests[-1].error_code, "context_unavailable")
+        self.assertIn("exact prompt measurement", result.error_message or "")
+
     def test_repl_compact_command_applies_to_the_next_request_only(self):
         agent = Agent(self.model, registry=ToolRegistry([]))
         self.model.generate.side_effect = [answer("7"), answer("8")]
