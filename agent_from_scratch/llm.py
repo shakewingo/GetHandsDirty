@@ -59,7 +59,7 @@ RESPONSE_ERROR_MESSAGES = {
     ResponseErrorCode.INVALID_TOOL_CALL: "Invalid tool call.",
     ResponseErrorCode.EMPTY_RESPONSE: "Model response has no text or tool call.",
     ResponseErrorCode.TRUNCATED_RESPONSE: "Model response was truncated.",
-    ResponseErrorCode.TOO_MANY_TOOL_CALLS: f"At most {MAX_TOOL_CALLS_PER_RESPONSE} tool calls per response are supported.",
+    ResponseErrorCode.TOO_MANY_TOOL_CALLS: "Too many tool calls in one response.",
     ResponseErrorCode.UNSUPPORTED_FINISH_REASON: "Unsupported model finish reason.",
 }
 
@@ -181,7 +181,7 @@ class LLM:
         return counts if any(value is not None for value in counts.values()) else None
 
     @staticmethod
-    def parse_response(response) -> LLMResponse:
+    def parse_response(response, max_tool_calls: int = MAX_TOOL_CALLS_PER_RESPONSE) -> LLMResponse:
         """Validate the entire native/Qwen batch before allowing any execution."""
         try:
             choice = response["choices"][0]
@@ -207,8 +207,9 @@ class LLM:
                 ResponseErrorCode.INVALID_TOOL_CALL, "tool_calls must be a list."
             )
         if calls:
-            if len(calls) > MAX_TOOL_CALLS_PER_RESPONSE:
-                raise ResponseError(ResponseErrorCode.TOO_MANY_TOOL_CALLS)
+            if len(calls) > max_tool_calls:
+                raise ResponseError(ResponseErrorCode.TOO_MANY_TOOL_CALLS,
+                                    f"At most {max_tool_calls} are supported.")
             parsed_calls = []
             for call in calls:
                 try:
@@ -248,8 +249,9 @@ class LLM:
             raise ResponseError(
                 ResponseErrorCode.INVALID_TOOL_CALL, str(error)
             ) from error
-        if len(extracted) > MAX_TOOL_CALLS_PER_RESPONSE:
-            raise ResponseError(ResponseErrorCode.TOO_MANY_TOOL_CALLS)
+        if len(extracted) > max_tool_calls:
+            raise ResponseError(ResponseErrorCode.TOO_MANY_TOOL_CALLS,
+                                f"At most {max_tool_calls} are supported.")
         if extracted:
             return LLMResponse(
                 role=role,
@@ -273,6 +275,7 @@ class LLM:
         tools: Dict[str, ChatCompletionTool],
         *,
         max_tokens: int | None = None,
+        max_tool_calls: int | None = None,
     ) -> LLMResponse:
         response = self.llm.create_chat_completion(
             messages=messages,
@@ -286,7 +289,8 @@ class LLM:
             if not isinstance(response, dict):
                 raise ResponseError(ResponseErrorCode.INVALID_RESPONSE,
                                     "Expected a non-streaming response object.")
-            parsed = LLM.parse_response(response)
+            parsed = LLM.parse_response(
+                response, MAX_TOOL_CALLS_PER_RESPONSE if max_tool_calls is None else max_tool_calls)
             parsed.raw_response = response
             return parsed
         except ResponseError as error:

@@ -211,7 +211,9 @@ class Agent:
             # and subsequent tool results remain beyond this boundary until its next call.
             state.last_sent = len(raw_messages)
             try:
-                response = self.llm.generate(prepared_messages, schemas)
+                response = self.llm.generate(
+                    prepared_messages, schemas,
+                    max_tool_calls=self.limits.max_tool_calls_per_response)
             except ResponseError as error:
                 request.status = ModelRequestStatus.PARSE_ERROR
                 request.raw_response = error.raw_response

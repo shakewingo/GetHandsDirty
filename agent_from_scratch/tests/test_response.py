@@ -210,6 +210,20 @@ class ResponseTests(unittest.TestCase):
             self.assertEqual(result.finish_reason, reason)
 
 
+    def test_parse_response_honours_a_configured_batch_limit(self):
+        response = {"choices": [{"message": {"role": "assistant", "content": None,
+            "tool_calls": [{"id": "a", "type": "function",
+                            "function": {"name": "calculator", "arguments": "{}"}},
+                           {"id": "b", "type": "function",
+                            "function": {"name": "calculator", "arguments": "{}"}}]},
+            "finish_reason": "tool_calls"}]}
+        with self.assertRaises(ResponseError) as caught:
+            LLM.parse_response(response, 1)
+        self.assertEqual(caught.exception.code, ResponseErrorCode.TOO_MANY_TOOL_CALLS)
+        self.assertIn("At most 1", str(caught.exception))
+        self.assertEqual(len(LLM.parse_response(response, 2).tool_calls), 2)
+
+
 class GenerateTests(unittest.TestCase):
     def measured_model(self):
         """Real project formatter/llama.cpp handler with a deterministic tokenizer."""

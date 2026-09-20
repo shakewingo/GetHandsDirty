@@ -233,10 +233,9 @@ reread before relying on it as current. Nanobot likewise separates
 
 Failed/interrupted turns may already have changed files even though their messages are
 excluded from session replay. Checkpoint fallback must not imply rollback or tool replay.
-One existing budget caveat: `AgentLimits.max_tool_calls_per_response` is recorded in settings,
-but the parser enforces `config.MAX_TOOL_CALLS_PER_RESPONSE` (8) directly. The defaults agree;
-overriding that field alone does not change parsing. Reconcile this when wiring Stage 3's
-budgets so recorded configuration describes the limits actually enforced.
+`AgentLimits.max_tool_calls_per_response` is now the limit the parser enforces: `Agent`
+passes it to `LLM.generate`, which forwards it to `parse_response`. Summary calls carry no
+tools and keep the module default. Recorded configuration and enforced limits agree.
 
 This is enough structure for our synchronous tiny agent. A generic event bus, universal State
 class or framework rewrite would add scope without resolving the current coupling.
