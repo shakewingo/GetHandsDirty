@@ -17,6 +17,7 @@ from .session import SessionStore
 from .compact import CompactOutcome, Compactor
 from .elision import elide_old_outputs
 from .planning import PLAN_RULES, PlanState, UpdatePlanTool
+from .support import RepeatMonitor, attach_diagnostics
 from .context import (ContextState, InstructionConfig, InstructionLoadError,
                       context_blocker, context_fits, load_instructions)
 from .tools.base import ToolErrorCode, ToolRegistry, ToolResult
@@ -153,6 +154,7 @@ class Agent:
         compactor = Compactor(self.llm, self.limits)
         plan = PlanState()
         plan_tool = UpdatePlanTool(plan) if self.limits.planning_enabled else None
+        repeat_monitor = RepeatMonitor()
         last_failure, failure_count = None, 0
         tool_attempts = 0
         used_ids = {call["id"] for m in raw_messages for call in m.get("tool_calls", [])}
@@ -263,6 +265,7 @@ class Agent:
             if response.type == ResponseType.tool_call:
                 if response.content and on_progress is not None:
                     on_progress(response.content) # print out assistant's any extra content other than just calling tools
+                reminders = []
                 for call in response.tool_calls:
                     if tool_attempts >= self.limits.max_tool_calls:
                         self._finish_pending_tools(result, "Turn tool-call budget exhausted.")
@@ -276,6 +279,12 @@ class Agent:
                         state.plan_text = plan.render()
                     else:
                         tool_result = self.execute_tool(call.name, call.arguments, call.call_id)
+                    if self.limits.diagnostics_enabled:
+                        attach_diagnostics(self.registry, tool_result, call.arguments)
+                    if self.limits.repeat_reminder_enabled:
+                        reminder = repeat_monitor.observe(tool_result, call.arguments)
+                        if reminder:
+                            reminders.append(reminder)
                     if tool_result.ok:
                         logger.debug("Tool executed successfully: {} ({})", tool_result.tool_name, tool_result.call_id)
                     else:
@@ -291,6 +300,8 @@ class Agent:
                                              tool_result.error_code)):
                             return
                         break
+                # Inject feedback only after all announced calls have results.
+                raw_messages.extend({'role': 'user', 'content': reminder} for reminder in reminders)
             elif response.type == ResponseType.direct:
                 result.final_answer = response.content
                 result.stop_reason = RunStopReason.FINAL_RESPONSE

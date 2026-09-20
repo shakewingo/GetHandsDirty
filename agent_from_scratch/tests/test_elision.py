@@ -77,6 +77,13 @@ class ElisionTests(unittest.TestCase):
         elide_old_outputs(self.state, self.llm, {}, self.limits, measure(self.raw, {}))
         self.assertFalse(self.state.elided)
 
+    def test_short_prior_history_does_not_block_current_turn_elision(self):
+        raw = [self.raw[0], {'role':'user','content':'earlier'},
+               {'role':'assistant','content':'ok'}, *self.raw[1:]]
+        state = ContextState(raw, 3, len(raw))
+        elide_old_outputs(state, self.llm, {}, self.limits, measure(raw, {}))
+        self.assertEqual(set(state.elided), {'0','1','2'})
+
     def test_agent_elides_without_summary_call_and_traces_actual_input(self):
         from agent_from_scratch.agent import Agent
         from agent_from_scratch.tests.test_turn import answer

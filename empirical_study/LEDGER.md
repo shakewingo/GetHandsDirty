@@ -46,3 +46,20 @@
 - Plans live only for a user turn; no cross-turn memory or shared registry mutation.
 - Ruling: allow zero active steps when all are completed; insisting on exactly one
   forever would prevent representing completion. Completion still requires evidence.
+
+## Stage 04 implementation validation
+
+- Six support tests cover search/diagnostics/repeat and runtime batch integration.
+- Ruling: register search explicitly against the known workspace rather than infer
+  a workspace inside Agent and risk searching the wrong directory.
+- Ruling: use syntax-only stdlib checks (no dependencies or automatic test execution).
+- Final independent review is running before freezing real-model comparisons.
+
+## Pre-panel review complete
+
+- Second independent review: three important findings, reproduced by four RED test
+  failures, now fixed. Full suite: 229 tests pass.
+- Elision reuses structural/recent/unsent protection with the prior-turn cap disabled.
+  Summarization's existing prior-turn-first policy is unchanged.
+- Recovery scoring normalizes workspace-relative and absolute paths.
+- Plan/search length bounds include whitespace.

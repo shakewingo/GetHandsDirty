@@ -157,7 +157,7 @@ class ContextState:
             messages.append({'role': 'user', 'content': self.plan_text})
         return messages
 
-    def compact_boundary(self) -> int:
+    def compact_boundary(self, *, prior_turn_only: bool = True) -> int:
         """Return the largest cut that is both structurally legal and policy-permitted.
 
         Two independent constraints meet here. `safe` is structure: a batch's calls and
@@ -196,7 +196,7 @@ class ContextState:
         cutoff = min(self.last_sent, starts[-2] if len(starts) >= 2 else
                      starts[0] if starts else len(self.raw))
         # First replace old turns; ongoing-turn exchanges can compact on a later attempt.
-        if self.covered < self.turn_start:
+        if prior_turn_only and self.covered < self.turn_start:
             cutoff = min(cutoff, self.turn_start)
         # Boundary is the intersection of safe and cutoff, and the position actually cut at.
         boundary = max((n for n in safe if n <= cutoff), default=self.covered)

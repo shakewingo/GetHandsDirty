@@ -24,7 +24,7 @@ def elide_old_outputs(state: ContextState, llm, schemas: dict, limits, before: d
     if available <= 0 or count < available * limits.elision_soft_ratio:
         return before
     replacements = dict(state.elided)
-    for message in state.raw[state.covered:state.compact_boundary()]:
+    for message in state.raw[state.covered:state.compact_boundary(prior_turn_only=False)]:
         call_id = message.get('tool_call_id')
         if message['role'] != 'tool' or call_id in replacements:
             continue

@@ -18,9 +18,11 @@ class PlanningTests(unittest.TestCase):
         self.assertTrue(tool.invoke(valid).ok)
         before = state.render()
         for steps in ([], [{'text': 'x', 'status': 'pending'}], valid['steps'] * 6,
-                      [{'text': 'x' * 161, 'status': 'in_progress'}]):
+                      [{'text': 'x' * 161, 'status': 'in_progress'}],
+                      [{'text': ' ' * 20000 + 'x', 'status': 'in_progress'}]):
             self.assertFalse(tool.invoke({**valid, 'steps': steps}).ok)
             self.assertEqual(state.render(), before)
+        self.assertFalse(tool.invoke({**valid, 'completion': ' ' * 20000 + 'x'}).ok)
         self.assertTrue(tool.invoke({'steps': [{'text': 'Inspected target', 'status': 'completed'}], 'completion': 'Observed expected value'}).ok)
 
     def test_latest_only_ephemeral_injection_and_turn_isolation(self):

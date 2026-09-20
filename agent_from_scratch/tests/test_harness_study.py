@@ -108,3 +108,18 @@ class StudyTests(unittest.TestCase):
                                  {'role': 'user', 'content': case['prompt']}],
                                 final_answer='MAPLE-41', stop_reason='final_response')
             self.assertEqual(turn_metrics(result, len(case['history']))['tool_attempts'], 0)
+
+    def test_absolute_path_recovery_is_valid(self):
+        with TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            case = make_case('missing_path', root)
+            before = snapshot(root)
+            reader = ReadFileTool(root)
+            messages = []
+            for i, (tool, path) in enumerate([(reader, root/'profiles/active.txt'),
+                         (ListFilesTool(root), root/'profiles'), (reader, root/'profiles/current.txt')]):
+                args, cid = {'path':str(path)}, str(i)
+                messages.extend([{'role':'assistant','tool_calls':[ToolCall(tool.name,args,cid).to_dict()]},
+                                 tool.invoke(args,cid).to_message()])
+            result = TurnResult(messages,final_answer=case['answer'],stop_reason='final_response')
+            self.assertTrue(score_case(case,result,root,before)['passed'])

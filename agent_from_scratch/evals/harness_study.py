@@ -25,7 +25,10 @@ CASE_IDS = ('direct', 'no_op', 'nested', 'search', 'json_repair', 'missing_path'
             'history_retain', 'history_edit')
 PROFILES = {'baseline': {}, 'elision': {'elision_enabled': True},
             'planning': {'planning_enabled': True},
-            'elision_planning': {'elision_enabled': True, 'planning_enabled': True}}
+            'elision_planning': {'elision_enabled': True, 'planning_enabled': True},
+            'search': {'search_enabled': True},
+            'repeat': {'repeat_reminder_enabled': True},
+            'diagnostics': {'diagnostics_enabled': True}}
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -133,7 +136,11 @@ def score_case(case, result, workspace, before):
         phase = 0
         for row in rows:
             args = json.loads((row.get('function') or {}).get('arguments', '{}'))
-            if phase == 0 and row['tool_name'] == 'read_file' and args.get('path') == 'profiles/active.txt' and not row['ok']:
+            try:
+                attempted_path = (workspace / args.get('path', '')).resolve().relative_to(workspace.resolve()).as_posix()
+            except (ValueError, TypeError):
+                attempted_path = None
+            if phase == 0 and row['tool_name'] == 'read_file' and attempted_path == 'profiles/active.txt' and not row['ok']:
                 fault_seen, phase = True, 1
             elif phase == 1 and row['tool_name'] == 'list_files' and row['ok'] and (row.get('output') or {}).get('path') == 'profiles':
                 phase = 2
@@ -168,9 +175,13 @@ def summarize(records):
             'plan_calls': sum(r.get('plan_calls', 0) for r in records)}
 
 
-def registry_for(workspace):
-    return ToolRegistry(cls(workspace, restrict_to_workspace=True) for cls in
-                        (ListFilesTool, ReadFileTool, WriteFileTool, EditFileTool))
+def registry_for(workspace, *, search=False):
+    tools = [cls(workspace, restrict_to_workspace=True) for cls in
+             (ListFilesTool, ReadFileTool, WriteFileTool, EditFileTool)]
+    if search:
+        from ..tools.search import SearchFilesTool
+        tools.append(SearchFilesTool(workspace))
+    return ToolRegistry(tools)
 
 
 def turn_metrics(result, history_length):
@@ -178,13 +189,13 @@ def turn_metrics(result, history_length):
     return metrics(replace(result, messages=result.messages[1 + history_length:]))
 
 
-def run_case(model, case_id, out, limits):
+def run_case(model, case_id, out, limits, *, search=False):
     out.mkdir(parents=True, exist_ok=False)
     with TemporaryDirectory(prefix='harness-study-') as directory:
         root = Path(directory)
         case = make_case(case_id, root)
         before = snapshot(root)
-        registry = registry_for(root)
+        registry = registry_for(root, search=search)
         save(out/'case.json', case)
         save(out/'before.json', before)
         result = Agent(model, str(out/'state'), registry=registry, limits=limits).run_turn(
@@ -221,11 +232,13 @@ def main():
     model = LLM()
     backend = model.llm.create_chat_completion
     model.llm.create_chat_completion = lambda *a, **kw: backend(*a, **kw, seed=args.seed)
-    limits = replace(AgentLimits(), **PROFILES[args.profile])
+    options = dict(PROFILES[args.profile])
+    search = options.pop('search_enabled', False)
+    limits = replace(AgentLimits(), **options)
     source = {p.relative_to(ROOT).as_posix(): sha256(p.read_bytes()).hexdigest() for p in ROOT.rglob('*')
               if p.is_file() and p.suffix in {'.py', '.md', '.jinja'} and '__pycache__' not in p.parts}
     save(out/'manifest.json', {'suite': 'harness-study-dev-v2', 'profile': args.profile,
-         'limits': asdict(limits), 'tasks': tasks, 'seed': args.seed, 'settings': model.settings(),
+         'limits': asdict(limits), 'search_enabled': search, 'tasks': tasks, 'seed': args.seed, 'settings': model.settings(),
          'started_at': datetime.now(timezone.utc).isoformat(), 'source_sha256': source,
          'git_revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
          'python': sys.version, 'llama_cpp': version('llama-cpp-python'),
@@ -233,7 +246,7 @@ def main():
     records = []
     for name in tasks:
         print('START', args.profile, name, flush=True)
-        record = run_case(model, name, out/name, limits)
+        record = run_case(model, name, out/name, limits, search=search)
         records.append(record)
         save(out/'records.json', records)
         save(out/'summary.json', summarize(records))

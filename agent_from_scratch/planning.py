@@ -41,8 +41,8 @@ class UpdatePlanTool(Tool):
         self.state = state
 
     def execute(self, steps, completion):
-        if (not 1 <= len(steps) <= 5 or not 1 <= len(completion.strip()) <= 240
-                or any(not 1 <= len(s['text'].strip()) <= 160 for s in steps)):
+        if (not 1 <= len(steps) <= 5 or not completion.strip() or len(completion) > 240
+                or any(not s['text'].strip() or len(s['text']) > 160 for s in steps)):
             raise ToolExecutionError(ToolErrorCode.INVALID_ARGUMENTS,
                                      'Use 1-5 steps of 1-160 characters and a completion condition of 1-240 characters.')
         active = sum(s['status'] == 'in_progress' for s in steps)

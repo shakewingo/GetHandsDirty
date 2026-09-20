@@ -274,6 +274,10 @@ class ToolRegistry:
     def schemas(self) -> Dict[str, "ChatCompletionTool"]:
         return {name: tool.to_schema() for name, tool in self._tools.items()}
 
+    def get_tool(self, name: str) -> Tool | None:
+        """Inspect the registered implementation without mutating the registry."""
+        return self._tools.get(name)
+
     def invoke(self, tool_name: Any, arguments: Any, call_id: str = "") -> ToolResult:
         if not isinstance(tool_name, str) or not tool_name.strip():
             return ToolResult.failure(
