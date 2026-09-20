@@ -66,10 +66,21 @@ class Agent:
     def run_turn(self, user_input: str, history: list[ChatCompletionRequestMessage] | None = None,
                  *, session_id: str | None = None,
                  compact: bool = False,
+                 checkpoint: dict | None = None,
                  on_progress: Callable[[str], None] | None = None) -> TurnResult:
         """Execute supplied history; compact=True requests the same path used under pressure.
 
-        session_id associates and saves this run, not loads history.
+        Args:
+            user_input: this turn's request.
+            history: the full raw replayable history; a checkpoint never replaces it.
+            session_id: associates and saves this run; it does not load history.
+            compact: summarize before the first generation, as pressure would.
+            checkpoint: a validated `SessionStore` checkpoint whose summary replaces the
+                covered prefix in the model-facing view only.
+            on_progress: receives assistant narration that accompanies a tool batch.
+
+        Returns:
+            TurnResult: raw messages, stop reason, and one record per model request.
         """
         started = monotonic()
         instructions, instruction_metadata = load_instructions(self.instruction_config)
@@ -84,6 +95,12 @@ class Agent:
 
         turn_start = 1 + len(history or [])
         state = ContextState(raw=result.messages, turn_start=turn_start, last_sent=turn_start)
+        if checkpoint is not None:
+            # load_checkpoint already bound this to the supplied history, so covered stays
+            # within the turn-start invariant; raw history is replayed unchanged.
+            state.covered, state.summary = checkpoint["covered"] + 1, checkpoint["summary"]
+            result.settings["checkpoint"] = {key: checkpoint[key] for key in
+                                             ("run_id", "covered", "source_sha256")}
         try:
             self._run_turn(result, state, compact=compact, on_progress=on_progress)
         except KeyboardInterrupt as error:
@@ -359,12 +376,13 @@ class Agent:
                 continue
             try:
                 history = store.load_history(session_id) if store else []
+                checkpoint = store.load_checkpoint(session_id, history) if store else None
             except (OSError, ValueError) as error:
                 print(f"Session unavailable: {error}. Use /new, /reset, or /session <id> to recover.")
                 continue
             try:
                 result = self.run_turn(user_input, history, session_id=session_id,
-                                       compact=compact_next,
+                                       compact=compact_next, checkpoint=checkpoint,
                                        on_progress=lambda text: print(f"{agent_label} {text}"))
             except InstructionLoadError as error:
                 print(f"Instructions unavailable: {error}")

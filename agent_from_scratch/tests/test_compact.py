@@ -378,6 +378,45 @@ class CompactTests(unittest.TestCase):
             self.assertEqual(len(store.load_history("cp")), 2)
             self.assertIsNone(store.load_checkpoint("cp", store.load_history("cp")))
 
+    def test_restart_replays_summary_and_uncovered_suffix(self):
+        with TemporaryDirectory() as directory:
+            self.pressure = True
+            self.model.generate.side_effect = [answer("Goal: report 7."), answer("7")]
+            store = SessionStore(Path(directory, "sessions"))
+            store.append("cp", "earlier", deepcopy(self.raw[1:3]))
+            Agent(self.model, directory, registry=ToolRegistry([])).run_turn(
+                "Use 7, not 6.", store.load_history("cp"), session_id="cp")
+            # A fresh store and agent stand in for a restarted process.
+            reopened = SessionStore(Path(directory, "sessions"))
+            history = reopened.load_history("cp")
+            checkpoint = reopened.load_checkpoint("cp", history)
+            assert checkpoint is not None
+            self.pressure = False
+            self.model.generate.side_effect = [answer("Still 7.")]
+            restarted = Agent(self.model, directory, registry=ToolRegistry([]))
+            result = restarted.run_turn("What is the limit?", history, session_id="cp",
+                                        checkpoint=checkpoint)
+            actor = result.model_requests[0]
+            assert actor.input_messages is not None
+            self.assertTrue(actor.input_messages[1]["content"].startswith("[Conversation summary:"))
+            self.assertEqual(actor.input_messages[-1]["content"], "What is the limit?")
+            # Raw history is replayed in full; only the model-facing view is shortened.
+            self.assertEqual(result.messages[1:1 + len(history)], history)
+            self.assertLess(len(actor.input_messages), 2 + len(history))
+            self.assertEqual(result.settings["checkpoint"]["covered"], checkpoint["covered"])
+
+    def test_stale_checkpoint_falls_back_to_raw_history(self):
+        with TemporaryDirectory() as directory:
+            self.pressure = True
+            self.model.generate.side_effect = [answer("Goal: report 7."), answer("7")]
+            store = SessionStore(Path(directory, "sessions"))
+            store.append("cp", "earlier", deepcopy(self.raw[1:3]))
+            Agent(self.model, directory, registry=ToolRegistry([])).run_turn(
+                "Use 7, not 6.", store.load_history("cp"), session_id="cp")
+            edited = store.load_history("cp")
+            edited[0] = message("user", "EDITED")
+            self.assertIsNone(store.load_checkpoint("cp", edited))
+
     def test_incomplete_turn_saves_no_checkpoint(self):
         with TemporaryDirectory() as directory:
             self.pressure = True

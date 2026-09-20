@@ -852,5 +852,21 @@ class TurnTests(unittest.TestCase):
             self.assertEqual(trace["session_id"], "demo")
 
 
+class CheckpointResetTests(unittest.TestCase):
+    def test_reset_clears_the_session_checkpoint(self):
+        with TemporaryDirectory() as directory:
+            store = SessionStore(Path(directory, "sessions"))
+            history: list[ChatCompletionRequestMessage] = [{"role": "user", "content": "a"},
+                                                           {"role": "assistant", "content": "b"}]
+            store.append("s", "run1", history)
+            store.append_checkpoint("s", "run1", covered=2, summary="Goal: x", history=history,
+                                    config={"compact_prompt_sha256": "a" * 64,
+                                            "summary_max_tokens": 512, "model": {}})
+            agent = Agent(Mock(spec=LLM), directory)
+            agent._session_command("/reset", "s", store)
+            self.assertEqual(store.load_history("s"), [])
+            self.assertIsNone(store.load_checkpoint("s", history))
+
+
 if __name__ == "__main__":
     unittest.main()
