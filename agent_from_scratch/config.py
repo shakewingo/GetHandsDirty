@@ -39,3 +39,13 @@ class AgentLimits:
     context_margin_tokens: int = 256  # token margin to reserve in the context window
     compact_headroom_tokens: int = 512  # try before the actor reaches the hard fit gate
     max_compact_calls: int = 4  # also charged against max_iterations; one call per attempt
+
+    elision_enabled: bool = False
+    elision_soft_ratio: float = 0.6
+    elision_min_chars: int = 1024
+
+    def __post_init__(self):
+        if not 0 < self.elision_soft_ratio < 1:
+            raise ValueError('elision_soft_ratio must be between 0 and 1.')
+        if type(self.elision_min_chars) is not int or self.elision_min_chars < 256:
+            raise ValueError('elision_min_chars must be an integer >= 256.')

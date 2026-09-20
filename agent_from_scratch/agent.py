@@ -15,6 +15,7 @@ from .config import AgentLimits
 from .llm import LLM, ResponseError, ResponseErrorCode, ResponseType
 from .session import SessionStore
 from .compact import CompactOutcome, Compactor
+from .elision import elide_old_outputs
 from .context import (ContextState, InstructionConfig, InstructionLoadError,
                       context_blocker, context_fits, load_instructions)
 from .tools.base import ToolErrorCode, ToolRegistry, ToolResult
@@ -169,6 +170,9 @@ class Agent:
                 prepared_messages = state.messages()
                 schemas = self.registry.schemas()
                 budget = self.llm.measure_context(prepared_messages, schemas)
+                if self.limits.elision_enabled:
+                    budget = elide_old_outputs(state, self.llm, schemas, self.limits, budget)
+                    prepared_messages = state.messages()
                 if compact or not context_fits(budget, self.limits.context_margin_tokens
                                                + self.limits.compact_headroom_tokens):
                     compact = False
@@ -195,7 +199,9 @@ class Agent:
                                    covered_boundary=state.covered,
                                    last_sent_boundary=state.last_sent,
                                    input_messages=deepcopy(prepared_messages),
-                                   tools=deepcopy(schemas))
+                                   tools=deepcopy(schemas),
+                                   elided_call_ids=[m['tool_call_id'] for m in prepared_messages
+                                                   if m.get('tool_call_id') in state.elided])
             result.model_requests.append(request)
             # A failed attempt only ends the turn when the request it was meant to relieve
             # cannot be sent anyway. A manual compact still has a working turn behind it.

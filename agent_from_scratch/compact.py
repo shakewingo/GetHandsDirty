@@ -105,7 +105,7 @@ class Compactor:
         try:
             candidate = ContextState(raw=state.raw, turn_start=state.turn_start,
                                      last_sent=state.last_sent, covered=boundary,
-                                     summary=summary)
+                                     summary=summary, elided=state.elided)
             # Nothing touched by planning or summarizing feeds messages(), so a measurement
             # the caller took of this same view still describes it exactly.
             if before is None:

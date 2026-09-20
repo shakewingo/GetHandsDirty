@@ -31,3 +31,11 @@
   before fixes and pass afterward. No review finding remains outstanding.
 - Ruling: final real-model panel uses one frozen runtime for all profiles, after all
   opt-in components are implemented. Current partial v1 pilot is excluded.
+
+## Stage 02 implementation complete
+
+- RED: missing elision module. GREEN: five elision tests plus all existing tests.
+- Full suite: 218 tests pass. Actor-input telemetry retains exact elided call IDs.
+- Ruling: complete re-readable outputs only; partial reads and transient shell/web
+  outputs are excluded. This trades compression coverage for evidence preservation.
+- Real-model comparisons remain scheduled for the common frozen Stage 05 revision.

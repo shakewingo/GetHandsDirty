@@ -55,6 +55,7 @@ class ModelRequest:
     last_sent_boundary: int = 0
     compact_before: dict | None = None
     compact_after: dict | None = None
+    elided_call_ids: list[str] = field(default_factory=list)
 
 
 def used_model_calls(requests: list[ModelRequest]) -> int:
