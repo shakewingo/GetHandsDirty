@@ -7,11 +7,15 @@ from copy import deepcopy
 from enum import StrEnum
 from hashlib import sha256
 import json
+from typing import TYPE_CHECKING
 
 from .config import AgentLimits, PROMPTS_DIR
 from .context import ContextState, context_fits
 from .llm import LLM, ResponseError, ResponseType
 from .trace import ModelRequest, ModelRequestStatus, used_model_calls
+
+if TYPE_CHECKING:
+    from llama_cpp import ChatCompletionRequestMessage
 
 
 def compact_prompt_digest() -> str:
@@ -157,7 +161,7 @@ class Compactor:
         try:
             # The boundary is the one point in a turn that already rebuilds the prompt, so
             # stable rules are reread here and measured as part of the candidate.
-            instructions = state.instructions
+            instructions: ChatCompletionRequestMessage | None = state.instructions
             if self.reload_instructions is not None:
                 text, request.instructions = self.reload_instructions()
                 if text is not None:

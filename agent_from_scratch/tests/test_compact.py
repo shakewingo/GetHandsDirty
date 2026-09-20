@@ -116,8 +116,8 @@ class CompactTests(unittest.TestCase):
                                     [message("user", "old"), message("assistant", "x" * 400)])
             summary, actor = result.model_requests
             assert actor.input_messages is not None
-            self.assertIn("Revised workspace rule.", actor.input_messages[0]["content"])
-            self.assertIn("Original workspace rule.", result.messages[0]["content"])
+            self.assertIn("Revised workspace rule.", str(actor.input_messages[0].get("content")))
+            self.assertIn("Original workspace rule.", str(result.messages[0].get("content")))
             assert summary.instructions is not None
             self.assertEqual(summary.instructions["sources"][-1]["status"], "loaded")
 
@@ -342,7 +342,7 @@ class CompactTests(unittest.TestCase):
             "Use 7, not 6.", deepcopy(self.raw[1:3]))
         feedback = [m for m in result.messages if "[Runtime feedback]" in str(m.get("content"))]
         self.assertEqual(len(feedback), 1)
-        self.assertIn("cut off", str(feedback[0]["content"]))
+        self.assertIn("cut off", str(feedback[0].get("content")))
         self.assertFalse(any(m.get("role") == "tool" for m in result.messages))
 
     def test_completed_compacted_turn_saves_a_checkpoint_after_its_raw_delta(self):

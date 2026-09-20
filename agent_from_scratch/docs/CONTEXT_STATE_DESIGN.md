@@ -1,7 +1,7 @@
 # Context semantics and state ownership
 
-Updated September 18, 2026. Stage 3A and Stage 3B item 1 are implemented; checkpoints
-remain planned. Stage 2's 167-test handoff and
+Updated September 20, 2026. Stage 3A, 3B and 3C are implemented, including versioned
+summary checkpoints and restart replay. Stage 2's 167-test handoff and
 historical model-score boundary are recorded in [STAGE.md](STAGE.md).
 
 ## Implemented: one preparation path
@@ -204,7 +204,7 @@ For Stage 3, introduce only the live state needed by context construction:
 | Agent local variables | Iteration, tool attempts, repeated failures and call IDs remain local; no `LoopState` class |
 | `ContextState` | Owns raw messages, summary, covered and last-sent boundaries, summary-call count and attempted boundary; builds independent inputs |
 | Reloaded rules | `ContextState.instructions` overrides `raw[0]` from a compact boundary onward; raw is never edited. Stage 4A's bounded memory index will attach at the same point and is not implemented here. |
-| Versioned summary checkpoint | Session store persists summary + raw boundary + source digest/configuration for restart |
+| Versioned summary checkpoint | `SessionStore.append_checkpoint` / `load_checkpoint` persist summary, session boundary, source digest and summary configuration as a `schema_version` 2 record in the same session file. `covered` counts session messages: `ContextState.covered - 1`, since raw index 0 is the system message |
 
 The separation is in place: **raw transcript versus an independent model-facing view**.
 Stage 3B item 1 adds `ContextState`: summary, covered raw boundary and last actor-sent raw

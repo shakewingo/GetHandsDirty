@@ -40,7 +40,7 @@ as pilots; mark missing required outcomes incomplete instead of silently extendi
 | Carried in | **0.5 — complete** | One user request → model/tool/result loop, validated contracts and error feedback |
 | Completed | **1 — complete** | Multiple user turns, persisted Session history, structured per-turn state and traces |
 | Completed | **2 — implementation complete** | General filesystem/shell/search/fetch; restricted 2B baseline 8/17 → 12/17 |
-| In progress | **3 — required** | Stage 3A complete; 3B item 1 automatic/manual compact implemented; continuation hardening and checkpoint next |
+| Completed | **3 — implementation complete** | Context budgeting, automatic/manual compact, rule reload at the boundary, versioned checkpoints and restart replay; real-model evidence for 3B items 2-4 and 3C still outstanding |
 | Next | **4A–4B — required** | Bounded durable memory, search/read, correction/forget, fresh-session recall |
 | Before training | **8 — required** | Resettable benchmark, isolated splits, measured baseline, frozen harness |
 | Research | **9 — draft, required outcome** | Verified trajectories → adapter update/reload → base/adapter comparison |
@@ -97,6 +97,16 @@ as completed stages. Intermediate experiments and stash commits are excluded.
 | Stage 2, general tools + narrated batches | `24f2608` | 12 | 1,747 | 2,039 | +462 |
 | Stage 2 handoff, structural refactor before Stage 3 | `b3dfab0` | 13 | 1,759 | 2,073 | +12 |
 | Stage 3A complete: context, instructions, measurement, fit gate | Commit containing this audit: `Complete Stage 3A context budgeting` | 14 | **1,940** | **2,296** | **+181 (+10.3%)** |
+| Stage 3 complete: compaction, rule reload, checkpoints, restart replay | Commit containing this audit | 15 | **2,254** | **2,800** | **+314 (+16.2%)** |
+
+Stage 3B item 1 and the September 20 refactor brought the tree to 2,584 physical lines at
+`d7f3887`; Stage 3B items 2-4 and Stage 3C added **216 more (+8.4%)**, reaching 2,800 physical
+/ 2,254 code. Source fingerprint
+`ece7ac5b6790923d05f59bb3c553cfe00e3fa99eca695b1a0ef7a312de8e8e4f`. That is nearly double the
+roughly 120 lines the work was estimated at; the excess is Google-style docstrings on the new
+public surface rather than new branching. The 2,500-line alarm was answered by the
+design-boundary review in [context-memory.md](context-memory.md#design-boundary-review-2584-physical-lines),
+which revised the alarm to **3,000 physical lines** and split no modules.
 
 Stage 3A added **223 physical lines (+10.8%)** over its direct parent. Its code growth is:
 
@@ -276,12 +286,14 @@ Read: book Chapters 2/3/5; Appendix A.1/A.2/A.4/A.5. Nanobot:
 and [summary checkpoint][nb-summary]. Apply the mechanisms to our measured window;
 the book's token constants and vendor-specific recovery paths are not our configuration.
 Design decisions: [tool-result semantics and state ownership](CONTEXT_STATE_DESIGN.md).
-All four 3A items are implemented: each generation receives an independent prepared
-view with a bounded instruction snapshot loaded at turn start, and its prompt tokens and
-remaining room are recorded and checked before generation. Stage 3B item 1 now adds
-automatic/manual compaction; summary checkpoints remain planned. The REPL gained `/compact`
-for the manual path; other new CLI commands stay deferred, and a future `/status` may expose
-usage, reported cache data, session ID and context statistics.
+Stage 3 is implemented. Each generation receives an independent prepared view whose
+prompt tokens and remaining room are checked before generation; compaction is automatic or
+manual through one bounded path; and a versioned summary checkpoint lets a restarted session
+replay a summary plus its uncovered raw suffix. The REPL gained `/compact` and loads a
+checkpoint per turn; other new CLI commands stay deferred, and a future `/status` may expose
+usage, reported cache data, session ID and context statistics. Deterministic coverage is
+complete; **no local-model diagnostic was run for 3B items 2-4 or 3C** because the September
+20 host could not hold the 7B weights. See [context-memory.md](context-memory.md).
 
 ### 3A — one prompt path and a visible budget
 
@@ -352,28 +364,66 @@ usage, reported cache data, session ID and context statistics.
   Review fixes resolved TypedDict access and test-fixture typing; 42 Python files pass
   Pyright with zero errors/warnings. An earlier class refactor was reverted; the present one
   landed as twelve reviewed commits, `9802c90`..`b060096`.
-- [ ] Compact old turns first, then older complete exchanges within a long ongoing turn.
+- [x] Compact old turns first, then older complete exchanges within a long ongoing turn.
   Never split a call/result pair. Rebuild the prompt with summary + retained suffix + fresh
   observations, reload stable rules and bounded memory, then recheck fit before publishing it.
-- [ ] Keep run ID, iteration/failure counters, registry, and actual workspace state intact.
+  Ordering, pair safety and the pre-publish recheck came with item 1. This item adds the rule
+  reload 3A deferred: `ContextState.instructions` overrides `raw[0]` in the model-facing view
+  from a compact boundary onward, and `Compactor._publish` measures the candidate with the
+  rules it would carry. Raw evidence never changes; `ModelRequest.input_messages` records what
+  each request actually sent. A failed reload keeps the turn snapshot and is recorded rather
+  than ending a turn already under pressure. Rules that grow more than the summary shrinks
+  correctly refuse the swap. Bounded memory attaches at the same point in Stage 4A and is
+  **not** implemented here.
+- [x] Keep run ID, iteration/failure counters, registry, and actual workspace state intact.
   Do not replay tools or treat summarized file state as current without rereading when needed.
   For truncated model output, reuse bounded correction feedback; never execute a partial call.
-- [ ] Bound recovery: at most two summary calls per attempt, four per run, and one attempt
+  No production change was required: `Compactor` touches four `ContextState` fields and nothing
+  else, and `run_id`, `tool_attempts`, `failure_count`, `used_ids` and the registry are
+  `_run_turn` locals beyond its reach. Four regressions make this checkable at the pressure
+  points the gate names. Rereading summarized file state is instructed by `prompts/compact.md`,
+  which is a prompt, not an enforced guarantee.
+- [x] Bound recovery: at most two summary calls per attempt, four per run, and one attempt
   at an unchanged boundary. Count summary requests in total cost/request limits. A failed or
   still-oversized candidate preserves raw evidence and the prior checkpoint, then stops with
   `context_limit`; repeated compaction cannot reset the task budget.
+  `Compactor.attempt` is a bounded loop of `max_summary_calls_per_attempt` (2) calls over one
+  cut; the retry carries why the previous call was rejected, and a blocked summarizer input
+  breaks out at once because a retry cannot make its own input fit. The per-run ceiling and the
+  `max_iterations` reserve for the actor are rechecked between calls. `summary_max_tokens` (512)
+  gives the summarizer an output reserve separate from the actor's, via an optional per-request
+  `max_tokens` on `LLM.measure_context`/`generate`. Separately,
+  `AgentLimits.max_tool_calls_per_response` is now the limit the parser enforces rather than a
+  recorded value it ignored. **228 deterministic tests pass**; 0 Pyright errors/warnings.
 
 ### 3C — persist and inspect the continuation
 
-- [ ] Save a versioned summary checkpoint with stable raw boundary, source digest, and
+- [x] Save a versioned summary checkpoint with stable raw boundary, source digest, and
   summary configuration. Persist raw new-turn messages before publishing a checkpoint
   referencing them. Save an explicit raw turn delta, not a slice of compacted messages.
-- [ ] Replay summary + uncovered raw suffix on restart. Invalid/stale checkpoints fall back
+  `SessionStore` gained a `schema_version` 2 `checkpoint` record in the same session file,
+  validated separately and skipped by `load_history`. `covered` counts session messages, one
+  less than `ContextState.covered`, whose raw index 0 is the system message. `_save_session`
+  appends the raw delta first and the checkpoint second, as two separately atomic writes;
+  `append_checkpoint` refuses any boundary the session does not already hold, which enforces
+  the ordering and also makes library-supplied history safe. A checkpoint write failure leaves
+  the saved turn intact and is logged.
+- [x] Replay summary + uncovered raw suffix on restart. Invalid/stale checkpoints fall back
   to raw history and its budget check; `/reset` also clears the session checkpoint.
   Incomplete turns stay evidence only; exact mid-tool resume remains outside scope.
-- [ ] Extend the existing trace with actual model-facing inputs, purpose (`agent`/`compact`),
+  `run_turn(..., checkpoint=...)` seeds `covered`/`summary` while `history` stays the full raw
+  list, so session slicing and raw evidence are unchanged. `load_checkpoint` considers only the
+  newest record and returns None on any digest mismatch. Checkpoints live in the session file,
+  so `/reset` clears them with it. Only completed turns publish one.
+- [x] Extend the existing trace with actual model-facing inputs, purpose (`agent`/`compact`),
   boundaries, usage, and before/after sizes. Preserve old readers and update eval export.
   This is also the input record needed later for truthful training examples.
+  Those fields landed with item 1 at schema 5; this item adds the readers. `schema_version`
+  stays 5 because `ModelRequest.instructions` is additive, matching the precedent set when
+  `budget` was added at schema 3. `trace.request_budget()` reads the measurement from records
+  on either side of the schema-5 rename. `metrics()` and `measure()` report `actor_requests`,
+  `compact_requests`, `compactions_applied` and `max_actor_prompt_tokens`; every pre-existing
+  key keeps its meaning, so the frozen Stage 2B suite still reads.
 
 **Gate/output:** a multi-turn conversation and a long single turn compact twice and continue
 without losing the current request/correction, duplicating a write, or resetting limits.
@@ -519,10 +569,11 @@ Our synchronous loop, optional fixed-command evaluation mode and explicit failur
 are smaller implementations of selected ideas, not claims of identical behavior.
 The capped memory index remains planned Stage 4 work.
 
-**Next coding session:** Stage 3B remaining items: rule reload at compact boundaries,
-separate summary budgets and broader long-turn continuation evidence; then Stage 3C checkpoints.
-Complete Stage 3's context/compact/replay block and Stage 4A–4B memory before the
-Stage 8 freeze. For each session record: what I built, what I broke, what the evidence shows,
+**Next coding session:** run `examples/continuation_demo.py` and `examples/compact_demo.py`
+on a host that can hold the 7B weights, and record the retained/lost facts in
+[context-memory.md](context-memory.md); that is Stage 3's one outstanding gap. Then start
+Stage 4A–4B memory, which attaches at the compact boundary beside the reloaded rules.
+Complete it before the Stage 8 freeze. For each session record: what I built, what I broke, what the evidence shows,
 what I can explain unaided, and the next smallest gap.
 
 [ch1]: ../../../harness-books/book1-claude-code/chapter-01-why-harness-engineering.md
