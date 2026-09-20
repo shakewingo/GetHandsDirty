@@ -24,3 +24,12 @@ Independent review before freeze found and fixed: prior-turn-only compaction bou
 blocking current-turn elision, absolute-path recovery scoring, and whitespace bypass
 of plan/search bounds. Four regression failures were observed before their fixes.
 Full log: `outputs/empirical-study/stage-04-final-tests.log`.
+
+## Matched model evidence
+
+Search: 1/4 vs matched baseline 1/4; local search task fell from 53.54 to 9.50 s,
+but nested task exhausted its budget and total subset cost increased.
+Repeat: 0/2 vs 0/2, with zero reminders activated; efficacy remains unmeasured.
+Diagnostics: 1/3 vs 0/3, one valid syntax result after an already-correct write;
+this does not demonstrate error-driven repair. The nested task exhausted its budget.
+See [Stage 05](STAGE-05.md) for paired costs, activation and causal limitations.

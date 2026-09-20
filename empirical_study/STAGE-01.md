@@ -19,3 +19,8 @@ validation first; Stage 05 links the matched model evidence back to each stage.
 
 Scope: no unrestricted shell, live network, concurrency or statistical generalization.
 The pilot tests transfer to general file operations, not a SWE-Bench reproduction.
+
+Final suite-v2 baseline: 1/8 strict success, 72,441 tokens, 156.77 s. See
+[Stage 05](STAGE-05.md) for task-by-task interpretation; this is not a semantic
+accuracy score. Post-panel review disclosed a no-op wording/process ambiguity;
+original results are retained with a separate endpoint audit.

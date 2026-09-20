@@ -1,0 +1,1948 @@
+{
+  "runtime_revision": "42c7228544f49490edc77bba702611ff5b320bd5",
+  "suite": "harness-study-dev-v2",
+  "settings": {
+    "model_path": "/Users/yingyao/Desktop/Code.nosync/GetHandsDirty.nosync/gz-data/hub/models--Qwen--Qwen2.5-7B-Instruct-GGUF/snapshots/bb5d59e06d9551d752d08b292a50eb208b07ab1f/qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf",
+    "temperature": 0.0,
+    "max_tokens": 2048,
+    "n_ctx": 8192,
+    "n_gpu_layers": -1,
+    "chat_template_sha256": "251957286ff23444e55f44b1cc2ac3511ff1d75bec98a1eefadd2b181169fbbd",
+    "chat_handler": "project_qwen_jinja"
+  },
+  "seed": 11,
+  "source_manifest_sha256": "5f97f1695bb1e1e65bd84ed9b0a512ad68cb445d9c3621251dd1d4c6d656a32e",
+  "source_sha256": {
+    "trace.py": "d8e5f60a46d75d4c9febc01ad15516331efb545552fe153155d8e94276cb0be6",
+    "support.py": "73f3e5a932eb1b516b28d76a52c30fcfb8ab3461e892cc9ddff1bc763ea0cb51",
+    "config.py": "f64b80ae38ef4417bbdcd56588fa02e95ffb61e24d8a69cf8c0b836ccc149f1a",
+    "memory.py": "2641be8283bc8cc17dcdaedeabc06b16485e61d83e43e148067417554bc24be7",
+    "session.py": "e2b3437adff163e6524460f99e0a71d4b61fb485791fe0d5292288b38d819a58",
+    "compact.py": "eb59ecbdf16bf4fe8c7add65256addde136cb5cf5b4470a8767d01305fb9cbf3",
+    "__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "llm.py": "9f1f2bb910eeffb6dd4ec68199cd53fa515799f907e93e3c2ec0d49ac1d97184",
+    "context.py": "c8ae5a280570c10b4653515b2db61b754c137f3fcb83eac20f14774518f221b9",
+    "utils.py": "1d80e5042e41b0e7499bf43f97758c7725a9c668839d7573f90fca5f2675c117",
+    "agent.py": "67250e1e5c15e0198aa4a811ef4a149907153ba8f15edd00a3446c2fbd0ac0a4",
+    "planning.py": "bd3d0e30d6c4f6945d4f1585a9e4ebf4538deda7c7548a1261062726f05ca39b",
+    "elision.py": "98951b90d2ba785a534089dabb03d5f9af1309123296b9c7d12ab245451f3149",
+    "evals/run.py": "2ba244735e734134eae098efaea44152921eac4b6712a98b0dc541bbbd404834",
+    "evals/tools_smoke.py": "35a21b17b4d35549a28793ef2e608976cc8e16ea12c9d3517d5934d24c39be6a",
+    "evals/check.py": "f270f2fa9fa7d5ef00432824dd938b204b3693fafe5e00d529f0dfb6eb02a17b",
+    "evals/TOOLS_CHECKPOINT.md": "34d2c65804eec903c4cd7e92a3a1fe5217a6b1092f6d2d5c05cf449ddb238823",
+    "evals/BEHAVIOR_CHECKPOINT.md": "45797515751da2a4c4b758fd7997ca58148ee20f34ef73ea3c343084ccd42786",
+    "evals/foundation.py": "3c998b891cb293a975434a2833116dc874f72ddbbc18e6c90bf436fa9f854cca",
+    "evals/core_lines.py": "6fc661184d515c921d9437957678b2805e44765e91fc91524cf64757cb890cf6",
+    "evals/README.md": "dcb031ab4b2cd0c3991a8948eaad81fb85a5e692325c262da80b746da2b8fadc",
+    "evals/FOUNDATION_CHECKPOINT.md": "25aec4e14cf8ce7415bb8f5b793d9f29858669a4072142307c3db97410e984b3",
+    "evals/legacy_files.py": "636fa54f7d346c7e19228bc2feebb5f327b87248b3ad6e53cb4ef767f6689b76",
+    "evals/harness_study.py": "6a63594a5d1ec6999fcf0855f566fd9eabcade90abc4c0dd889429623db39993",
+    "evals/verify.py": "b3722fe5ad49c39d01ee31b9f1b96d7bc80357a053fc2013e9d8923ac5f58f97",
+    "tools/files.py": "f498f31eae9256dd74e3e2108331ca6efd97e6543e87b5a1cfd1a4200a7905a8",
+    "tools/web.py": "e0e73a566eb44acdad8fe88aec156fda0a3d426c11f356fdd9ad2d25d7604ac3",
+    "tools/register.py": "6b20e4164a1c21707a09e16a16da0855b1693901ae6597687ca63c53c3103509",
+    "tools/THIRD_PARTY.md": "02977a0415815904013a1e677efe02cd79ecd60566a1efa8b5e4886fcb244f30",
+    "tools/file_documents.py": "0dadafd65eae502b5b6d27cb86d7a2ba433b04f598efa604d3095f42034c10f3",
+    "tools/shell.py": "4d4456ae0b74a451ec4e7d4075c25c5d8eb29a13b5d61a5348b9e5c5a2fba0cf",
+    "tools/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tools/calculator.py": "6ab517c42a5beded95110f3bd2148944a670f5f5aedd1caf37b76165e14aec7a",
+    "tools/search.py": "6793ee2c8eb02579dd984c6de733add7951dd311bb05868efbc5b9e9127741c7",
+    "tools/base.py": "5324edea45616b616972b5520cfb66a156229918e1a8c444b3e181679a92d0b7",
+    "tests/test_response.py": "26a8604479723563d8bd42d4b56a960dbec0849cf2127ce926d49e0af63b94f8",
+    "tests/test_turn.py": "1bab3687c0adbce480aa32b87542b49e794b02f7c676c304fcb1b9f97ccd65b4",
+    "tests/test_session.py": "4bec09dfeb1b82cf9bb79ec5430e9a9e7a913df5a63e94d41ae049beba5e135f",
+    "tests/test_compact.py": "11532a8240baa4a37187d0b9c35475bdcc498850da9cc3a1bc64cdf7c040b42d",
+    "tests/test_web.py": "1d6e5ae151fcf475cce06cef73338c3b396bee86a5ea368e8e032f9042fce318",
+    "tests/test_files.py": "c20aee28beabc6471589064a793e7790fa94d535a942a8619e14dd83f8638c0c",
+    "tests/test_harness_study.py": "37cd2f31c9216a232319c4c4d21e4ab874f743a0aa4bccac9a116a713a46f5c6",
+    "tests/test_general_files.py": "137a2807db47cede790f83b22f0bde75a2dc913694ffd5289726ba612b71e70b",
+    "tests/test_study_support.py": "6b5e85932aa1c3e1ddc935301fc7d8bf32bc020f7325dee712be95e4bbcaeb4a",
+    "tests/test_behavior_eval.py": "04af6bfa86222d309ef8fd6810d24d9590949e323fa10256ba53ce33ede17e52",
+    "tests/test_context.py": "8e69eaf07665ceb7efcad70aeebaac9527e2021969351a07abe07f5672fdd3b7",
+    "tests/test_shell.py": "01eed00e433679a2fe724e7fbc793d5ed0a0961d8c48bb03cca4cb85a660c345",
+    "tests/test_tools.py": "e0b749c7ab7b9df4eec0ab85cca1a703a0a074fd7f0a7f140467238be3161dba",
+    "tests/test_tool_workflows.py": "ef460d1b1e11bd9a448bd4bda2b2da2a1b4f486c15d396b8560ccc07332ce71e",
+    "tests/test_elision.py": "53caf02d1b2b211bc0b3810484b31fefea4a49f6efd761a7c60567b21d750297",
+    "tests/test_eval.py": "6b549760087e4b724bc0bfcf20f02c423597702dbb878014e2f4a92dbe54edb8",
+    "tests/test_planning.py": "e7a7f81783bc15901fd73672d8d8d1dccaf52fbe053daabc399305075e106e3d",
+    "tests/test_batches.py": "ef40a7df1203bba7d33c155c6eaed19e3f921da4e43355d403ab9bc81d169ab9",
+    "docs/REPORT_ANALYSIS.md": "817866f07808f0698f05b1d60637fffa01eaa8309710ab7ce10f5c01870a9242",
+    "docs/STAGE.md": "8b42436383d621820ece19f488391c0b2ff2989ecf8069f54942832972bcd7ab",
+    "docs/context-memory.md": "5848ffed87401b0c5a4f0e6ac7c44357b730e43677091b4560ac160f15aaa088",
+    "docs/STAGE3A_ITEM2_PLAN.md": "912cca9857a251ec954812c9748b2dd15edcf2a741fca7d5d82e97c45e7ab21e",
+    "docs/CONTEXT_STATE_DESIGN.md": "11991c418199c4dfa94b0ae55d21866d4b4567f1a04e2542db4b05506de3acf0",
+    "docs/day01_stage0.5.md": "88598daedbbc074879cfede3521d26780c4cbb204145ce0518bfd931602a7b29",
+    "docs/day03_stage1.2.md": "cce3bda83af8b8a632232580a0cf745f40af8c6a39b4af60e710c4125b49b7e5",
+    "examples/tools_demo.py": "5899ffedeead05a5fc1adc0f8c98e8f545fe08688019eec571190ab3aad484f7",
+    "examples/compact_demo.py": "d703fc764ef1c39ed559d2ff46162e82e6461fe904e065e8a4730887a4c24abb",
+    "examples/fixture_command.py": "60e5aec87c13cae8a95c147352b8edd3835909e1a5a18a4fe2c23623f2a6b51d",
+    "prompts/system.md": "41cd2e319077f33a4df9ce2a09d3e59a0600507afd4e26ad4e68521eb0b6b79d",
+    "prompts/compact.md": "dfdca1ae56e7913909fb3996a22bd4c548f7396ed285f7527f11b688e1206be4",
+    "prompts/qwen_chat.jinja": "251957286ff23444e55f44b1cc2ac3511ff1d75bec98a1eefadd2b181169fbbd"
+  },
+  "scope": "Single greedy development run per condition; no significance or generalization claim.",
+  "no_op_audit_policy": "Post hoc: unchanged snapshots plus every mutation result explicitly ok/changed=False; other frozen checks retained. Errors/skips are not explicit no-change confirmations. Original scores never replaced.",
+  "panels": {
+    "baseline": {
+      "candidate": {
+        "passed": 1,
+        "total": 8,
+        "seconds": 156.77,
+        "seconds_per_success": 156.77,
+        "tokens_per_success": 72441.0,
+        "prompt_tokens": 69986,
+        "completion_tokens": 2455,
+        "total_tokens": 72441,
+        "model_requests": 28,
+        "tool_attempts": 23,
+        "summary_requests": 0,
+        "parse_errors": 0,
+        "invalid_calls": 0,
+        "stop_reasons": {
+          "final_response": 6,
+          "context_limit": 2
+        }
+      },
+      "matched_baseline": {
+        "passed": 1,
+        "total": 8,
+        "seconds": 156.77,
+        "seconds_per_success": 156.77,
+        "tokens_per_success": 72441.0,
+        "prompt_tokens": 69986,
+        "completion_tokens": 2455,
+        "total_tokens": 72441,
+        "model_requests": 28,
+        "tool_attempts": 23,
+        "summary_requests": 0,
+        "parse_errors": 0,
+        "invalid_calls": 0,
+        "stop_reasons": {
+          "final_response": 6,
+          "context_limit": 2
+        }
+      },
+      "wins": [],
+      "losses": [],
+      "activations": {
+        "total": {
+          "elided_observations": 0,
+          "compact_blocked": 2,
+          "agent_blocked": 2
+        },
+        "by_task": {
+          "direct": {
+            "elided_observations": 0
+          },
+          "no_op": {
+            "elided_observations": 0
+          },
+          "nested": {
+            "elided_observations": 0
+          },
+          "search": {
+            "elided_observations": 0
+          },
+          "json_repair": {
+            "elided_observations": 0
+          },
+          "missing_path": {
+            "elided_observations": 0
+          },
+          "history_retain": {
+            "compact_blocked": 1,
+            "agent_blocked": 1,
+            "elided_observations": 0
+          },
+          "history_edit": {
+            "compact_blocked": 1,
+            "agent_blocked": 1,
+            "elided_observations": 0
+          }
+        }
+      },
+      "no_op_post_hoc_audit": {
+        "strict_passed": false,
+        "snapshots_unchanged": true,
+        "other_checks_passed": true,
+        "mutation_results": [
+          {
+            "tool": "edit_file",
+            "ok": false,
+            "error_code": "execution_error",
+            "changed": null
+          },
+          {
+            "tool": "write_file",
+            "ok": false,
+            "error_code": "skipped",
+            "changed": null
+          }
+        ],
+        "all_mutations_explicitly_unchanged": false,
+        "conservative_sensitivity_passed": false
+      },
+      "limits": {
+        "max_iterations": 20,
+        "max_same_failures": 3,
+        "max_tool_calls": 40,
+        "max_tool_calls_per_response": 8,
+        "context_margin_tokens": 256,
+        "compact_headroom_tokens": 512,
+        "max_compact_calls": 4,
+        "elision_enabled": false,
+        "elision_soft_ratio": 0.6,
+        "elision_min_chars": 1024,
+        "planning_enabled": false,
+        "repeat_reminder_enabled": false,
+        "diagnostics_enabled": false
+      },
+      "search_enabled": false,
+      "tasks": [
+        {
+          "id": "direct",
+          "passed": true,
+          "checks": {
+            "normal_finish": true,
+            "answer": true,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true,
+            "no_tools": true
+          },
+          "changed_paths": [],
+          "final_answer": "READY",
+          "failed_checks": [],
+          "stop_reason": "final_response",
+          "model_requests": 1,
+          "elapsed_seconds": 6.27,
+          "usage": {
+            "prompt_tokens": 1551,
+            "completion_tokens": 1,
+            "total_tokens": 1552
+          },
+          "summary_requests": 0,
+          "tool_attempts": 0,
+          "fault_encountered": null
+        },
+        {
+          "id": "no_op",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": true,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": false
+          },
+          "changed_paths": [],
+          "final_answer": "DONE",
+          "failed_checks": [
+            "no_write_attempts"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 2,
+          "elapsed_seconds": 15.63,
+          "usage": {
+            "prompt_tokens": 3875,
+            "completion_tokens": 200,
+            "total_tokens": 4075
+          },
+          "summary_requests": 0,
+          "tool_attempts": 2,
+          "fault_encountered": null
+        },
+        {
+          "id": "nested",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": false,
+            "allowed_changes": true,
+            "artifact": false
+          },
+          "changed_paths": [],
+          "final_answer": "The text in `manifest.json` is:\n\n```\n1| {\"active\": \"settings/live.json\"}\n```\n\nSince the `retries` setting is not present, we cannot make the change as requested. Please ensure the file contains the necessary text or structure before attempting the modification.\n\nDONE",
+          "failed_checks": [
+            "answer",
+            "required_sources",
+            "artifact"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 8,
+          "elapsed_seconds": 45.62,
+          "usage": {
+            "prompt_tokens": 21894,
+            "completion_tokens": 787,
+            "total_tokens": 22681
+          },
+          "summary_requests": 0,
+          "tool_attempts": 7,
+          "fault_encountered": null
+        },
+        {
+          "id": "search",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true
+          },
+          "changed_paths": [],
+          "final_answer": "The value of `release_key` is `ORCHID-72`.",
+          "failed_checks": [
+            "answer"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 9,
+          "elapsed_seconds": 53.54,
+          "usage": {
+            "prompt_tokens": 27126,
+            "completion_tokens": 943,
+            "total_tokens": 28069
+          },
+          "summary_requests": 0,
+          "tool_attempts": 8,
+          "fault_encountered": null
+        },
+        {
+          "id": "json_repair",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": true,
+            "required_sources": true,
+            "allowed_changes": true,
+            "artifact": false
+          },
+          "changed_paths": [
+            "config.json"
+          ],
+          "final_answer": "DONE",
+          "failed_checks": [
+            "artifact"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 4,
+          "elapsed_seconds": 21.0,
+          "usage": {
+            "prompt_tokens": 7974,
+            "completion_tokens": 335,
+            "total_tokens": 8309
+          },
+          "summary_requests": 0,
+          "tool_attempts": 3,
+          "fault_encountered": null
+        },
+        {
+          "id": "missing_path",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true,
+            "recovered_in_order": true
+          },
+          "changed_paths": [],
+          "final_answer": "The code from the `profiles/current.txt` file is `CEDAR-19`.",
+          "failed_checks": [
+            "answer"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 4,
+          "elapsed_seconds": 14.69,
+          "usage": {
+            "prompt_tokens": 7566,
+            "completion_tokens": 189,
+            "total_tokens": 7755
+          },
+          "summary_requests": 0,
+          "tool_attempts": 3,
+          "fault_encountered": true
+        },
+        {
+          "id": "history_retain",
+          "passed": false,
+          "checks": {
+            "normal_finish": false,
+            "answer": false,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true
+          },
+          "changed_paths": [],
+          "final_answer": null,
+          "failed_checks": [
+            "normal_finish",
+            "answer"
+          ],
+          "stop_reason": "context_limit",
+          "model_requests": 0,
+          "elapsed_seconds": 0.01,
+          "usage": {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0
+          },
+          "summary_requests": 0,
+          "tool_attempts": 0,
+          "fault_encountered": null
+        },
+        {
+          "id": "history_edit",
+          "passed": false,
+          "checks": {
+            "normal_finish": false,
+            "answer": false,
+            "required_sources": false,
+            "allowed_changes": true,
+            "artifact": false
+          },
+          "changed_paths": [],
+          "final_answer": null,
+          "failed_checks": [
+            "normal_finish",
+            "answer",
+            "required_sources",
+            "artifact"
+          ],
+          "stop_reason": "context_limit",
+          "model_requests": 0,
+          "elapsed_seconds": 0.01,
+          "usage": {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0
+          },
+          "summary_requests": 0,
+          "tool_attempts": 0,
+          "fault_encountered": null
+        }
+      ]
+    },
+    "elision": {
+      "candidate": {
+        "passed": 1,
+        "total": 8,
+        "seconds": 173.73,
+        "seconds_per_success": 173.73,
+        "tokens_per_success": 73674.0,
+        "prompt_tokens": 71603,
+        "completion_tokens": 2071,
+        "total_tokens": 73674,
+        "model_requests": 27,
+        "tool_attempts": 20,
+        "summary_requests": 0,
+        "parse_errors": 0,
+        "invalid_calls": 0,
+        "stop_reasons": {
+          "final_response": 8
+        }
+      },
+      "matched_baseline": {
+        "passed": 1,
+        "total": 8,
+        "seconds": 156.77,
+        "seconds_per_success": 156.77,
+        "tokens_per_success": 72441.0,
+        "prompt_tokens": 69986,
+        "completion_tokens": 2455,
+        "total_tokens": 72441,
+        "model_requests": 28,
+        "tool_attempts": 23,
+        "summary_requests": 0,
+        "parse_errors": 0,
+        "invalid_calls": 0,
+        "stop_reasons": {
+          "final_response": 6,
+          "context_limit": 2
+        }
+      },
+      "wins": [],
+      "losses": [],
+      "activations": {
+        "total": {
+          "elided_observations": 9
+        },
+        "by_task": {
+          "direct": {
+            "elided_observations": 0
+          },
+          "no_op": {
+            "elided_observations": 0
+          },
+          "nested": {
+            "elided_observations": 0
+          },
+          "search": {
+            "elided_observations": 0
+          },
+          "json_repair": {
+            "elided_observations": 0
+          },
+          "missing_path": {
+            "elided_observations": 0
+          },
+          "history_retain": {
+            "elided_observations": 4
+          },
+          "history_edit": {
+            "elided_observations": 5
+          }
+        }
+      },
+      "no_op_post_hoc_audit": {
+        "strict_passed": false,
+        "snapshots_unchanged": true,
+        "other_checks_passed": true,
+        "mutation_results": [
+          {
+            "tool": "edit_file",
+            "ok": false,
+            "error_code": "execution_error",
+            "changed": null
+          },
+          {
+            "tool": "write_file",
+            "ok": false,
+            "error_code": "skipped",
+            "changed": null
+          }
+        ],
+        "all_mutations_explicitly_unchanged": false,
+        "conservative_sensitivity_passed": false
+      },
+      "limits": {
+        "max_iterations": 20,
+        "max_same_failures": 3,
+        "max_tool_calls": 40,
+        "max_tool_calls_per_response": 8,
+        "context_margin_tokens": 256,
+        "compact_headroom_tokens": 512,
+        "max_compact_calls": 4,
+        "elision_enabled": true,
+        "elision_soft_ratio": 0.6,
+        "elision_min_chars": 1024,
+        "planning_enabled": false,
+        "repeat_reminder_enabled": false,
+        "diagnostics_enabled": false
+      },
+      "search_enabled": false,
+      "tasks": [
+        {
+          "id": "direct",
+          "passed": true,
+          "checks": {
+            "normal_finish": true,
+            "answer": true,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true,
+            "no_tools": true
+          },
+          "changed_paths": [],
+          "final_answer": "READY",
+          "failed_checks": [],
+          "stop_reason": "final_response",
+          "model_requests": 1,
+          "elapsed_seconds": 6.43,
+          "usage": {
+            "prompt_tokens": 1555,
+            "completion_tokens": 1,
+            "total_tokens": 1556
+          },
+          "summary_requests": 0,
+          "tool_attempts": 0,
+          "fault_encountered": null
+        },
+        {
+          "id": "no_op",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": true,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": false
+          },
+          "changed_paths": [],
+          "final_answer": "DONE",
+          "failed_checks": [
+            "no_write_attempts"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 2,
+          "elapsed_seconds": 16.0,
+          "usage": {
+            "prompt_tokens": 3871,
+            "completion_tokens": 200,
+            "total_tokens": 4071
+          },
+          "summary_requests": 0,
+          "tool_attempts": 2,
+          "fault_encountered": null
+        },
+        {
+          "id": "nested",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": false,
+            "allowed_changes": true,
+            "artifact": false
+          },
+          "changed_paths": [],
+          "final_answer": "The file `manifest.json` does not exist in the current directory. Since the manifest file is not found, we cannot proceed with the requested change. \n\nDONE",
+          "failed_checks": [
+            "answer",
+            "required_sources",
+            "artifact"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 2,
+          "elapsed_seconds": 11.3,
+          "usage": {
+            "prompt_tokens": 3472,
+            "completion_tokens": 132,
+            "total_tokens": 3604
+          },
+          "summary_requests": 0,
+          "tool_attempts": 1,
+          "fault_encountered": null
+        },
+        {
+          "id": "search",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true
+          },
+          "changed_paths": [],
+          "final_answer": "The value of `release_key` is `ORCHID-72`.",
+          "failed_checks": [
+            "answer"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 9,
+          "elapsed_seconds": 55.71,
+          "usage": {
+            "prompt_tokens": 27124,
+            "completion_tokens": 919,
+            "total_tokens": 28043
+          },
+          "summary_requests": 0,
+          "tool_attempts": 8,
+          "fault_encountered": null
+        },
+        {
+          "id": "json_repair",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": true,
+            "required_sources": true,
+            "allowed_changes": true,
+            "artifact": false
+          },
+          "changed_paths": [
+            "config.json"
+          ],
+          "final_answer": "DONE",
+          "failed_checks": [
+            "artifact"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 4,
+          "elapsed_seconds": 21.04,
+          "usage": {
+            "prompt_tokens": 7902,
+            "completion_tokens": 332,
+            "total_tokens": 8234
+          },
+          "summary_requests": 0,
+          "tool_attempts": 3,
+          "fault_encountered": null
+        },
+        {
+          "id": "missing_path",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true,
+            "recovered_in_order": true
+          },
+          "changed_paths": [],
+          "final_answer": "The `profile_code` from the `current.txt` file is `CEDAR-19`.",
+          "failed_checks": [
+            "answer"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 4,
+          "elapsed_seconds": 15.89,
+          "usage": {
+            "prompt_tokens": 7658,
+            "completion_tokens": 214,
+            "total_tokens": 7872
+          },
+          "summary_requests": 0,
+          "tool_attempts": 3,
+          "fault_encountered": true
+        },
+        {
+          "id": "history_retain",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true
+          },
+          "changed_paths": [],
+          "final_answer": "The `launch_code` from `archive0.txt` is not explicitly provided in the content you've shown. The file appears to be empty or does not contain any identifiable `launch_code`. Please ensure you have the correct file or provide more details if the file content has changed.",
+          "failed_checks": [
+            "answer"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 1,
+          "elapsed_seconds": 13.95,
+          "usage": {
+            "prompt_tokens": 3123,
+            "completion_tokens": 56,
+            "total_tokens": 3179
+          },
+          "summary_requests": 0,
+          "tool_attempts": 0,
+          "fault_encountered": null
+        },
+        {
+          "id": "history_edit",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": true,
+            "allowed_changes": true,
+            "artifact": false
+          },
+          "changed_paths": [],
+          "final_answer": "The `old_text` was not found in the `config.json` file. Please ensure the exact text is copied from the file, including any leading or trailing spaces. If the text is correct, there might be an issue with the file content. Let's try again.\n\nHere is the content of `config.json` for reference:\n```json\n1| {\"code\": \"old\"}\n```\n\nPlease provide the exact `old_text` to proceed.",
+          "failed_checks": [
+            "answer",
+            "artifact"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 4,
+          "elapsed_seconds": 33.41,
+          "usage": {
+            "prompt_tokens": 16898,
+            "completion_tokens": 217,
+            "total_tokens": 17115
+          },
+          "summary_requests": 0,
+          "tool_attempts": 3,
+          "fault_encountered": null
+        }
+      ]
+    },
+    "planning": {
+      "candidate": {
+        "passed": 1,
+        "total": 8,
+        "seconds": 186.74,
+        "seconds_per_success": 186.74,
+        "tokens_per_success": 87948.0,
+        "prompt_tokens": 85272,
+        "completion_tokens": 2676,
+        "total_tokens": 87948,
+        "model_requests": 29,
+        "tool_attempts": 27,
+        "summary_requests": 0,
+        "parse_errors": 0,
+        "invalid_calls": 2,
+        "stop_reasons": {
+          "final_response": 6,
+          "context_limit": 2
+        }
+      },
+      "matched_baseline": {
+        "passed": 1,
+        "total": 8,
+        "seconds": 156.77,
+        "seconds_per_success": 156.77,
+        "tokens_per_success": 72441.0,
+        "prompt_tokens": 69986,
+        "completion_tokens": 2455,
+        "total_tokens": 72441,
+        "model_requests": 28,
+        "tool_attempts": 23,
+        "summary_requests": 0,
+        "parse_errors": 0,
+        "invalid_calls": 0,
+        "stop_reasons": {
+          "final_response": 6,
+          "context_limit": 2
+        }
+      },
+      "wins": [],
+      "losses": [],
+      "activations": {
+        "total": {
+          "elided_observations": 0,
+          "update_plan": 1,
+          "compact_blocked": 2,
+          "agent_blocked": 2
+        },
+        "by_task": {
+          "direct": {
+            "elided_observations": 0
+          },
+          "no_op": {
+            "elided_observations": 0
+          },
+          "nested": {
+            "elided_observations": 0,
+            "update_plan": 1
+          },
+          "search": {
+            "elided_observations": 0
+          },
+          "json_repair": {
+            "elided_observations": 0
+          },
+          "missing_path": {
+            "elided_observations": 0
+          },
+          "history_retain": {
+            "compact_blocked": 1,
+            "agent_blocked": 1,
+            "elided_observations": 0
+          },
+          "history_edit": {
+            "compact_blocked": 1,
+            "agent_blocked": 1,
+            "elided_observations": 0
+          }
+        }
+      },
+      "no_op_post_hoc_audit": {
+        "strict_passed": false,
+        "snapshots_unchanged": true,
+        "other_checks_passed": false,
+        "mutation_results": [
+          {
+            "tool": "edit_file",
+            "ok": false,
+            "error_code": "execution_error",
+            "changed": null
+          },
+          {
+            "tool": "write_file",
+            "ok": false,
+            "error_code": "skipped",
+            "changed": null
+          }
+        ],
+        "all_mutations_explicitly_unchanged": false,
+        "conservative_sensitivity_passed": false
+      },
+      "limits": {
+        "max_iterations": 20,
+        "max_same_failures": 3,
+        "max_tool_calls": 40,
+        "max_tool_calls_per_response": 8,
+        "context_margin_tokens": 256,
+        "compact_headroom_tokens": 512,
+        "max_compact_calls": 4,
+        "elision_enabled": false,
+        "elision_soft_ratio": 0.6,
+        "elision_min_chars": 1024,
+        "planning_enabled": true,
+        "repeat_reminder_enabled": false,
+        "diagnostics_enabled": false
+      },
+      "search_enabled": false,
+      "tasks": [
+        {
+          "id": "direct",
+          "passed": true,
+          "checks": {
+            "normal_finish": true,
+            "answer": true,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true,
+            "no_tools": true
+          },
+          "changed_paths": [],
+          "final_answer": "READY",
+          "failed_checks": [],
+          "stop_reason": "final_response",
+          "model_requests": 1,
+          "elapsed_seconds": 7.97,
+          "usage": {
+            "prompt_tokens": 1800,
+            "completion_tokens": 1,
+            "total_tokens": 1801
+          },
+          "summary_requests": 0,
+          "tool_attempts": 0,
+          "fault_encountered": null
+        },
+        {
+          "id": "no_op",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": false
+          },
+          "changed_paths": [],
+          "final_answer": "The `config.json` file already has the correct `retries=3` setting. No changes were made.\n\nDONE",
+          "failed_checks": [
+            "answer",
+            "no_write_attempts"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 3,
+          "elapsed_seconds": 20.19,
+          "usage": {
+            "prompt_tokens": 7254,
+            "completion_tokens": 241,
+            "total_tokens": 7495
+          },
+          "summary_requests": 0,
+          "tool_attempts": 3,
+          "fault_encountered": null
+        },
+        {
+          "id": "nested",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": false,
+            "allowed_changes": false,
+            "artifact": false
+          },
+          "changed_paths": [
+            "manifest.json"
+          ],
+          "final_answer": "It seems the exact text `\"retries\": 1` is not present in the file, which is why the replacement is failing. Given the content of `manifest.json`:\n\n```\n1| {\"active\": \"settings/live.json\"}\n```\n\nIt appears that the key `\"retries\": 1` is not part of the JSON content. Therefore, we cannot update the retries to 3 as the key does not exist.\n\nThe final state of `manifest.json` remains unchanged. The task is complete.\n\nDONE",
+          "failed_checks": [
+            "answer",
+            "required_sources",
+            "allowed_changes",
+            "artifact"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 9,
+          "elapsed_seconds": 84.16,
+          "usage": {
+            "prompt_tokens": 33270,
+            "completion_tokens": 1416,
+            "total_tokens": 34686
+          },
+          "summary_requests": 0,
+          "tool_attempts": 11,
+          "fault_encountered": null
+        },
+        {
+          "id": "search",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true
+          },
+          "changed_paths": [],
+          "final_answer": "The value of `release_key` in the `notes` directory is `ORCHID-72`.",
+          "failed_checks": [
+            "answer"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 9,
+          "elapsed_seconds": 42.96,
+          "usage": {
+            "prompt_tokens": 28059,
+            "completion_tokens": 636,
+            "total_tokens": 28695
+          },
+          "summary_requests": 0,
+          "tool_attempts": 8,
+          "fault_encountered": null
+        },
+        {
+          "id": "json_repair",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": true,
+            "required_sources": true,
+            "allowed_changes": true,
+            "artifact": false
+          },
+          "changed_paths": [
+            "config.json"
+          ],
+          "final_answer": "DONE",
+          "failed_checks": [
+            "artifact"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 3,
+          "elapsed_seconds": 13.88,
+          "usage": {
+            "prompt_tokens": 6291,
+            "completion_tokens": 150,
+            "total_tokens": 6441
+          },
+          "summary_requests": 0,
+          "tool_attempts": 2,
+          "fault_encountered": null
+        },
+        {
+          "id": "missing_path",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true,
+            "recovered_in_order": true
+          },
+          "changed_paths": [],
+          "final_answer": "The `profile_code` from `profiles/current.txt` is `CEDAR-19`.",
+          "failed_checks": [
+            "answer"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 4,
+          "elapsed_seconds": 17.56,
+          "usage": {
+            "prompt_tokens": 8598,
+            "completion_tokens": 232,
+            "total_tokens": 8830
+          },
+          "summary_requests": 0,
+          "tool_attempts": 3,
+          "fault_encountered": true
+        },
+        {
+          "id": "history_retain",
+          "passed": false,
+          "checks": {
+            "normal_finish": false,
+            "answer": false,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true
+          },
+          "changed_paths": [],
+          "final_answer": null,
+          "failed_checks": [
+            "normal_finish",
+            "answer"
+          ],
+          "stop_reason": "context_limit",
+          "model_requests": 0,
+          "elapsed_seconds": 0.01,
+          "usage": {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0
+          },
+          "summary_requests": 0,
+          "tool_attempts": 0,
+          "fault_encountered": null
+        },
+        {
+          "id": "history_edit",
+          "passed": false,
+          "checks": {
+            "normal_finish": false,
+            "answer": false,
+            "required_sources": false,
+            "allowed_changes": true,
+            "artifact": false
+          },
+          "changed_paths": [],
+          "final_answer": null,
+          "failed_checks": [
+            "normal_finish",
+            "answer",
+            "required_sources",
+            "artifact"
+          ],
+          "stop_reason": "context_limit",
+          "model_requests": 0,
+          "elapsed_seconds": 0.01,
+          "usage": {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0
+          },
+          "summary_requests": 0,
+          "tool_attempts": 0,
+          "fault_encountered": null
+        }
+      ]
+    },
+    "elision_planning": {
+      "candidate": {
+        "passed": 2,
+        "total": 8,
+        "seconds": 228.2,
+        "seconds_per_success": 114.1,
+        "tokens_per_success": 59258.0,
+        "prompt_tokens": 115611,
+        "completion_tokens": 2905,
+        "total_tokens": 118516,
+        "model_requests": 39,
+        "tool_attempts": 32,
+        "summary_requests": 0,
+        "parse_errors": 0,
+        "invalid_calls": 2,
+        "stop_reasons": {
+          "final_response": 8
+        }
+      },
+      "matched_baseline": {
+        "passed": 1,
+        "total": 8,
+        "seconds": 156.77,
+        "seconds_per_success": 156.77,
+        "tokens_per_success": 72441.0,
+        "prompt_tokens": 69986,
+        "completion_tokens": 2455,
+        "total_tokens": 72441,
+        "model_requests": 28,
+        "tool_attempts": 23,
+        "summary_requests": 0,
+        "parse_errors": 0,
+        "invalid_calls": 0,
+        "stop_reasons": {
+          "final_response": 6,
+          "context_limit": 2
+        }
+      },
+      "wins": [
+        "json_repair"
+      ],
+      "losses": [],
+      "activations": {
+        "total": {
+          "elided_observations": 9
+        },
+        "by_task": {
+          "direct": {
+            "elided_observations": 0
+          },
+          "no_op": {
+            "elided_observations": 0
+          },
+          "nested": {
+            "elided_observations": 0
+          },
+          "search": {
+            "elided_observations": 0
+          },
+          "json_repair": {
+            "elided_observations": 0
+          },
+          "missing_path": {
+            "elided_observations": 0
+          },
+          "history_retain": {
+            "elided_observations": 4
+          },
+          "history_edit": {
+            "elided_observations": 5
+          }
+        }
+      },
+      "no_op_post_hoc_audit": {
+        "strict_passed": false,
+        "snapshots_unchanged": true,
+        "other_checks_passed": true,
+        "mutation_results": [
+          {
+            "tool": "edit_file",
+            "ok": false,
+            "error_code": "execution_error",
+            "changed": null
+          },
+          {
+            "tool": "write_file",
+            "ok": false,
+            "error_code": "skipped",
+            "changed": null
+          }
+        ],
+        "all_mutations_explicitly_unchanged": false,
+        "conservative_sensitivity_passed": false
+      },
+      "limits": {
+        "max_iterations": 20,
+        "max_same_failures": 3,
+        "max_tool_calls": 40,
+        "max_tool_calls_per_response": 8,
+        "context_margin_tokens": 256,
+        "compact_headroom_tokens": 512,
+        "max_compact_calls": 4,
+        "elision_enabled": true,
+        "elision_soft_ratio": 0.6,
+        "elision_min_chars": 1024,
+        "planning_enabled": true,
+        "repeat_reminder_enabled": false,
+        "diagnostics_enabled": false
+      },
+      "search_enabled": false,
+      "tasks": [
+        {
+          "id": "direct",
+          "passed": true,
+          "checks": {
+            "normal_finish": true,
+            "answer": true,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true,
+            "no_tools": true
+          },
+          "changed_paths": [],
+          "final_answer": "READY",
+          "failed_checks": [],
+          "stop_reason": "final_response",
+          "model_requests": 1,
+          "elapsed_seconds": 7.59,
+          "usage": {
+            "prompt_tokens": 1796,
+            "completion_tokens": 1,
+            "total_tokens": 1797
+          },
+          "summary_requests": 0,
+          "tool_attempts": 0,
+          "fault_encountered": null
+        },
+        {
+          "id": "no_op",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": true,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": false
+          },
+          "changed_paths": [],
+          "final_answer": "DONE",
+          "failed_checks": [
+            "no_write_attempts"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 3,
+          "elapsed_seconds": 20.42,
+          "usage": {
+            "prompt_tokens": 7480,
+            "completion_tokens": 236,
+            "total_tokens": 7716
+          },
+          "summary_requests": 0,
+          "tool_attempts": 3,
+          "fault_encountered": null
+        },
+        {
+          "id": "nested",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": true,
+            "required_sources": false,
+            "allowed_changes": false,
+            "artifact": false
+          },
+          "changed_paths": [
+            "manifest.json"
+          ],
+          "final_answer": "DONE",
+          "failed_checks": [
+            "required_sources",
+            "allowed_changes",
+            "artifact"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 9,
+          "elapsed_seconds": 50.98,
+          "usage": {
+            "prompt_tokens": 26922,
+            "completion_tokens": 848,
+            "total_tokens": 27770
+          },
+          "summary_requests": 0,
+          "tool_attempts": 8,
+          "fault_encountered": null
+        },
+        {
+          "id": "search",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true
+          },
+          "changed_paths": [],
+          "final_answer": "The `release_key` found in `part6.txt` is `ORCHID-72`.\n\nFinal answer: ORCHID-72",
+          "failed_checks": [
+            "answer"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 9,
+          "elapsed_seconds": 40.45,
+          "usage": {
+            "prompt_tokens": 27598,
+            "completion_tokens": 564,
+            "total_tokens": 28162
+          },
+          "summary_requests": 0,
+          "tool_attempts": 8,
+          "fault_encountered": null
+        },
+        {
+          "id": "json_repair",
+          "passed": true,
+          "checks": {
+            "normal_finish": true,
+            "answer": true,
+            "required_sources": true,
+            "allowed_changes": true,
+            "artifact": true
+          },
+          "changed_paths": [
+            "config.json"
+          ],
+          "final_answer": "DONE",
+          "failed_checks": [],
+          "stop_reason": "final_response",
+          "model_requests": 7,
+          "elapsed_seconds": 45.67,
+          "usage": {
+            "prompt_tokens": 18351,
+            "completion_tokens": 829,
+            "total_tokens": 19180
+          },
+          "summary_requests": 0,
+          "tool_attempts": 6,
+          "fault_encountered": null
+        },
+        {
+          "id": "missing_path",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true,
+            "recovered_in_order": true
+          },
+          "changed_paths": [],
+          "final_answer": "The code from the `profiles/current.txt` file is `CEDAR-19`.",
+          "failed_checks": [
+            "answer"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 4,
+          "elapsed_seconds": 15.38,
+          "usage": {
+            "prompt_tokens": 8562,
+            "completion_tokens": 190,
+            "total_tokens": 8752
+          },
+          "summary_requests": 0,
+          "tool_attempts": 3,
+          "fault_encountered": true
+        },
+        {
+          "id": "history_retain",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true
+          },
+          "changed_paths": [],
+          "final_answer": "The launch_code from archive0.txt is `entry_000`.",
+          "failed_checks": [
+            "answer"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 2,
+          "elapsed_seconds": 15.37,
+          "usage": {
+            "prompt_tokens": 7040,
+            "completion_tokens": 48,
+            "total_tokens": 7088
+          },
+          "summary_requests": 0,
+          "tool_attempts": 1,
+          "fault_encountered": null
+        },
+        {
+          "id": "history_edit",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": true,
+            "allowed_changes": true,
+            "artifact": false
+          },
+          "changed_paths": [],
+          "final_answer": "The `old_text` was not found in the `config.json` file. Please check the exact text and try again. Here is the content of the file for reference:\n\n```json\n1| {\"code\": \"old\"}\n```\n\nIf you need further assistance, please provide the exact text to search for.",
+          "failed_checks": [
+            "answer",
+            "artifact"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 4,
+          "elapsed_seconds": 32.34,
+          "usage": {
+            "prompt_tokens": 17862,
+            "completion_tokens": 189,
+            "total_tokens": 18051
+          },
+          "summary_requests": 0,
+          "tool_attempts": 3,
+          "fault_encountered": null
+        }
+      ]
+    },
+    "search": {
+      "candidate": {
+        "passed": 1,
+        "total": 4,
+        "seconds": 339.95,
+        "seconds_per_success": 339.95,
+        "tokens_per_success": 92301.0,
+        "prompt_tokens": 87686,
+        "completion_tokens": 4615,
+        "total_tokens": 92301,
+        "model_requests": 27,
+        "tool_attempts": 32,
+        "summary_requests": 3,
+        "parse_errors": 0,
+        "invalid_calls": 0,
+        "stop_reasons": {
+          "final_response": 3,
+          "max_iterations": 1
+        }
+      },
+      "matched_baseline": {
+        "passed": 1,
+        "total": 4,
+        "seconds": 120.12,
+        "seconds_per_success": 120.12,
+        "tokens_per_success": 60057.0,
+        "prompt_tokens": 58137,
+        "completion_tokens": 1920,
+        "total_tokens": 60057,
+        "model_requests": 22,
+        "tool_attempts": 18,
+        "summary_requests": 0,
+        "parse_errors": 0,
+        "invalid_calls": 0,
+        "stop_reasons": {
+          "final_response": 4
+        }
+      },
+      "wins": [],
+      "losses": [],
+      "activations": {
+        "total": {
+          "elided_observations": 0,
+          "search_files": 1
+        },
+        "by_task": {
+          "direct": {
+            "elided_observations": 0
+          },
+          "nested": {
+            "elided_observations": 0
+          },
+          "search": {
+            "elided_observations": 0,
+            "search_files": 1
+          },
+          "missing_path": {
+            "elided_observations": 0
+          }
+        }
+      },
+      "no_op_post_hoc_audit": null,
+      "limits": {
+        "max_iterations": 20,
+        "max_same_failures": 3,
+        "max_tool_calls": 40,
+        "max_tool_calls_per_response": 8,
+        "context_margin_tokens": 256,
+        "compact_headroom_tokens": 512,
+        "max_compact_calls": 4,
+        "elision_enabled": false,
+        "elision_soft_ratio": 0.6,
+        "elision_min_chars": 1024,
+        "planning_enabled": false,
+        "repeat_reminder_enabled": false,
+        "diagnostics_enabled": false
+      },
+      "search_enabled": true,
+      "tasks": [
+        {
+          "id": "direct",
+          "passed": true,
+          "checks": {
+            "normal_finish": true,
+            "answer": true,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true,
+            "no_tools": true
+          },
+          "changed_paths": [],
+          "final_answer": "READY",
+          "failed_checks": [],
+          "stop_reason": "final_response",
+          "model_requests": 1,
+          "elapsed_seconds": 7.08,
+          "usage": {
+            "prompt_tokens": 1744,
+            "completion_tokens": 1,
+            "total_tokens": 1745
+          },
+          "summary_requests": 0,
+          "tool_attempts": 0,
+          "fault_encountered": null
+        },
+        {
+          "id": "nested",
+          "passed": false,
+          "checks": {
+            "normal_finish": false,
+            "answer": false,
+            "required_sources": false,
+            "allowed_changes": true,
+            "artifact": false
+          },
+          "changed_paths": [],
+          "final_answer": null,
+          "failed_checks": [
+            "normal_finish",
+            "answer",
+            "required_sources",
+            "artifact"
+          ],
+          "stop_reason": "max_iterations",
+          "model_requests": 20,
+          "elapsed_seconds": 307.43,
+          "usage": {
+            "prompt_tokens": 73863,
+            "completion_tokens": 4325,
+            "total_tokens": 78188
+          },
+          "summary_requests": 3,
+          "tool_attempts": 28,
+          "fault_encountered": null
+        },
+        {
+          "id": "search",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true
+          },
+          "changed_paths": [],
+          "final_answer": "The value of `release_key` is `ORCHID-72`.",
+          "failed_checks": [
+            "answer"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 2,
+          "elapsed_seconds": 9.5,
+          "usage": {
+            "prompt_tokens": 3721,
+            "completion_tokens": 89,
+            "total_tokens": 3810
+          },
+          "summary_requests": 0,
+          "tool_attempts": 1,
+          "fault_encountered": null
+        },
+        {
+          "id": "missing_path",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true,
+            "recovered_in_order": true
+          },
+          "changed_paths": [],
+          "final_answer": "The `profile_code` from the `profiles/current.txt` file is `CEDAR-19`.",
+          "failed_checks": [
+            "answer"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 4,
+          "elapsed_seconds": 15.94,
+          "usage": {
+            "prompt_tokens": 8358,
+            "completion_tokens": 200,
+            "total_tokens": 8558
+          },
+          "summary_requests": 0,
+          "tool_attempts": 3,
+          "fault_encountered": true
+        }
+      ]
+    },
+    "repeat": {
+      "candidate": {
+        "passed": 0,
+        "total": 2,
+        "seconds": 72.65,
+        "seconds_per_success": null,
+        "tokens_per_success": null,
+        "prompt_tokens": 35183,
+        "completion_tokens": 1209,
+        "total_tokens": 36392,
+        "model_requests": 13,
+        "tool_attempts": 11,
+        "summary_requests": 0,
+        "parse_errors": 0,
+        "invalid_calls": 0,
+        "stop_reasons": {
+          "final_response": 2
+        }
+      },
+      "matched_baseline": {
+        "passed": 0,
+        "total": 2,
+        "seconds": 68.23,
+        "seconds_per_success": null,
+        "tokens_per_success": null,
+        "prompt_tokens": 34692,
+        "completion_tokens": 1132,
+        "total_tokens": 35824,
+        "model_requests": 13,
+        "tool_attempts": 11,
+        "summary_requests": 0,
+        "parse_errors": 0,
+        "invalid_calls": 0,
+        "stop_reasons": {
+          "final_response": 2
+        }
+      },
+      "wins": [],
+      "losses": [],
+      "activations": {
+        "total": {
+          "elided_observations": 0
+        },
+        "by_task": {
+          "search": {
+            "elided_observations": 0
+          },
+          "missing_path": {
+            "elided_observations": 0
+          }
+        }
+      },
+      "no_op_post_hoc_audit": null,
+      "limits": {
+        "max_iterations": 20,
+        "max_same_failures": 3,
+        "max_tool_calls": 40,
+        "max_tool_calls_per_response": 8,
+        "context_margin_tokens": 256,
+        "compact_headroom_tokens": 512,
+        "max_compact_calls": 4,
+        "elision_enabled": false,
+        "elision_soft_ratio": 0.6,
+        "elision_min_chars": 1024,
+        "planning_enabled": false,
+        "repeat_reminder_enabled": true,
+        "diagnostics_enabled": false
+      },
+      "search_enabled": false,
+      "tasks": [
+        {
+          "id": "search",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true
+          },
+          "changed_paths": [],
+          "final_answer": "The value of `release_key` is `ORCHID-72`.",
+          "failed_checks": [
+            "answer"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 9,
+          "elapsed_seconds": 57.17,
+          "usage": {
+            "prompt_tokens": 27600,
+            "completion_tokens": 995,
+            "total_tokens": 28595
+          },
+          "summary_requests": 0,
+          "tool_attempts": 8,
+          "fault_encountered": null
+        },
+        {
+          "id": "missing_path",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": false,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": true,
+            "recovered_in_order": true
+          },
+          "changed_paths": [],
+          "final_answer": "The `profile_code` from the `current.txt` file is `CEDAR-19`.",
+          "failed_checks": [
+            "answer"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 4,
+          "elapsed_seconds": 15.48,
+          "usage": {
+            "prompt_tokens": 7583,
+            "completion_tokens": 214,
+            "total_tokens": 7797
+          },
+          "summary_requests": 0,
+          "tool_attempts": 3,
+          "fault_encountered": true
+        }
+      ]
+    },
+    "diagnostics": {
+      "candidate": {
+        "passed": 1,
+        "total": 3,
+        "seconds": 185.4,
+        "seconds_per_success": 185.4,
+        "tokens_per_success": 82932.0,
+        "prompt_tokens": 80247,
+        "completion_tokens": 2685,
+        "total_tokens": 82932,
+        "model_requests": 25,
+        "tool_attempts": 24,
+        "summary_requests": 1,
+        "parse_errors": 0,
+        "invalid_calls": 1,
+        "stop_reasons": {
+          "final_response": 2,
+          "max_iterations": 1
+        }
+      },
+      "matched_baseline": {
+        "passed": 0,
+        "total": 3,
+        "seconds": 82.25,
+        "seconds_per_success": null,
+        "tokens_per_success": null,
+        "prompt_tokens": 33743,
+        "completion_tokens": 1322,
+        "total_tokens": 35065,
+        "model_requests": 14,
+        "tool_attempts": 12,
+        "summary_requests": 0,
+        "parse_errors": 0,
+        "invalid_calls": 0,
+        "stop_reasons": {
+          "final_response": 3
+        }
+      },
+      "wins": [
+        "json_repair"
+      ],
+      "losses": [],
+      "activations": {
+        "total": {
+          "elided_observations": 0,
+          "diagnostics": 1,
+          "diagnostic_ok": 1
+        },
+        "by_task": {
+          "no_op": {
+            "elided_observations": 0
+          },
+          "nested": {
+            "elided_observations": 0
+          },
+          "json_repair": {
+            "elided_observations": 0,
+            "diagnostics": 1,
+            "diagnostic_ok": 1
+          }
+        }
+      },
+      "no_op_post_hoc_audit": {
+        "strict_passed": false,
+        "snapshots_unchanged": true,
+        "other_checks_passed": true,
+        "mutation_results": [
+          {
+            "tool": "edit_file",
+            "ok": false,
+            "error_code": "execution_error",
+            "changed": null
+          },
+          {
+            "tool": "write_file",
+            "ok": false,
+            "error_code": "skipped",
+            "changed": null
+          }
+        ],
+        "all_mutations_explicitly_unchanged": false,
+        "conservative_sensitivity_passed": false
+      },
+      "limits": {
+        "max_iterations": 20,
+        "max_same_failures": 3,
+        "max_tool_calls": 40,
+        "max_tool_calls_per_response": 8,
+        "context_margin_tokens": 256,
+        "compact_headroom_tokens": 512,
+        "max_compact_calls": 4,
+        "elision_enabled": false,
+        "elision_soft_ratio": 0.6,
+        "elision_min_chars": 1024,
+        "planning_enabled": false,
+        "repeat_reminder_enabled": false,
+        "diagnostics_enabled": true
+      },
+      "search_enabled": false,
+      "tasks": [
+        {
+          "id": "no_op",
+          "passed": false,
+          "checks": {
+            "normal_finish": true,
+            "answer": true,
+            "required_sources": true,
+            "allowed_changes": true,
+            "no_write_attempts": false
+          },
+          "changed_paths": [],
+          "final_answer": "DONE",
+          "failed_checks": [
+            "no_write_attempts"
+          ],
+          "stop_reason": "final_response",
+          "model_requests": 2,
+          "elapsed_seconds": 17.31,
+          "usage": {
+            "prompt_tokens": 3891,
+            "completion_tokens": 200,
+            "total_tokens": 4091
+          },
+          "summary_requests": 0,
+          "tool_attempts": 2,
+          "fault_encountered": null
+        },
+        {
+          "id": "nested",
+          "passed": false,
+          "checks": {
+            "normal_finish": false,
+            "answer": false,
+            "required_sources": false,
+            "allowed_changes": true,
+            "artifact": false
+          },
+          "changed_paths": [],
+          "final_answer": null,
+          "failed_checks": [
+            "normal_finish",
+            "answer",
+            "required_sources",
+            "artifact"
+          ],
+          "stop_reason": "max_iterations",
+          "model_requests": 20,
+          "elapsed_seconds": 145.83,
+          "usage": {
+            "prompt_tokens": 70219,
+            "completion_tokens": 2127,
+            "total_tokens": 72346
+          },
+          "summary_requests": 1,
+          "tool_attempts": 19,
+          "fault_encountered": null
+        },
+        {
+          "id": "json_repair",
+          "passed": true,
+          "checks": {
+            "normal_finish": true,
+            "answer": true,
+            "required_sources": true,
+            "allowed_changes": true,
+            "artifact": true
+          },
+          "changed_paths": [
+            "config.json"
+          ],
+          "final_answer": "DONE",
+          "failed_checks": [],
+          "stop_reason": "final_response",
+          "model_requests": 3,
+          "elapsed_seconds": 22.26,
+          "usage": {
+            "prompt_tokens": 6137,
+            "completion_tokens": 358,
+            "total_tokens": 6495
+          },
+          "summary_requests": 0,
+          "tool_attempts": 3,
+          "fault_encountered": null
+        }
+      ]
+    }
+  }
+}

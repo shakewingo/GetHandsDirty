@@ -63,3 +63,45 @@
   Summarization's existing prior-turn-first policy is unchanged.
 - Recovery scoring normalizes workspace-relative and absolute paths.
 - Plan/search length bounds include whitespace.
+
+## Stage 05 panel started
+
+- Runtime frozen at `42c7228`; independent reviewer verified all targeted fixes.
+- Actual backend window is **8,192**, although requested N_CTX is 8,000. Use manifest
+  settings and exact measured budgets, not the nominal configuration, in conclusions.
+- Core profiles: baseline/elision/planning/elision_planning, all 8 cases each.
+- Targeted profiles: search (direct,nested,search,missing_path); repeat (search,
+  missing_path); diagnostics (no_op,nested,json_repair). Compare each to the matching
+  baseline subset, never to baseline's full eight-task aggregate.
+- Raw evidence directory: `outputs/empirical-study/stage-05/`. One local model process
+  at a time. Runtime files remain untouched throughout the panel.
+
+## Slow-run observation
+
+- Search/nested exhausted its fixed 20-model-call budget (307.43 s): 17 actor calls
+  and 3 real summary calls. Trace shows repeated successful read + failed edit cycles;
+  no search invocation occurred on this task. Availability/schema is the intervention.
+- A one-second OS process sample confirmed active llama/Metal decoding (not a stuck
+  filesystem search). Saved under stage-05; timing includes this profiling overhead.
+- Existing failure streaks reset on successful reads, and the new identical-success
+  monitor resets on intervening failures. Neither detects alternating read/edit cycles.
+  This is a future study question; the frozen runtime and budget were not altered.
+
+## Stage 05 complete
+
+- Completed all 41 scheduled tasks at frozen runtime 42c7228: 1,343.44 seconds and
+  564,204 tokens, including failures. No panel source changes or concurrent models.
+- Core strict successes: baseline 1/8, elision 1/8, planning 1/8, combined 2/8.
+  Targeted search 1/4, repeat 0/2, diagnostics 1/3; only matched subsets compared.
+- No-op post-panel review identified outcome/process wording ambiguity. Original
+  scores retained. Explicit changed=False sensitivity changes zero scores: all
+  actual attempts in these final tasks returned error/skipped, although snapshots
+  remained unchanged. Future prompt should explicitly prohibit tool invocations.
+- Independent final report review found no material issues; reviewer recomputed
+  41 tasks, time/tokens, matched denominators and sensitivity results from evidence.
+- Final full suite: 229 tests pass in 3.954 seconds; log stage-05-final-tests.log.
+- All 66 source-manifest entries still match; original memory.py hash unchanged.
+  Branch ancestry, 41 records, aggregates and document links verified.
+- Adoption: retain research infrastructure; experimental behavior remains opt-in.
+  No overall capability or efficiency improvement established by this small pilot.
+- Branch kept for the user's phase-by-phase review; no push, merge or deletion.
