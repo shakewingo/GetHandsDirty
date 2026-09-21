@@ -87,6 +87,7 @@ class TurnResult:
     input: str = ""
     started_at: str = ""
     settings: dict[str, Any] = field(default_factory=dict)
+    stuck_reminders: int = 0  # Runtime reminders injected for repeated identical calls.
 
 
 class TraceStore:

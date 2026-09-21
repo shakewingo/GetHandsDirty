@@ -4,6 +4,7 @@ import json
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+from ..context import window_share
 from .foundation import digest, measure
 
 
@@ -122,6 +123,14 @@ def verify(task: dict, result, workspace: Path, original: Path, before: dict) ->
             "unexpected_changes": unexpected, "read_coverage": coverage}
 
 
+# Tool categories for trajectory labels; deliberately not coding stages.
+ACTION_KINDS = {"list_files": "explore", "read_file": "explore", "glob_files": "explore",
+                "grep_text": "explore", "web_fetch": "explore", "web_search": "explore",
+                "write_file": "modify", "edit_file": "modify", "shell": "execute",
+                "calculator": "execute", "update_plan": "plan"}
+ACTION_PRIORITY = ("modify", "execute", "explore", "plan", "other")
+
+
 def metrics(result) -> dict:
     requests = [q for q in result.model_requests if q.status != "blocked"]
     actors = [q for q in requests if q.purpose == "agent"]
@@ -140,6 +149,15 @@ def metrics(result) -> dict:
             total += value
         usage[key] = total
     invalid = {"invalid_tool_call", "unknown_tool", "invalid_arguments"}
+    # One label per actor request: its most consequential call's category.
+    names = {call["id"]: call["function"]["name"]
+             for m in result.messages for call in m.get("tool_calls", [])}
+    actions = []
+    for request in actors:
+        kinds = {ACTION_KINDS.get(names.get(call_id, ""), "other") for call_id in request.call_ids}
+        actions.append("error" if request.status != "completed" else
+                       next((k for k in ACTION_PRIORITY if k in kinds), "answer"))
+    shares = [share for q in actors if (share := window_share(q.budget)) is not None]
     return {
         "run_id": result.run_id, "stop_reason": result.stop_reason,
         "final_answer": result.final_answer, "model_requests": len(requests),
@@ -160,6 +178,11 @@ def metrics(result) -> dict:
         "usage": usage,
         "requests_without_usage": sum(not q.usage for q in requests),
         "elapsed_seconds": result.elapsed_seconds,
+        "peak_context_ratio": round(max(shares), 4) if shares else None,
+        "elided_messages": max((q.elided_messages for q in actors), default=0),
+        "plan_updates": sum(r["tool_name"] == "update_plan" and r["ok"] for r in rows),
+        "stuck_reminders": result.stuck_reminders,
+        "actions": actions,
     }
 
 

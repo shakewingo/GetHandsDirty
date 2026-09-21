@@ -15,6 +15,7 @@ from tempfile import TemporaryDirectory
 
 from loguru import logger
 from ..agent import Agent
+from ..config import AgentLimits
 from ..llm import LLM
 from ..tools.base import Tool, ToolErrorCode, ToolExecutionError, ToolRegistry
 from ..tools.calculator import CalculatorTool
@@ -22,6 +23,7 @@ from .legacy_files import ListFilesTool, ReadFileTool, WriteFileTool
 from ..tools.shell import Command, ShellTool
 from ..tools.web import WebFetchTool
 from .foundation import digest
+from .trajectory import profile
 from .verify import exchanges, metrics, snapshot, summarize, verify
 
 
@@ -126,8 +128,12 @@ def registry_for(task: dict, workspace: Path, private: Path, fixture: Path) -> T
     return ToolRegistry(available[name] for name in task["allowed_tools"])
 
 
-def run_case(model, task: dict, output: Path, directory: Path = HERE) -> dict:
-    """No history or memory is carried between tasks; verifiers run only after return."""
+def run_case(model, task: dict, output: Path, directory: Path = HERE,
+             overrides: dict | None = None) -> dict:
+    """No history or memory is carried between tasks; verifiers run only after return.
+
+    `overrides` are AgentLimits fields for ablations; the task's own request budget wins.
+    """
     output.mkdir(parents=True, exist_ok=False)
     fixture = directory / "fixtures" / task["fixture"]
     save(output / "task.json", task)
@@ -140,7 +146,8 @@ def run_case(model, task: dict, output: Path, directory: Path = HERE) -> dict:
         registry = registry_for(task, workspace, private, fixture)
         save(output / "schemas.json", registry.schemas())
         agent = Agent(model, str(output / "state"), registry=registry)
-        agent.limits = replace(agent.limits, max_iterations=task["max_iterations"])
+        agent.limits = replace(agent.limits, **{**(overrides or {}),
+                                                "max_iterations": task["max_iterations"]})
         try:
             result = agent.run_turn(task["prompt"], session_id=task["id"])
             score = verify(task, result, workspace, fixture / "workspace", before)
@@ -168,7 +175,14 @@ def main():
     parser.add_argument("--tasks", help="Comma-separated dev task IDs; default: all 17")
     parser.add_argument("--seed", type=int, default=11)
     parser.add_argument("--review", type=Path, help="Apply human claim annotations to an existing run; no model calls")
+    parser.add_argument("--limits", default="{}",
+                        help='JSON AgentLimits overrides for ablations, e.g. \'{"planning": true}\'')
     args = parser.parse_args()
+    try:
+        overrides = json.loads(args.limits)
+        replace(AgentLimits(), **overrides)
+    except (ValueError, TypeError) as error:
+        parser.error(f"--limits must be a JSON object of AgentLimits fields: {error}")
     if args.review:
         review = json.loads(args.review.read_text())
         records = json.loads((args.output / "results.json").read_text())
@@ -213,13 +227,14 @@ def main():
         "tasks_sha256": digest((HERE / "tasks.jsonl").read_bytes()),
         "splits_sha256": digest((HERE / "splits.json").read_bytes()),
         "selected_tasks": [t["id"] for t in tasks], "read_max_bytes": 1024,
+        "limit_overrides": overrides,
         "web_mode": "Recorded extracted tool results; no live network, DNS, TLS or HTML extraction.",
         "split_scope": "Development only. Train/test skeleton names are reservations, not a completed holdout.",
     })
     records = []
     for task in tasks:
         print("START", task["id"], flush=True)
-        record = run_case(model, task, out / task["id"])
+        record = run_case(model, task, out / task["id"], overrides=overrides)
         records.append(record)
         save(out / "results.json", records)
         save(out / "summary.json", summarize(records))
@@ -227,6 +242,7 @@ def main():
               record["stop_reason"], "requests", record["model_requests"], flush=True)
         if record["stop_reason"] == "interrupted":
             break
+    save(out / "trajectory.json", profile(records))
 
 
 if __name__ == "__main__":
