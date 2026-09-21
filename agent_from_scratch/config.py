@@ -44,3 +44,4 @@ class AgentLimits:
     elide_ratio: float | None = 0.6  # stub old tool outputs at this share of the usable window; None disables
     elide_min_chars: int = 400  # only outputs longer than this are elided
     planning: bool = False  # update_plan tool plus a per-request plan reminder
+    stuck_reminder_calls: int = 3  # remind after this many identical successful calls in a row

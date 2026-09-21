@@ -50,6 +50,13 @@ def recovery_feedback(error: ResponseError) -> str:
             f"No tool executed for this response. {detail}{hints[error.code]}")
 
 
+REPEATED_CALL = ("[Runtime feedback] You called {tool} with the same arguments {count} times "
+                 "and already have this result. Move on to the next concrete step.")
+REPEATED_FAILURE = ("[Runtime feedback] You called {tool} with the same arguments {count} times "
+                    "and it keeps failing the same way. Repeating it will not work: read the "
+                    "error, then try a different call or reconsider the approach.")
+
+
 class Agent:
     def __init__(self, llm: LLM, state_dir: str | None = None,
                  *, registry: ToolRegistry | None = None, limits: AgentLimits = AgentLimits(),
@@ -201,6 +208,7 @@ class Agent:
         compactor = Compactor(self.llm, self.limits,
                               reload_instructions=self._reload_instructions)
         last_failure, failure_count = None, 0
+        streak_key, streak = None, 0  # consecutive identical calls, across batches
         tool_attempts = 0
         used_ids = {call["id"] for m in raw_messages for call in m.get("tool_calls", [])}
         planner = PlanTool() if state.plan is not None else None
@@ -316,6 +324,7 @@ class Agent:
             if response.type == ResponseType.tool_call:
                 if response.content and on_progress is not None:
                     on_progress(response.content) # print out assistant's any extra content other than just calling tools
+                reminder = None
                 for call in response.tool_calls:
                     if tool_attempts >= self.limits.max_tool_calls:
                         self._finish_pending_tools(result, "Turn tool-call budget exhausted.")
@@ -337,15 +346,26 @@ class Agent:
                         logger.error("Tool execution failed due to: {}", tool_result.error_message)
                     raw_messages.append(tool_result.to_message())
 
+                    key = (call.name, json.dumps(call.arguments, sort_keys=True, ensure_ascii=False))
+                    streak = streak + 1 if key == streak_key else 1
+                    streak_key = key
                     if tool_result.ok:
                         last_failure, failure_count = None, 0
+                        if streak == self.limits.stuck_reminder_calls:
+                            reminder = REPEATED_CALL.format(tool=call.name, count=streak)
                     else:
                         self._finish_pending_tools(result,
                             "An earlier call failed. Reconsider these calls using its result before retrying.")
-                        if repeated_failure((call.name, json.dumps(call.arguments, sort_keys=True, ensure_ascii=False),
-                                             tool_result.error_code)):
+                        if repeated_failure(key + (tool_result.error_code,)):
                             return
+                        # Warn once, one failure before the stop, so the model gets a last chance.
+                        if failure_count == self.limits.max_same_failures - 1:
+                            reminder = REPEATED_FAILURE.format(tool=call.name, count=failure_count)
                         break
+                # After the whole batch, so no call is separated from its result.
+                if reminder is not None:
+                    raw_messages.append({"role": "user", "content": reminder})
+                    result.stuck_reminders += 1
             elif response.type == ResponseType.direct:
                 result.final_answer = response.content
                 result.stop_reason = RunStopReason.FINAL_RESPONSE
