@@ -1,6 +1,6 @@
 """Domain-agnostic trajectory profile and paired comparison of eval runs.
 
-Usage: python -m agent_from_scratch.evals.trajectory RUN_DIR [OTHER_RUN_DIR]
+Usage: python -m agent_from_scratch.evals compare RUN_DIR [OTHER_RUN_DIR]
 Reads each directory's results.json. With two runs, pairs tasks by ID (second minus first).
 """
 

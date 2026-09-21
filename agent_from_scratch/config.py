@@ -34,16 +34,16 @@ class AgentLimits:
     """Per-turn budgets recorded in `TurnResult.settings`; override with `replace`."""
 
     max_iterations: int = 20  # total model calls per turn, including summaries
-    max_same_failures: int = 3
+    max_same_failures: int = 3 # reminder ingestion after this many identical failed calls in a row
+    stuck_reminder_calls: int = 3  # reminder ingestion after this many identical successful calls in a row
     max_tool_calls: int = 40  # max number of tool calls per turn
     max_tool_calls_per_response: int = MAX_TOOL_CALLS_PER_RESPONSE
 
     context_margin_tokens: int = 256  # token margin to reserve in the context window
-    compact_ratio: float = 0.85  # summarize at this share of the usable window, before the hard fit gate
+    compact_ratio: float = 0.85  # hard-threshold in compact mechanism, summarize at this share of the usable window, before the hard fit gate
     max_compact_calls: int = 4  # also charged against max_iterations; one call per attempt
     summary_max_tokens: int = 512  # summarizer output reserve, independent of the actor's
     max_summary_calls_per_attempt: int = 2  # one corrective retry at the same cut
-    elide_ratio: float | None = 0.6  # stub old tool outputs at this share of the usable window; None disables
+    elide_ratio: float | None = 0.6  # soft-threhold in compact mechanism, stub old tool outputs at this share of the usable window; None disables
     elide_min_chars: int = 400  # only outputs longer than this are elided
     planning: bool = False  # update_plan tool plus a per-request plan reminder
-    stuck_reminder_calls: int = 3  # remind after this many identical successful calls in a row

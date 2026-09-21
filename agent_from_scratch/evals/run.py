@@ -1,4 +1,8 @@
-"""Stage 2B dev benchmark: fresh fixtures, ordinary agent loop, independent scoring."""
+"""Stage 2B dev benchmark: fresh fixtures, ordinary agent loop, independent scoring.
+
+Usage: python -m agent_from_scratch.evals dev --output DIR [--tasks a,b] [--seed N]
+           [--limits '{"planning": true}'] [--n-ctx N]
+"""
 
 from dataclasses import replace
 import argparse
@@ -22,9 +26,8 @@ from ..tools.calculator import CalculatorTool
 from .legacy_files import ListFilesTool, ReadFileTool, WriteFileTool
 from ..tools.shell import Command, ShellTool
 from ..tools.web import WebFetchTool
-from .foundation import digest
 from .trajectory import profile
-from .verify import exchanges, metrics, snapshot, summarize, verify
+from .verify import digest, exchanges, metrics, snapshot, summarize, verify
 
 
 HERE = Path(__file__).resolve().parent
@@ -169,6 +172,50 @@ def run_case(model, task: dict, output: Path, directory: Path = HERE,
             shutil.copytree(workspace, output / "workspace", symlinks=True)
 
 
+def parse_limits(parser: argparse.ArgumentParser, text: str) -> dict:
+    """Validate `--limits` JSON against AgentLimits; exits with a usage error when invalid."""
+    try:
+        overrides = json.loads(text)
+        replace(AgentLimits(), **overrides)
+    except (ValueError, TypeError) as error:
+        parser.error(f"--limits must be a JSON object of AgentLimits fields: {error}")
+    return overrides
+
+
+def open_run(out: Path, parser: argparse.ArgumentParser, *, suite: str, seed: int, overrides: dict,
+             n_ctx: int | None = None, **extra) -> LLM:
+    """Create the evidence directory, load the model and write metadata.json; shared by all suites.
+
+    Args:
+        out: new directory; must be outside the package so a run cannot edit its own source.
+        suite: name recorded in the metadata.
+        seed: passed to every request. Temperature is 0, so it is bookkeeping, not extra trials.
+        overrides: validated AgentLimits overrides, recorded for ablation.
+        n_ctx: model window override; None keeps `config.N_CTX`.
+        **extra: suite-specific metadata fields.
+    """
+    root = HERE.parent
+    if out.is_relative_to(root):
+        parser.error("Evidence must be outside the source package and frozen fixtures.")
+    out.mkdir(parents=True, exist_ok=False)
+    logger.remove()
+    model = LLM(n_ctx=n_ctx) if n_ctx else LLM()
+    backend = model.llm.create_chat_completion
+    model.llm.create_chat_completion = lambda *a, **kw: backend(*a, **kw, seed=seed)
+    revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, text=True, capture_output=True, check=True).stdout.strip()
+    save(out / "metadata.json", {
+        "suite": suite, "started_at": datetime.now(timezone.utc).isoformat(),
+        "settings": model.settings(), "seed": seed, "python": sys.version,
+        "platform": platform.platform(), "llama_cpp_version": version("llama-cpp-python"),
+        "git_revision": revision,
+        "source_sha256": {p.relative_to(root).as_posix(): digest(p.read_bytes()) for p in root.rglob("*")
+            if p.is_file() and p.suffix in {".py", ".jinja"} and "__pycache__" not in p.parts},
+        "system_prompt": (root / "prompts/system.md").read_text(),
+        "limit_overrides": overrides, **extra,
+    })
+    return model
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True, help="New evidence directory outside the package")
@@ -177,12 +224,9 @@ def main():
     parser.add_argument("--review", type=Path, help="Apply human claim annotations to an existing run; no model calls")
     parser.add_argument("--limits", default="{}",
                         help='JSON AgentLimits overrides for ablations, e.g. \'{"planning": true}\'')
+    parser.add_argument("--n-ctx", type=int, help="Override the model window; default config.N_CTX")
     args = parser.parse_args()
-    try:
-        overrides = json.loads(args.limits)
-        replace(AgentLimits(), **overrides)
-    except (ValueError, TypeError) as error:
-        parser.error(f"--limits must be a JSON object of AgentLimits fields: {error}")
+    overrides = parse_limits(parser, args.limits)
     if args.review:
         review = json.loads(args.review.read_text())
         records = json.loads((args.output / "results.json").read_text())
@@ -206,31 +250,14 @@ def main():
         if len(selected) != len(set(selected)) or not set(selected) <= {t["id"] for t in tasks}:
             parser.error("Select unique existing dev task IDs.")
         tasks = [t for t in tasks if t["id"] in selected]
-    root, out = HERE.parent, args.output.resolve()
-    if out.is_relative_to(root):
-        parser.error("Evidence must be outside the source package and frozen fixtures.")
-    out.mkdir(parents=True, exist_ok=False)
-    logger.remove()
-    model = LLM()
-    backend = model.llm.create_chat_completion
-    # Reset the RNG on every request; temperature=0, so seed is bookkeeping, not extra trials.
-    model.llm.create_chat_completion = lambda *a, **kw: backend(*a, **kw, seed=args.seed)
-    revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, text=True, capture_output=True, check=True).stdout.strip()
-    save(out / "metadata.json", {
-        "suite": "stage2b-dev-v1", "started_at": datetime.now(timezone.utc).isoformat(),
-        "settings": model.settings(), "seed": args.seed, "python": sys.version,
-        "platform": platform.platform(), "llama_cpp_version": version("llama-cpp-python"),
-        "git_revision": revision,
-        "source_sha256": {p.relative_to(root).as_posix(): digest(p.read_bytes()) for p in root.rglob("*")
-            if p.is_file() and p.suffix in {".py", ".jinja"} and "__pycache__" not in p.parts},
-        "system_prompt": (root / "prompts/system.md").read_text(),
-        "tasks_sha256": digest((HERE / "tasks.jsonl").read_bytes()),
-        "splits_sha256": digest((HERE / "splits.json").read_bytes()),
-        "selected_tasks": [t["id"] for t in tasks], "read_max_bytes": 1024,
-        "limit_overrides": overrides,
-        "web_mode": "Recorded extracted tool results; no live network, DNS, TLS or HTML extraction.",
-        "split_scope": "Development only. Train/test skeleton names are reservations, not a completed holdout.",
-    })
+    out = args.output.resolve()
+    model = open_run(
+        out, parser, suite="stage2b-dev-v1", seed=args.seed, overrides=overrides, n_ctx=args.n_ctx,
+        tasks_sha256=digest((HERE / "tasks.jsonl").read_bytes()),
+        splits_sha256=digest((HERE / "splits.json").read_bytes()),
+        selected_tasks=[t["id"] for t in tasks], read_max_bytes=1024,
+        web_mode="Recorded extracted tool results; no live network, DNS, TLS or HTML extraction.",
+        split_scope="Development only. Train/test skeleton names are reservations, not a completed holdout.")
     records = []
     for task in tasks:
         print("START", task["id"], flush=True)

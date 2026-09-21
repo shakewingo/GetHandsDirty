@@ -16,7 +16,7 @@ from .llm import LLM, ResponseError, ResponseErrorCode, ResponseType
 from .session import SessionStore
 from .compact import CompactOutcome, Compactor, compact_prompt_digest
 from .context import (ContextState, InstructionConfig, InstructionLoadError,
-                      context_blocker, context_fits, load_instructions, window_share)
+                      context_blocker, context_fits, load_instructions, window_share_ratio)
 from .tools.base import ToolErrorCode, ToolRegistry, ToolResult
 from .tools.plan import PlanTool
 from .tools.register import default_registry, workspace as default_workspace
@@ -234,17 +234,17 @@ class Agent:
                     schemas = {**schemas, planner.name: planner.to_schema()}
                 budget = self.llm.measure_context(prepared_messages, schemas)
                 # Cheap first: stubs cost no model call, so they run before the summary trigger.
-                share = window_share(budget)
-                if (self.limits.elide_ratio is not None and share is not None
-                        and share >= self.limits.elide_ratio
-                        and state.elide(self.limits.elide_min_chars)):
-                    prepared_messages = state.messages()
+                share_ratio = window_share_ratio(budget)
+                if (self.limits.elide_ratio is not None and share_ratio is not None
+                        and share_ratio >= self.limits.elide_ratio
+                        and state.elide(self.limits.elide_min_chars)): # elide record w short stub is added in state
+                    prepared_messages = state.messages() # re-get the correct messages in consideration of elide record from state
                     budget = self.llm.measure_context(prepared_messages, schemas)
-                    share = window_share(budget)
-                # A share, like elision, so the trigger keeps its meaning at any window size.
-                # The hard fit rule still triggers when the share is unknown or margin is short.
+                    share_ratio = window_share_ratio(budget)
+                # A share_ratio, like elision, so the trigger keeps its meaning at any window size.
+                # The hard fit rule still triggers when the share_ratio is unknown or margin is short.
                 if (compact or not context_fits(budget, self.limits.context_margin_tokens)
-                        or (share is not None and share >= self.limits.compact_ratio)):
+                        or (share_ratio is not None and share_ratio >= self.limits.compact_ratio)):
                     compact = False
                     # The actor's request is deliberately not appended yet: it precedes no
                     # summary in the trace, and the compactor reserves the turn's last slot

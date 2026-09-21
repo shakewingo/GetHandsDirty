@@ -6,8 +6,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
 from agent_from_scratch.agent import Agent
-from agent_from_scratch.evals.foundation import measure
-from agent_from_scratch.evals.verify import metrics
+from agent_from_scratch.evals.verify import measure, metrics
 from agent_from_scratch.llm import LLM, LLMResponse, ResponseType
 from agent_from_scratch.tools.base import ToolCall, ToolRegistry
 from agent_from_scratch.evals.legacy_files import ReadFileTool
