@@ -18,6 +18,7 @@ from .compact import CompactOutcome, Compactor, compact_prompt_digest
 from .context import (ContextState, InstructionConfig, InstructionLoadError,
                       context_blocker, context_fits, load_instructions, window_share)
 from .tools.base import ToolErrorCode, ToolRegistry, ToolResult
+from .tools.plan import PlanTool
 from .tools.register import default_registry, workspace as default_workspace
 from .trace import (ModelRequest, ModelRequestStatus, RunStopReason, TraceStore, TurnResult,
                     used_model_calls)
@@ -94,7 +95,8 @@ class Agent:
         trace = TraceStore(Path(self.state_dir, "runs") if self.state_dir is not None else None)
 
         turn_start = 1 + len(history or [])
-        state = ContextState(raw=result.messages, turn_start=turn_start, last_sent=turn_start)
+        state = ContextState(raw=result.messages, turn_start=turn_start, last_sent=turn_start,
+                             plan="" if self.limits.planning else None)
         if checkpoint is not None:
             # load_checkpoint already bound this to the supplied history, so covered stays
             # within the turn-start invariant; raw history is replayed unchanged.
@@ -201,6 +203,7 @@ class Agent:
         last_failure, failure_count = None, 0
         tool_attempts = 0
         used_ids = {call["id"] for m in raw_messages for call in m.get("tool_calls", [])}
+        planner = PlanTool() if state.plan is not None else None
 
         def repeated_failure(key: tuple) -> bool:
             nonlocal last_failure, failure_count
@@ -219,6 +222,8 @@ class Agent:
             try:
                 prepared_messages = state.messages()
                 schemas = self.registry.schemas()
+                if planner is not None:
+                    schemas = {**schemas, planner.name: planner.to_schema()}
                 budget = self.llm.measure_context(prepared_messages, schemas)
                 # Cheap first: stubs cost no model call, so they run before the summary trigger.
                 share = window_share(budget)
@@ -319,7 +324,13 @@ class Agent:
                         return
                     tool_attempts += 1
                     logger.debug("Tool call detected: {} {}", call.name, call.arguments)
-                    tool_result = self.execute_tool(call.name, call.arguments, call.call_id)
+                    if planner is not None and call.name == planner.name:
+                        # A harness component, not a workspace action: never the registry's.
+                        tool_result = planner.invoke(call.arguments, call.call_id)
+                        if tool_result.ok:
+                            state.plan = planner.render()
+                    else:
+                        tool_result = self.execute_tool(call.name, call.arguments, call.call_id)
                     if tool_result.ok:
                         logger.debug("Tool executed successfully: {} ({})", tool_result.tool_name, tool_result.call_id)
                     else:
@@ -416,7 +427,9 @@ class Agent:
 
 if __name__ == "__main__":
     llm = LLM()
+    # Planning lengthens weak-model runs, so the REPL raises the turn budgets with it.
     agent = Agent(llm, state_dir="./outputs/sessions",
+                  limits=AgentLimits(planning=True, max_iterations=30, max_tool_calls=60),
                   instruction_config=InstructionConfig(workspace=default_workspace))
     try:
         agent.run_repl()

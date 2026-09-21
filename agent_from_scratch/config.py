@@ -43,3 +43,4 @@ class AgentLimits:
     max_summary_calls_per_attempt: int = 2  # one corrective retry at the same cut
     elide_ratio: float | None = 0.6  # stub old tool outputs at this share of the usable window; None disables
     elide_min_chars: int = 400  # only outputs longer than this are elided
+    planning: bool = False  # update_plan tool plus a per-request plan reminder
