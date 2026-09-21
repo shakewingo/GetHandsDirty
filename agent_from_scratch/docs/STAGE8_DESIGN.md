@@ -25,7 +25,7 @@ the end maps each bullet to a section here.
 | Dev set | 4 new skeletons = **15** tasks on the current tools (3 + 3 + 6 + 3; recovery keeps three matched pairs), plus the legacy 17 |
 | Definition of a task | Python builder emits a declarative spec; **one generic verifier** interprets it |
 | `passed` | **Content first.** Format is recorded separately and only gates tasks whose reply token is the deliverable |
-| Web tasks | Excluded (replay uses a legacy interface, and the 7B fails them for reasons unrelated to what Stage 8 measures) |
+| Web tasks | Excluded from this version. Web is not one of Stage 8's four families, and the dev suite's `RecordedWeb` replays extracted text through a frozen legacy interface, so web tasks need their own recorded-response generator. The dev suite's two web failures are **not** web failures: in all three Task 3.3 runs the model batched `web_fetch` with a `write_file` whose JSON `content` was single-quoted and filled with empty placeholders, three identical malformed calls in a row, then `no_progress`. That weakness (dependent calls in one batch, JSON-in-a-string arguments) is still exercised by the update skeletons. Candidate addition later |
 | Memory | Stage 4A–4B deferred past Stage 11; the freeze records `memory: off`. Memory tools must stay out of the frozen registry because they change the prompt |
 | Test-set guard | `--split test` needs `--final` and refuses on manifest drift |
 | 7B real-model use | Pipeline check only; the base control for weight comparisons is the Stage 9 checkpoint |
