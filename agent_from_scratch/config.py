@@ -41,3 +41,5 @@ class AgentLimits:
     max_compact_calls: int = 4  # also charged against max_iterations; one call per attempt
     summary_max_tokens: int = 512  # summarizer output reserve, independent of the actor's
     max_summary_calls_per_attempt: int = 2  # one corrective retry at the same cut
+    elide_ratio: float | None = 0.6  # stub old tool outputs at this share of the usable window; None disables
+    elide_min_chars: int = 400  # only outputs longer than this are elided

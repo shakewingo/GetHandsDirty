@@ -80,7 +80,7 @@ and "Evaluation". Design decisions this plan must not contradict:
 **Files:** Modify `context.py`, `config.py`. Test `tests/test_compact.py`.
 
 **Interfaces — produces:**
-- `ContextState.elided: dict[int, str]` (raw index → stub content), default empty.
+- `ContextState.elided: dict[int, ChatCompletionRequestMessage]` (raw index → stub tool message), default empty.
 - `ContextState.view(start: int, end: int | None = None) -> list[message]`.
 - `ContextState.elide(min_chars: int) -> bool`: True when a new stub was added.
 - `AgentLimits.elide_ratio: float | None = 0.6`, `AgentLimits.elide_min_chars: int = 400`.

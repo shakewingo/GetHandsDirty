@@ -492,5 +492,31 @@ class CompactTests(unittest.TestCase):
         self.assertEqual(result.messages[1:3], self.raw[1:3])
 
 
+    def bulky(self, name, size=1000) -> list[ChatCompletionRequestMessage]:
+        return [call(call_id=name).to_message(),
+                {"role": "tool", "tool_call_id": name, "content": json.dumps(
+                    {"call_id": name, "tool_name": "calculator", "ok": True, "output": "x" * size,
+                     "error_code": None, "error_message": None})}]
+
+    def test_elide_stubs_bulky_outputs_outside_the_two_latest_batches(self):
+        raw = [message("system", "rules"), message("user", "go"),
+               *self.bulky("a"), *self.bulky("b"), *self.bulky("c")]
+        original = deepcopy(raw)
+        state = ContextState(raw, turn_start=1, last_sent=len(raw))
+        self.assertTrue(state.elide(400))
+        self.assertEqual(set(state.elided), {3})
+        stub = json.loads(state.messages()[3]["content"])
+        self.assertEqual((stub["call_id"], stub["ok"]), ("a", True))
+        self.assertIn("elided: 1002 chars", stub["output"])
+        self.assertEqual(state.messages()[5:], raw[5:])  # b and c stay verbatim
+        self.assertEqual(raw, original)
+        self.assertFalse(state.elide(400))  # nothing new
+
+    def test_elide_skips_unseen_and_small_outputs(self):
+        raw = [message("system", "rules"), message("user", "go"),
+               *self.bulky("a"), *self.bulky("b"), *self.bulky("c")]
+        self.assertFalse(ContextState(raw, turn_start=1, last_sent=3).elide(400))
+        self.assertFalse(ContextState(raw, turn_start=1, last_sent=len(raw)).elide(5000))
+
 if __name__ == "__main__":
     unittest.main()
