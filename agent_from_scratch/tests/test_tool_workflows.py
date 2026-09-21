@@ -30,7 +30,7 @@ class ToolWorkflowTests(unittest.TestCase):
             model.settings.return_value = {}
             state = 0
 
-            def generate(messages, tools):
+            def generate(messages, tools, **kwargs):
                 nonlocal state
                 state += 1
                 if state == 1:

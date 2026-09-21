@@ -14,7 +14,7 @@ from unittest.mock import Mock, patch
 from agent_from_scratch.agent import Agent
 from agent_from_scratch.config import AgentLimits
 from agent_from_scratch.compact import CompactOutcome, Compactor
-from agent_from_scratch.context import ContextState
+from agent_from_scratch.context import ContextState, InstructionConfig
 from agent_from_scratch.evals.verify import metrics
 from agent_from_scratch.llm import LLM, ResponseError, ResponseErrorCode
 from agent_from_scratch.session import SessionStore
@@ -49,7 +49,7 @@ class CompactTests(unittest.TestCase):
         self.state = ContextState(self.raw, turn_start=3, last_sent=3)
         self.requests = []
 
-    def measure(self, messages, schemas):
+    def measure(self, messages, schemas, **kwargs):
         # Deliberately scripted budget: these tests make no tokenizer claims.
         summarized = any(m.get("content", "").startswith("[Conversation summary:") for m in messages)
         summary_request = messages[0]["content"].startswith("Summarize the supplied")
@@ -61,6 +61,86 @@ class CompactTests(unittest.TestCase):
     def compact(self):
         outcome = Compactor(self.model, self.limits).attempt(self.state, {}, self.requests, 1)
         return outcome is CompactOutcome.APPLIED
+
+    def test_unusable_summary_retries_once_at_the_same_cut_then_gives_up(self):
+        self.model.generate.side_effect = [answer(""), answer("Goal: report 7. Next: answer.")]
+        self.assertTrue(self.compact())
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual({q.covered_boundary for q in self.requests}, {self.state.covered})
+        self.assertEqual(self.state.summary_calls, 2)
+        retry = self.requests[1].input_messages
+        assert retry is not None
+        self.assertIn("previous attempt was rejected", retry[0]["content"])
+
+    def test_attempt_never_exceeds_two_calls_or_the_run_budget(self):
+        self.model.generate.side_effect = [answer(""), answer(""), answer("Goal: unused.")]
+        self.assertFalse(self.compact())
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(self.model.generate.call_count, 2)
+        self.limits = replace(AgentLimits(), max_compact_calls=1)
+        self.state = ContextState(self.raw, turn_start=3, last_sent=3)
+        self.requests = []
+        self.model.generate.reset_mock()
+        self.model.generate.side_effect = [answer(""), answer("Goal: unused.")]
+        self.assertFalse(self.compact())
+        self.assertEqual(len(self.requests), 1)  # the run ceiling stops the retry
+        self.assertEqual(self.model.generate.call_count, 1)
+
+    def test_blocked_summary_input_does_not_retry(self):
+        self.model.measure_context.side_effect = lambda messages, schemas, **kwargs: {
+            "count_method": "exact", "prompt_tokens": 9000, "response_reserve": 512,
+            "remaining_tokens": -100, "window_tokens": 8192}
+        self.assertFalse(self.compact())
+        self.assertEqual(len(self.requests), 1)
+        self.model.generate.assert_not_called()
+
+    def test_compact_publishes_reloaded_rules_without_editing_raw(self):
+        with TemporaryDirectory() as directory:
+            rules = Path(directory, "AGENTS.md")
+            rules.write_text("Original workspace rule.")
+            agent = Agent(self.model, None, registry=ToolRegistry([]),
+                          instruction_config=InstructionConfig(workspace=Path(directory)))
+            self.model.generate.side_effect = [answer("Goal: report 7."), answer("7")]
+            seen_first = False
+
+            def rewrite(messages, schemas, **kwargs):
+                nonlocal seen_first
+                if not seen_first:
+                    seen_first = True
+                    rules.write_text("Revised workspace rule.")
+                return self.measure(messages, schemas)
+
+            self.pressure = True
+            self.model.measure_context.side_effect = rewrite
+            result = agent.run_turn("Use 7, not 6.",
+                                    [message("user", "old"), message("assistant", "x" * 400)])
+            summary, actor = result.model_requests
+            assert actor.input_messages is not None
+            self.assertIn("Revised workspace rule.", str(actor.input_messages[0].get("content")))
+            self.assertIn("Original workspace rule.", str(result.messages[0].get("content")))
+            assert summary.instructions is not None
+            self.assertEqual(summary.instructions["sources"][-1]["status"], "loaded")
+
+    def test_failed_reload_keeps_the_turn_snapshot_and_records_the_error(self):
+        compactor = Compactor(self.model, self.limits,
+                              reload_instructions=lambda: (None, {"status": "error",
+                                                                  "detail": "unreadable"}))
+        self.assertIs(compactor.attempt(self.state, {}, self.requests, 1),
+                      CompactOutcome.APPLIED)
+        self.assertIsNone(self.state.instructions)
+        assert self.requests[0].instructions is not None
+        self.assertEqual(self.requests[0].instructions["status"], "error")
+
+    def test_summary_uses_its_own_output_reserve(self):
+        self.limits = replace(AgentLimits(), summary_max_tokens=128)
+        self.assertTrue(self.compact())
+        summary_reserve = [call.kwargs.get("max_tokens")
+                           for call in self.model.generate.call_args_list]
+        self.assertEqual(summary_reserve, [128])
+        measured = [call.kwargs.get("max_tokens")
+                    for call in self.model.measure_context.call_args_list
+                    if call.args[0][0]["content"].startswith("Summarize the supplied")]
+        self.assertEqual(measured, [128])
 
     def test_manual_and_automatic_paths_share_summary_and_preserve_raw_session(self):
         for manual in (True, False):
@@ -125,7 +205,7 @@ class CompactTests(unittest.TestCase):
 
     def test_compaction_does_not_reset_repeated_failure_counter(self):
         replies = iter([call(left="bad"), answer("summary"), call(left="bad"), call(left="bad")])
-        def generate(messages, schemas):
+        def generate(messages, schemas, **kwargs):
             self.pressure = True
             return next(replies)
         self.model.generate.side_effect = generate
@@ -153,12 +233,12 @@ class CompactTests(unittest.TestCase):
                 self.state = ContextState(self.raw, 3, 3)
                 self.requests = []
                 self.model.generate.reset_mock()
-                self.model.generate.side_effect = [reply]
+                self.model.generate.side_effect = [reply, reply]
                 before = self.state.messages()
                 self.assertFalse(self.compact())
                 self.assertEqual(self.state.messages(), before)
                 self.assertFalse(self.compact())
-                self.assertEqual(self.model.generate.call_count, 1)
+                self.assertEqual(self.model.generate.call_count, 2)
 
     def test_oversized_summary_input_never_generates(self):
         self.model.measure_context.side_effect = None
@@ -206,7 +286,7 @@ class CompactTests(unittest.TestCase):
                     first = call()
                     first.tool_calls = [ToolCall("write_file", {"path": "done.txt", "content": "once"})]
                 replies = iter([first, answer("summary"), answer("Done")])
-                def generate(messages, schemas):
+                def generate(messages, schemas, **kwargs):
                     seen.append(deepcopy(messages))
                     self.pressure = True
                     reply = next(replies)
@@ -222,8 +302,141 @@ class CompactTests(unittest.TestCase):
                 self.assertEqual([q.purpose for q in result.model_requests], ["agent", "compact", "agent"])
                 self.assertEqual(seen[-1][-1], result.messages[-2])
                 self.assertEqual(result.model_requests[1].last_sent_boundary, 4)
+                # Compaction changes the view, never the turn's identity or its counters.
+                self.assertEqual([q.iteration for q in result.model_requests], [1, 2, 2])
+                self.assertIs(agent.registry, agent.registry)
+                self.assertTrue(all(i.startswith(result.run_id)
+                                    for q in result.model_requests for i in q.call_ids))
                 if not parse_error:
                     self.assertEqual(Path(directory, "done.txt").read_text(), "once")
+
+    def test_parser_feedback_survives_compaction_and_stays_unsent(self):
+        self.raw.extend(exchange("old") + exchange("recent"))
+        self.raw.append(message("user", "[Runtime feedback] The output was cut off."))
+        self.state.last_sent = len(self.raw) - 1
+        self.assertTrue(self.compact())
+        self.assertIn(self.raw[-1], self.state.messages())
+        self.assertGreaterEqual(self.state.last_sent, self.state.covered)
+
+    def test_failing_summarizer_preserves_raw_evidence_and_saves_no_session(self):
+        with TemporaryDirectory() as directory:
+            self.pressure = True
+            self.model.generate.side_effect = ResponseError(ResponseErrorCode.EMPTY_RESPONSE)
+            agent = Agent(self.model, directory, registry=ToolRegistry([]))
+            raw_before = deepcopy(self.raw[1:3])
+            result = agent.run_turn("Use 7, not 6.", raw_before, session_id="failing")
+            self.assertEqual(result.stop_reason, "context_limit")
+            self.assertEqual(result.messages[1:3], raw_before)
+            self.assertEqual(self.state.summary, "")
+            self.assertEqual(SessionStore(Path(directory, "sessions")).load_history("failing"), [])
+
+    def test_truncated_response_under_pressure_executes_nothing(self):
+        self.pressure = True
+        self.model.generate.side_effect = [
+            answer("Goal: continue."),
+            ResponseError(ResponseErrorCode.TRUNCATED_RESPONSE),
+            answer("Done."),
+        ]
+        registry = ToolRegistry([])
+        result = Agent(self.model, None, registry=registry).run_turn(
+            "Use 7, not 6.", deepcopy(self.raw[1:3]))
+        feedback = [m for m in result.messages if "[Runtime feedback]" in str(m.get("content"))]
+        self.assertEqual(len(feedback), 1)
+        self.assertIn("cut off", str(feedback[0].get("content")))
+        self.assertFalse(any(m.get("role") == "tool" for m in result.messages))
+
+    def test_completed_compacted_turn_saves_a_checkpoint_after_its_raw_delta(self):
+        with TemporaryDirectory() as directory:
+            self.pressure = True
+            self.model.generate.side_effect = [answer("Goal: report 7."), answer("7")]
+            agent = Agent(self.model, directory, registry=ToolRegistry([]))
+            # A checkpoint may only cover messages the session itself holds, so replay the
+            # REPL's flow: earlier turns are on disk before this one runs.
+            store = SessionStore(Path(directory, "sessions"))
+            store.append("cp", "earlier", deepcopy(self.raw[1:3]))
+            result = agent.run_turn("Use 7, not 6.", store.load_history("cp"), session_id="cp")
+            lines = Path(directory, "sessions", "cp.jsonl").read_text().splitlines()
+            earlier, turn, checkpoint = (json.loads(line) for line in lines)
+            self.assertNotIn("kind", turn)
+            self.assertEqual(checkpoint["kind"], "checkpoint")
+            self.assertEqual(checkpoint["run_id"], result.run_id)
+            # covered counts session messages: one less than ContextState.covered.
+            self.assertEqual(checkpoint["covered"], 2)
+            self.assertEqual(store.load_checkpoint("cp", store.load_history("cp")), checkpoint)
+            self.assertEqual(len(checkpoint["config"]["compact_prompt_sha256"]), 64)
+
+    def test_checkpoint_is_refused_when_history_was_never_saved(self):
+        with TemporaryDirectory() as directory:
+            self.pressure = True
+            self.model.generate.side_effect = [answer("Goal: report 7."), answer("7")]
+            agent = Agent(self.model, directory, registry=ToolRegistry([]))
+            # Library callers may pass history the store does not hold; a checkpoint over it
+            # could never be replayed, so none is written and the raw turn is still saved.
+            result = agent.run_turn("Use 7, not 6.", deepcopy(self.raw[1:3]), session_id="cp")
+            self.assertEqual(result.stop_reason, "final_response")
+            store = SessionStore(Path(directory, "sessions"))
+            self.assertEqual(len(store.load_history("cp")), 2)
+            self.assertIsNone(store.load_checkpoint("cp", store.load_history("cp")))
+
+    def test_restart_replays_summary_and_uncovered_suffix(self):
+        with TemporaryDirectory() as directory:
+            self.pressure = True
+            self.model.generate.side_effect = [answer("Goal: report 7."), answer("7")]
+            store = SessionStore(Path(directory, "sessions"))
+            store.append("cp", "earlier", deepcopy(self.raw[1:3]))
+            Agent(self.model, directory, registry=ToolRegistry([])).run_turn(
+                "Use 7, not 6.", store.load_history("cp"), session_id="cp")
+            # A fresh store and agent stand in for a restarted process.
+            reopened = SessionStore(Path(directory, "sessions"))
+            history = reopened.load_history("cp")
+            checkpoint = reopened.load_checkpoint("cp", history)
+            assert checkpoint is not None
+            self.pressure = False
+            self.model.generate.side_effect = [answer("Still 7.")]
+            restarted = Agent(self.model, directory, registry=ToolRegistry([]))
+            result = restarted.run_turn("What is the limit?", history, session_id="cp",
+                                        checkpoint=checkpoint)
+            actor = result.model_requests[0]
+            assert actor.input_messages is not None
+            self.assertTrue(actor.input_messages[1]["content"].startswith("[Conversation summary:"))
+            self.assertEqual(actor.input_messages[-1]["content"], "What is the limit?")
+            # Raw history is replayed in full; only the model-facing view is shortened.
+            self.assertEqual(result.messages[1:1 + len(history)], history)
+            self.assertLess(len(actor.input_messages), 2 + len(history))
+            self.assertEqual(result.settings["checkpoint"]["covered"], checkpoint["covered"])
+
+    def test_stale_checkpoint_falls_back_to_raw_history(self):
+        with TemporaryDirectory() as directory:
+            self.pressure = True
+            self.model.generate.side_effect = [answer("Goal: report 7."), answer("7")]
+            store = SessionStore(Path(directory, "sessions"))
+            store.append("cp", "earlier", deepcopy(self.raw[1:3]))
+            Agent(self.model, directory, registry=ToolRegistry([])).run_turn(
+                "Use 7, not 6.", store.load_history("cp"), session_id="cp")
+            edited = store.load_history("cp")
+            edited[0] = message("user", "EDITED")
+            self.assertIsNone(store.load_checkpoint("cp", edited))
+
+    def test_incomplete_turn_saves_no_checkpoint(self):
+        with TemporaryDirectory() as directory:
+            self.pressure = True
+            self.model.generate.side_effect = ResponseError(ResponseErrorCode.EMPTY_RESPONSE)
+            Agent(self.model, directory, registry=ToolRegistry([])).run_turn(
+                "Use 7, not 6.", deepcopy(self.raw[1:3]), session_id="cp")
+            self.assertIsNone(SessionStore(Path(directory, "sessions")).load_checkpoint("cp", []))
+
+    def test_checkpoint_write_failure_leaves_the_saved_turn_intact(self):
+        with TemporaryDirectory() as directory:
+            self.pressure = True
+            self.model.generate.side_effect = [answer("Goal: report 7."), answer("7")]
+            agent = Agent(self.model, directory, registry=ToolRegistry([]))
+            with patch("agent_from_scratch.session.SessionStore.append_checkpoint",
+                       side_effect=OSError("disk full")):
+                result = agent.run_turn("Use 7, not 6.", deepcopy(self.raw[1:3]), session_id="cp")
+            self.assertEqual(result.stop_reason, "final_response")
+            store = SessionStore(Path(directory, "sessions"))
+            self.assertEqual(len(store.load_history("cp")), 2)
+            self.assertIsNone(store.load_checkpoint("cp", store.load_history("cp")))
 
     def test_failed_compaction_with_room_left_does_not_end_the_turn(self):
         """A manual compact must not kill a turn that the budget can still serve."""
@@ -233,12 +446,13 @@ class CompactTests(unittest.TestCase):
             "remaining_tokens": 4000, "window_tokens": 5512}
         for reply in (ResponseError(ResponseErrorCode.TRUNCATED_RESPONSE), answer("   ")):
             with self.subTest(reply=reply):
-                self.model.generate.side_effect = [reply, answer("7")]
+                self.model.generate.side_effect = [reply, reply, answer("7")]
                 result = Agent(self.model, registry=ToolRegistry([])).run_turn(
                     "Use 7, not 6.", self.raw[1:3], compact=True)
                 self.assertEqual(result.stop_reason, "final_response")
                 self.assertEqual(result.final_answer, "7")
-                self.assertEqual([q.purpose for q in result.model_requests], ["compact", "agent"])
+                self.assertEqual([q.purpose for q in result.model_requests],
+                                 ["compact", "compact", "agent"])
 
     def test_unavailable_measurement_keeps_its_own_error_code(self):
         """A missing tokenizer is not a context limit, whatever compaction did."""
@@ -272,8 +486,9 @@ class CompactTests(unittest.TestCase):
         self.model.generate.side_effect = error
         result = Agent(self.model).run_turn("Finish", self.raw[1:3])
         self.assertEqual(result.stop_reason, "context_limit")
-        self.assertEqual(self.model.generate.call_count, 1)
-        self.assertEqual(metrics(result)["usage"]["total_tokens"], 612)
+        # Both calls of the one attempt are charged, and both report the same usage.
+        self.assertEqual(self.model.generate.call_count, 2)
+        self.assertEqual(metrics(result)["usage"]["total_tokens"], 1224)
         self.assertEqual(result.messages[1:3], self.raw[1:3])
 
 

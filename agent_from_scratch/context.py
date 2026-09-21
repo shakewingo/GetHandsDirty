@@ -139,6 +139,9 @@ class ContextState:
     summary_calls: int = 0
     elided: dict[str, str] = field(default_factory=dict)
     plan_text: str = ''
+    # Rules republished at a compact boundary. None keeps raw[0], the turn-start snapshot;
+    # raw itself is never edited, so trace evidence of earlier requests stays exact.
+    instructions: ChatCompletionRequestMessage | None = None
 
     def messages(self) -> list[ChatCompletionRequestMessage]:
         history: list[ChatCompletionRequestMessage] = self.raw[1:self.turn_start]
@@ -149,7 +152,8 @@ class ContextState:
             # Pin the request even when older exchanges in this turn compact.
             pinned = [self.raw[self.turn_start]] if self.covered > self.turn_start else []
             current = [*pinned, *self.raw[self.covered:]]
-        messages = build_messages(instructions=self.raw[:1], history=history, current_turn=current)
+        rules = self.raw[:1] if self.instructions is None else [self.instructions]
+        messages = build_messages(instructions=rules, history=history, current_turn=current)
         for message in messages:
             if message['role'] == 'tool' and message.get('tool_call_id') in self.elided:
                 message['content'] = self.elided[message['tool_call_id']]

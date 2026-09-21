@@ -124,6 +124,8 @@ def verify(task: dict, result, workspace: Path, original: Path, before: dict) ->
 
 def metrics(result) -> dict:
     requests = [q for q in result.model_requests if q.status != "blocked"]
+    actors = [q for q in requests if q.purpose == "agent"]
+    summaries = [q for q in requests if q.purpose == "compact"]
     rows = exchanges(result)
     errors = [r for r in rows if not r["ok"]]
     usage = {}
@@ -141,6 +143,13 @@ def metrics(result) -> dict:
     return {
         "run_id": result.run_id, "stop_reason": result.stop_reason,
         "final_answer": result.final_answer, "model_requests": len(requests),
+        "actor_requests": len(actors),
+        "compact_requests": len(summaries),
+        # A published summary records its measured result and no error; a rejected one does not.
+        "compactions_applied": sum(q.compact_after is not None and q.error_message is None
+                                   for q in summaries),
+        "max_actor_prompt_tokens": max(((q.budget or {}).get("prompt_tokens") or 0
+                                        for q in actors), default=0),
         "parse_errors": sum(q.status == "parse_error" for q in requests),
         "invalid_calls": sum(q.error_code in {"invalid_tool_call", "multiple_tool_calls", "too_many_tool_calls"}
                              for q in requests) + sum(r["error_code"] in invalid for r in errors),
@@ -177,6 +186,10 @@ def summarize(records: list[dict]) -> dict:
         "parse_errors": sum(r["parse_errors"] for r in records),
         "unintended_change_tasks": sum(bool(r["unexpected_changes"]) for r in records),
         "model_requests": sum(r["model_requests"] for r in records),
+        # These metrics were added after the original result format; absent is unknown.
+        **{key: sum(r[key] for r in records)
+           if all(type(r.get(key)) is int for r in records) else None
+           for key in ("compact_requests", "compactions_applied")},
         "elapsed_seconds": round(sum(r["elapsed_seconds"] for r in records), 2),
         "usage": {k: sum(r["usage"][k] for r in records) if records
                   and all(r["usage"][k] is not None for r in records) else None

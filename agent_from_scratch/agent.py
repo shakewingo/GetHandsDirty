@@ -14,7 +14,7 @@ from loguru import logger
 from .config import AgentLimits
 from .llm import LLM, ResponseError, ResponseErrorCode, ResponseType
 from .session import SessionStore
-from .compact import CompactOutcome, Compactor
+from .compact import CompactOutcome, Compactor, compact_prompt_digest
 from .elision import elide_old_outputs
 from .planning import PLAN_RULES, PlanState, UpdatePlanTool
 from .support import RepeatMonitor, attach_diagnostics
@@ -69,15 +69,24 @@ class Agent:
     def run_turn(self, user_input: str, history: list[ChatCompletionRequestMessage] | None = None,
                  *, session_id: str | None = None,
                  compact: bool = False,
+                 checkpoint: dict | None = None,
                  on_progress: Callable[[str], None] | None = None) -> TurnResult:
         """Execute supplied history; compact=True requests the same path used under pressure.
 
-        session_id associates and saves this run, not loads history.
+        Args:
+            user_input: this turn's request.
+            history: the full raw replayable history; a checkpoint never replaces it.
+            session_id: associates and saves this run; it does not load history.
+            compact: summarize before the first generation, as pressure would.
+            checkpoint: a validated `SessionStore` checkpoint whose summary replaces the
+                covered prefix in the model-facing view only.
+            on_progress: receives assistant narration that accompanies a tool batch.
+
+        Returns:
+            TurnResult: raw messages, stop reason, and one record per model request.
         """
         started = monotonic()
-        instructions, instruction_metadata = load_instructions(self.instruction_config)
-        if self.limits.planning_enabled:
-            instructions += '\n' + PLAN_RULES
+        instructions, instruction_metadata = self._load_instructions()
         result = TurnResult(
             messages=[{"role": "system", "content": instructions},
                       *deepcopy(history or []), {"role": "user", "content": user_input}],
@@ -87,9 +96,16 @@ class Agent:
         )
         trace = TraceStore(Path(self.state_dir, "runs") if self.state_dir is not None else None)
 
+        turn_start = 1 + len(history or [])
+        state = ContextState(raw=result.messages, turn_start=turn_start, last_sent=turn_start)
+        if checkpoint is not None:
+            # load_checkpoint already bound this to the supplied history, so covered stays
+            # within the turn-start invariant; raw history is replayed unchanged.
+            state.covered, state.summary = checkpoint["covered"] + 1, checkpoint["summary"]
+            result.settings["checkpoint"] = {key: checkpoint[key] for key in
+                                             ("run_id", "covered", "source_sha256")}
         try:
-            self._run_turn(result, history_length=len(history or []), compact=compact,
-                           on_progress=on_progress)
+            self._run_turn(result, state, compact=compact, on_progress=on_progress)
         except KeyboardInterrupt as error:
             # A completed model request can still be followed by an interrupted tool.
             if result.model_requests and result.model_requests[-1].status == ModelRequestStatus.STARTED:
@@ -100,7 +116,7 @@ class Agent:
             result.stop_reason = RunStopReason.INTERRUPTED
         result.elapsed_seconds = round(monotonic() - started, 2)
         trace.save_run(result)
-        self._save_session(result, len(history or []))
+        self._save_session(result, turn_start - 1, state)
         return result
 
     @staticmethod
@@ -131,27 +147,67 @@ class Agent:
         result.error_message = blocked[1]
         return True
 
-    def _save_session(self, result: TurnResult, history_length: int) -> None:
+    def _load_instructions(self) -> tuple[str, dict[str, Any]]:
+        """Assemble file rules and enabled harness protocols at every load boundary."""
+        instructions, metadata = load_instructions(self.instruction_config)
+        if self.limits.planning_enabled:
+            instructions += '\n' + PLAN_RULES
+        return instructions, metadata
+
+    def _reload_instructions(self) -> tuple[str | None, dict[str, Any]]:
+        """Reread rule sources at a compact boundary; keep the turn snapshot on failure.
+
+        Returns:
+            tuple: the reloaded system text, or None to keep the current snapshot, and the
+                provenance recorded on the compact request either way.
+        """
+        try:
+            return self._load_instructions()
+        except InstructionLoadError as error:
+            # Mid-turn this must not end a turn already recovering from context pressure;
+            # turn start still refuses to run at all on the same error.
+            logger.error("Keeping the turn's instruction snapshot: {}", error)
+            return None, {"status": "error", "detail": str(error)}
+
+    def _save_session(self, result: TurnResult, history_length: int, state: ContextState) -> None:
+        """Append this turn's raw delta, then a checkpoint that references it.
+
+        The two writes are ordered and separately atomic: a checkpoint never names messages
+        that are not already on disk. An incomplete turn contributes neither.
+        """
         if self.state_dir is None or result.session_id is None:
             return
-        messages = result.messages[1 + history_length:] if result.stop_reason == RunStopReason.FINAL_RESPONSE else []
+        completed = result.stop_reason == RunStopReason.FINAL_RESPONSE
+        store = SessionStore(Path(self.state_dir, "sessions"))
         try:
-            SessionStore(Path(self.state_dir, "sessions")).append(
-                result.session_id, result.run_id, messages,
-                started_at=result.started_at, stop_reason=result.stop_reason,
-            )
+            store.append(result.session_id, result.run_id,
+                         result.messages[1 + history_length:] if completed else [],
+                         started_at=result.started_at, stop_reason=result.stop_reason)
         except (OSError, ValueError) as error:
             logger.error("Could not save session for run {}; this turn will not be remembered: {}",
                          result.run_id, error)
+            return
+        if not completed or not state.summary or state.covered <= 1:
+            return
+        try:
+            # covered indexes raw, whose system message is at 0; session history is raw[1:].
+            store.append_checkpoint(
+                result.session_id, result.run_id, covered=state.covered - 1,
+                summary=state.summary, history=result.messages[1:],
+                config={"compact_prompt_sha256": compact_prompt_digest(),
+                        "summary_max_tokens": self.limits.summary_max_tokens,
+                        "model": self.llm.settings()})
+        except (OSError, ValueError) as error:
+            logger.error("Could not save the summary checkpoint for run {}; "
+                         "the next turn replays raw history: {}", result.run_id, error)
 
-    def _run_turn(self, result: TurnResult, *, history_length: int, compact: bool = False,
+    def _run_turn(self, result: TurnResult, state: ContextState, *, compact: bool = False,
                   on_progress: Callable[[str], None] | None = None) -> None:
         # Keep the original layout for tracing, session saving and evaluators.
         # Only raw_messages receives new events; prepared views are disposable.
         raw_messages = result.messages
-        turn_start = 1 + history_length
-        state = ContextState(raw=raw_messages, turn_start=turn_start, last_sent=turn_start)
-        compactor = Compactor(self.llm, self.limits)
+        compactor = Compactor(self.llm, self.limits,
+                              reload_instructions=self._reload_instructions)
         plan = PlanState()
         plan_tool = UpdatePlanTool(plan) if self.limits.planning_enabled else None
         repeat_monitor = RepeatMonitor()
@@ -226,7 +282,9 @@ class Agent:
             # and subsequent tool results remain beyond this boundary until its next call.
             state.last_sent = len(raw_messages)
             try:
-                response = self.llm.generate(prepared_messages, schemas)
+                response = self.llm.generate(
+                    prepared_messages, schemas,
+                    max_tool_calls=self.limits.max_tool_calls_per_response)
             except ResponseError as error:
                 request.status = ModelRequestStatus.PARSE_ERROR
                 request.raw_response = error.raw_response
@@ -351,12 +409,13 @@ class Agent:
                 continue
             try:
                 history = store.load_history(session_id) if store else []
+                checkpoint = store.load_checkpoint(session_id, history) if store else None
             except (OSError, ValueError) as error:
                 print(f"Session unavailable: {error}. Use /new, /reset, or /session <id> to recover.")
                 continue
             try:
                 result = self.run_turn(user_input, history, session_id=session_id,
-                                       compact=compact_next,
+                                       compact=compact_next, checkpoint=checkpoint,
                                        on_progress=lambda text: print(f"{agent_label} {text}"))
             except InstructionLoadError as error:
                 print(f"Instructions unavailable: {error}")

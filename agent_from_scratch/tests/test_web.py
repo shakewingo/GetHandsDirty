@@ -258,7 +258,7 @@ class WebTests(unittest.TestCase):
             model.settings.return_value = {}
             step = 0
 
-            def generate(messages, tools):
+            def generate(messages, tools, **kwargs):
                 nonlocal step
                 step += 1
                 if step <= 2:

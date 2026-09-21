@@ -32,6 +32,8 @@ def digest(data: bytes) -> str:
 def measure(result, original: bytes, relative_path: str, history_length: int) -> dict:
     """Score completed traces against a frozen fixture; never steer the runtime."""
     requests = [q for q in result.model_requests if q.status != "blocked"]
+    actors = [q for q in requests if q.purpose == "agent"]
+    summaries = [q for q in requests if q.purpose == "compact"]
     observations, chunks, calls = [], [], {}
     covered = bytearray(len(original))
     matches = True
@@ -67,6 +69,13 @@ def measure(result, original: bytes, relative_path: str, history_length: int) ->
     return {
         "run_id": result.run_id, "stop_reason": result.stop_reason,
         "model_requests": len(requests),
+        "actor_requests": len(actors),
+        "compact_requests": len(summaries),
+        # A published summary records its measured result and no error; a rejected one does not.
+        "compactions_applied": sum(q.compact_after is not None and q.error_message is None
+                                   for q in summaries),
+        "max_actor_prompt_tokens": max(((q.budget or {}).get("prompt_tokens") or 0
+                                        for q in actors), default=0),
         "parse_errors": sum(q.status == "parse_error" for q in requests),
         "tool_errors": [o for o in observations if not o["ok"]],
         "tool_names": [o["tool_name"] for o in observations],

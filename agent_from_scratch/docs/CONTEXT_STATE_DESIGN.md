@@ -1,7 +1,7 @@
 # Context semantics and state ownership
 
-Updated September 18, 2026. Stage 3A and Stage 3B item 1 are implemented; checkpoints
-remain planned. Stage 2's 167-test handoff and
+Updated September 20, 2026. Stage 3A, 3B and 3C are implemented, including versioned
+summary checkpoints and restart replay. Stage 2's 167-test handoff and
 historical model-score boundary are recorded in [STAGE.md](STAGE.md).
 
 ## Implemented: one preparation path
@@ -203,7 +203,8 @@ For Stage 3, introduce only the live state needed by context construction:
 | Existing result/request records | Tool/model/turn evidence, linked by call ID and run ID |
 | Agent local variables | Iteration, tool attempts, repeated failures and call IDs remain local; no `LoopState` class |
 | `ContextState` | Owns raw messages, summary, covered and last-sent boundaries, summary-call count and attempted boundary; builds independent inputs |
-| Versioned summary checkpoint | Session store persists summary + raw boundary + source digest/configuration for restart |
+| Reloaded rules | `ContextState.instructions` overrides `raw[0]` from a compact boundary onward; raw is never edited. Stage 4A's bounded memory index will attach at the same point and is not implemented here. |
+| Versioned summary checkpoint | `SessionStore.append_checkpoint` / `load_checkpoint` persist summary, session boundary, source digest and summary configuration as a `schema_version` 2 record in the same session file. `covered` counts session messages: `ContextState.covered - 1`, since raw index 0 is the system message |
 
 The separation is in place: **raw transcript versus an independent model-facing view**.
 Stage 3B item 1 adds `ContextState`: summary, covered raw boundary and last actor-sent raw
@@ -233,10 +234,9 @@ reread before relying on it as current. Nanobot likewise separates
 
 Failed/interrupted turns may already have changed files even though their messages are
 excluded from session replay. Checkpoint fallback must not imply rollback or tool replay.
-One existing budget caveat: `AgentLimits.max_tool_calls_per_response` is recorded in settings,
-but the parser enforces `config.MAX_TOOL_CALLS_PER_RESPONSE` (8) directly. The defaults agree;
-overriding that field alone does not change parsing. Reconcile this when wiring Stage 3's
-budgets so recorded configuration describes the limits actually enforced.
+`AgentLimits.max_tool_calls_per_response` is now the limit the parser enforces: `Agent`
+passes it to `LLM.generate`, which forwards it to `parse_response`. Summary calls carry no
+tools and keep the module default. Recorded configuration and enforced limits agree.
 
 This is enough structure for our synchronous tiny agent. A generic event bus, universal State
 class or framework rewrite would add scope without resolving the current coupling.

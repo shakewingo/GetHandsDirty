@@ -56,11 +56,21 @@ class ModelRequest:
     compact_before: dict | None = None
     compact_after: dict | None = None
     elided_call_ids: list[str] = field(default_factory=list)
+    instructions: dict | None = None  # Rule provenance when a compact boundary reloaded them.
 
 
 def used_model_calls(requests: list[ModelRequest]) -> int:
     """Count requests charged against the turn's budget; blocked ones never reached the model."""
     return sum(request.status != ModelRequestStatus.BLOCKED for request in requests)
+
+
+def request_budget(record: dict) -> dict | None:
+    """Read one request's pre-generation measurement across the schema-5 rename.
+
+    Records at schema_version 5 and later use `budget`; 4 and earlier use `context`.
+    """
+    budget = record.get("budget")
+    return record.get("context") if budget is None else budget
 
 
 @dataclass
@@ -72,7 +82,7 @@ class TurnResult:
     run_id: str = ""
     elapsed_seconds: float = 0.0
     model_requests: list[ModelRequest] = field(default_factory=list)
-    schema_version: int = 5  # 5 renamed ModelRequest.context to budget.
+    schema_version: int = 5  # 5 renamed ModelRequest.context to budget; later fields are additive.
     session_id: str | None = None
     input: str = ""
     started_at: str = ""

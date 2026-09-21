@@ -59,7 +59,7 @@ class TurnTests(unittest.TestCase):
     def script(self, *responses):
         responses = iter(responses)
 
-        def generate(messages, tools):
+        def generate(messages, tools, **kwargs):
             self.seen.append(deepcopy(messages))
             response = next(responses)
             if isinstance(response, BaseException):
@@ -170,7 +170,7 @@ class TurnTests(unittest.TestCase):
     def test_context_measurements_precede_each_generation_and_survive_backend_failure(self):
         measured_inputs, stats = [], []
 
-        def measure(messages, schemas):
+        def measure(messages, schemas, **kwargs):
             measured_inputs.append(deepcopy(messages))
             self.assertEqual(schemas, self.agent.registry.schemas())
             count = 100 * len(measured_inputs)
@@ -181,7 +181,7 @@ class TurnTests(unittest.TestCase):
 
         replies = iter([ResponseError(ResponseErrorCode.INVALID_RESPONSE), call(), RuntimeError("backend failed")])
 
-        def generate(messages, schemas):
+        def generate(messages, schemas, **kwargs):
             self.assertEqual(messages, measured_inputs[-1])
             self.assertEqual(len(measured_inputs), self.model.generate.call_count)
             response = next(replies)
@@ -274,7 +274,7 @@ class TurnTests(unittest.TestCase):
         received = []
         responses = iter([ResponseError(ResponseErrorCode.INVALID_RESPONSE), call(), answer("4")])
 
-        def generate(messages, tools):
+        def generate(messages, tools, **kwargs):
             received.append(messages)  # Retain actual inputs, without copying them in the mock.
             response = next(responses)
             if isinstance(response, BaseException):
@@ -311,7 +311,7 @@ class TurnTests(unittest.TestCase):
         history: list[ChatCompletionRequestMessage] = [{"role": "user", "content": "Remember this"},
                    {"role": "assistant", "content": "Remembered"}]
 
-        def generate(messages, tools):
+        def generate(messages, tools, **kwargs):
             received.append(deepcopy(messages))
             if len(received) == 1:
                 messages[1]["content"] = "Changed by backend"
@@ -404,7 +404,7 @@ class TurnTests(unittest.TestCase):
                 answer("Updated config.txt"),
             ])
 
-            def generate(messages, tools):
+            def generate(messages, tools, **kwargs):
                 self.assertEqual(set(tools), {"read_file", "write_file"})
                 return next(responses)
 
@@ -850,6 +850,22 @@ class TurnTests(unittest.TestCase):
             trace = TraceStore(Path(directory) / "runs").load_run(result.run_id)
             assert trace is not None
             self.assertEqual(trace["session_id"], "demo")
+
+
+class CheckpointResetTests(unittest.TestCase):
+    def test_reset_clears_the_session_checkpoint(self):
+        with TemporaryDirectory() as directory:
+            store = SessionStore(Path(directory, "sessions"))
+            history: list[ChatCompletionRequestMessage] = [{"role": "user", "content": "a"},
+                                                           {"role": "assistant", "content": "b"}]
+            store.append("s", "run1", history)
+            store.append_checkpoint("s", "run1", covered=2, summary="Goal: x", history=history,
+                                    config={"compact_prompt_sha256": "a" * 64,
+                                            "summary_max_tokens": 512, "model": {}})
+            agent = Agent(Mock(spec=LLM), directory)
+            agent._session_command("/reset", "s", store)
+            self.assertEqual(store.load_history("s"), [])
+            self.assertIsNone(store.load_checkpoint("s", history))
 
 
 if __name__ == "__main__":

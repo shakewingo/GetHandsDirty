@@ -59,7 +59,7 @@ RESPONSE_ERROR_MESSAGES = {
     ResponseErrorCode.INVALID_TOOL_CALL: "Invalid tool call.",
     ResponseErrorCode.EMPTY_RESPONSE: "Model response has no text or tool call.",
     ResponseErrorCode.TRUNCATED_RESPONSE: "Model response was truncated.",
-    ResponseErrorCode.TOO_MANY_TOOL_CALLS: f"At most {MAX_TOOL_CALLS_PER_RESPONSE} tool calls per response are supported.",
+    ResponseErrorCode.TOO_MANY_TOOL_CALLS: "Too many tool calls in one response.",
     ResponseErrorCode.UNSUPPORTED_FINISH_REASON: "Unsupported model finish reason.",
 }
 
@@ -130,13 +130,21 @@ class LLM:
 
     def measure_context(
         self, messages: List[ChatCompletionRequestMessage], tools: Dict[str, ChatCompletionTool],
+        *, max_tokens: int | None = None,
     ) -> dict[str, Any]:
         """Measure the next input without generation or changing the model's KV cache.
 
-        Remaining room reserves the configured output maximum, before any safety
-        margin.
+        Args:
+            messages: the exact model-facing view to be sent.
+            tools: the schemas that will accompany it.
+            max_tokens: output reserve for this one request; None uses the instance default.
+
+        Returns:
+            dict: count method, prompt tokens, window, reserve and remaining room, before
+                any safety margin.
         """
-        reserve = self.max_tokens if self.max_tokens is not None and self.max_tokens > 0 else None
+        configured = self.max_tokens if max_tokens is None else max_tokens
+        reserve = configured if configured is not None and configured > 0 else None
         measurement = {"count_method": "unavailable", "prompt_tokens": None,
                        "window_tokens": self.n_ctx, "response_reserve": reserve,
                        "remaining_tokens": None}
@@ -173,7 +181,7 @@ class LLM:
         return counts if any(value is not None for value in counts.values()) else None
 
     @staticmethod
-    def parse_response(response) -> LLMResponse:
+    def parse_response(response, max_tool_calls: int = MAX_TOOL_CALLS_PER_RESPONSE) -> LLMResponse:
         """Validate the entire native/Qwen batch before allowing any execution."""
         try:
             choice = response["choices"][0]
@@ -199,8 +207,9 @@ class LLM:
                 ResponseErrorCode.INVALID_TOOL_CALL, "tool_calls must be a list."
             )
         if calls:
-            if len(calls) > MAX_TOOL_CALLS_PER_RESPONSE:
-                raise ResponseError(ResponseErrorCode.TOO_MANY_TOOL_CALLS)
+            if len(calls) > max_tool_calls:
+                raise ResponseError(ResponseErrorCode.TOO_MANY_TOOL_CALLS,
+                                    f"At most {max_tool_calls} are supported.")
             parsed_calls = []
             for call in calls:
                 try:
@@ -240,8 +249,9 @@ class LLM:
             raise ResponseError(
                 ResponseErrorCode.INVALID_TOOL_CALL, str(error)
             ) from error
-        if len(extracted) > MAX_TOOL_CALLS_PER_RESPONSE:
-            raise ResponseError(ResponseErrorCode.TOO_MANY_TOOL_CALLS)
+        if len(extracted) > max_tool_calls:
+            raise ResponseError(ResponseErrorCode.TOO_MANY_TOOL_CALLS,
+                                f"At most {max_tool_calls} are supported.")
         if extracted:
             return LLMResponse(
                 role=role,
@@ -263,20 +273,24 @@ class LLM:
         self,
         messages: List[ChatCompletionRequestMessage],
         tools: Dict[str, ChatCompletionTool],
+        *,
+        max_tokens: int | None = None,
+        max_tool_calls: int | None = None,
     ) -> LLMResponse:
         response = self.llm.create_chat_completion(
             messages=messages,
             tools=list(tools.values()),
             tool_choice="auto",
             temperature=self.temperature,
-            max_tokens=self.max_tokens,
+            max_tokens=self.max_tokens if max_tokens is None else max_tokens,
             stream=False,
         )
         try:
             if not isinstance(response, dict):
                 raise ResponseError(ResponseErrorCode.INVALID_RESPONSE,
                                     "Expected a non-streaming response object.")
-            parsed = LLM.parse_response(response)
+            parsed = LLM.parse_response(
+                response, MAX_TOOL_CALLS_PER_RESPONSE if max_tool_calls is None else max_tool_calls)
             parsed.raw_response = response
             return parsed
         except ResponseError as error:

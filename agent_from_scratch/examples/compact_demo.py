@@ -44,7 +44,7 @@ def main():
                 break
         else:
             raise RuntimeError("Could not construct the measured pressure fixture.")
-        report = {"initial_budget": budget, "cases": {}}
+        report = {"initial_budget": budget, "limits": asdict(AgentLimits()), "cases": {}}
         for name in ("full", "automatic", "manual", "oversized"):
             limits = replace(AgentLimits(), max_compact_calls=0) if name == "full" else AgentLimits()
             agent = Agent(model, str(args.output / name), registry=ToolRegistry([]), limits=limits)
@@ -52,7 +52,7 @@ def main():
                                     [] if name == "oversized" else history, compact=name == "manual")
             report["cases"][name] = asdict(result)
             print(name, result.stop_reason, repr(result.final_answer),
-                  [(q.purpose, q.status, (q.budget or {}).get("prompt_tokens"))
+                  [(q.purpose, q.status, (q.budget or {}).get("prompt_tokens"), q.error_message)
                    for q in result.model_requests], flush=True)
         (args.output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2))
     finally:

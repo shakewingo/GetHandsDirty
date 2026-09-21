@@ -38,7 +38,9 @@ class AgentLimits:
 
     context_margin_tokens: int = 256  # token margin to reserve in the context window
     compact_headroom_tokens: int = 512  # try before the actor reaches the hard fit gate
-    max_compact_calls: int = 4  # also charged against max_iterations; one call per attempt
+    max_compact_calls: int = 4  # all summary calls/retries also count against max_iterations
+    summary_max_tokens: int = 512  # summarizer output reserve, independent of the actor's
+    max_summary_calls_per_attempt: int = 2  # one corrective retry at the same cut
 
     elision_enabled: bool = False
     elision_soft_ratio: float = 0.6
