@@ -1,12 +1,28 @@
 from __future__ import annotations # postpone evaluating type annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from collections.abc import Iterable
+from dataclasses import asdict, dataclass
 from enum import StrEnum
+import json
 from typing import Any, Dict, Mapping, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from llama_cpp import ChatCompletionTool
+    from llama_cpp import (ChatCompletionTool, ChatCompletionMessageToolCall,
+                           ChatCompletionRequestToolMessage)
+
+
+@dataclass
+class ToolCall:
+    """One action requested by the model, before the registry has resolved it."""
+
+    name: str
+    arguments: dict
+    call_id: str = ""
+
+    def to_dict(self) -> ChatCompletionMessageToolCall:
+        return {"id": self.call_id, "type": "function",
+                "function": {"name": self.name, "arguments": json.dumps(self.arguments)}}
 
 
 class ToolErrorCode(StrEnum):
@@ -14,6 +30,10 @@ class ToolErrorCode(StrEnum):
     UNKNOWN_TOOL = "unknown_tool"
     INVALID_ARGUMENTS = "invalid_arguments"
     EXECUTION_ERROR = "execution_error"
+    DENIED = "denied"
+    TIMEOUT = "timeout"
+    INTERRUPTED = "interrupted"
+    SKIPPED = "skipped"
 
 
 ERROR_MESSAGES = {
@@ -21,7 +41,28 @@ ERROR_MESSAGES = {
     ToolErrorCode.UNKNOWN_TOOL: "The requested tool is not registered.",
     ToolErrorCode.INVALID_ARGUMENTS: "Tool arguments do not match the schema.",
     ToolErrorCode.EXECUTION_ERROR: "Tool execution failed.",
+    ToolErrorCode.DENIED: "Operation is outside the configured tool policy.",
+    ToolErrorCode.TIMEOUT: "Tool execution timed out.",
+    ToolErrorCode.INTERRUPTED: "Tool execution was interrupted; completion is not confirmed.",
+    ToolErrorCode.SKIPPED: "Tool call was not executed.",
 }
+
+
+class ToolExecutionError(Exception):
+    """An expected failure that can retain bounded observations (e.g. stderr)."""
+
+    def __init__(self, code: ToolErrorCode, detail: str, output: Any = None):
+        super().__init__(detail)
+        self.code = code
+        self.output = output
+
+
+class ToolInterrupted(KeyboardInterrupt):
+    """Stop the turn, retaining any observations collected before cleanup."""
+
+    def __init__(self, output: Any = None):
+        super().__init__()
+        self.output = output
 
 
 @dataclass
@@ -36,13 +77,17 @@ class ToolResult:
     @classmethod
     def failure(
         cls, code: ToolErrorCode, *, call_id: str = "",
-        tool_name: str = "", detail: str = "",
+        tool_name: str = "", detail: str = "", output: Any = None,
     ) -> "ToolResult":
         message = ERROR_MESSAGES[code]
         if detail:
             message = f"{message} {detail}"
         return cls(call_id=call_id, tool_name=tool_name, ok=False,
-                   error_code=code, error_message=message)
+                   error_code=code, error_message=message, output=output)
+
+    def to_message(self) -> ChatCompletionRequestToolMessage:
+        return {"role": "tool", "content": json.dumps(asdict(self)),
+                "tool_call_id": self.call_id}
 
 
 class Tool(ABC):
@@ -60,7 +105,7 @@ class Tool(ABC):
 
         This intentionally supports the JSON Schema features used by the local
         tools: ``type``, ``properties``, ``required``, ``additionalProperties``,
-        ``enum`` and array ``items``. Invalid arguments raise ``ValueError`` and
+        ``enum``, numeric ``minimum``/``maximum`` and array ``items``. Invalid arguments raise ``ValueError`` and
         must never reach ``execute``.
         """
         if not isinstance(arguments, Mapping):
@@ -84,7 +129,12 @@ class Tool(ABC):
 
         try:
             output = self.execute(**dict(arguments))
+        except ToolExecutionError as error:
+            # Do explicit error code capture and stderr and stdout first including EXECUTION_ERROR
+            return ToolResult.failure(error.code, call_id=call_id, tool_name=self.name,
+                                      detail=str(error), output=error.output)
         except Exception as error:
+            # Then for other Exceptions, categorize as the general EXECUTION_ERROR with no explicit stdout
             return ToolResult.failure(
                 ToolErrorCode.EXECUTION_ERROR,
                 call_id=call_id,
@@ -113,6 +163,12 @@ class Tool(ABC):
         if "enum" in schema and not any(cls._json_equal(value, option) for option in schema["enum"]):
             raise ValueError(f"{path} must be one of {schema['enum']}, got {value!r}")
 
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            if "minimum" in schema and value < schema["minimum"]:
+                raise ValueError(f"{path} must be >= {schema['minimum']}, got {value!r}")
+            if "maximum" in schema and value > schema["maximum"]:
+                raise ValueError(f"{path} must be <= {schema['maximum']}, got {value!r}")
+
         if isinstance(value, Mapping):
             properties = schema.get("properties", {})
             required = schema.get("required", [])
@@ -135,7 +191,7 @@ class Tool(ABC):
             additional = schema.get("additionalProperties", True)
             unknown = [name for name in value if name not in properties]
             if additional is False and unknown:
-                raise ValueError(f"{path} contains unexpected fields: {unknown}")
+                raise ValueError(f"{path} contains unexpected fields: {unknown}. Allowed fields: {list(properties)}")
 
             for name, item in value.items():
                 if name in properties:
@@ -203,3 +259,30 @@ class Tool(ABC):
                 "parameters": self.parameters,
             },
         }
+
+
+class ToolRegistry:
+    def __init__(self, tools: Iterable[Tool]):
+        self._tools: dict[str, Tool] = {}
+        for tool in tools:
+            if not isinstance(tool.name, str) or not tool.name.strip():
+                raise ValueError("Registered tools must have non-empty string names.")
+            if tool.name in self._tools:
+                raise ValueError(f"Duplicate tool name: {tool.name!r}")
+            self._tools[tool.name] = tool
+
+    def schemas(self) -> Dict[str, "ChatCompletionTool"]:
+        return {name: tool.to_schema() for name, tool in self._tools.items()}
+
+    def invoke(self, tool_name: Any, arguments: Any, call_id: str = "") -> ToolResult:
+        if not isinstance(tool_name, str) or not tool_name.strip():
+            return ToolResult.failure(
+                ToolErrorCode.INVALID_TOOL_CALL, call_id=call_id,
+            )
+        tool = self._tools.get(tool_name)
+        if tool is None:
+            return ToolResult.failure(
+                ToolErrorCode.UNKNOWN_TOOL, call_id=call_id, tool_name=tool_name,
+                detail=f"Requested: {tool_name!r}. Available tools: {', '.join(sorted(self._tools))}.",
+            )
+        return tool.invoke(arguments, call_id=call_id)

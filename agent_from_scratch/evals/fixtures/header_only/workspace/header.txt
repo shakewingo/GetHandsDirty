@@ -1,0 +1,5 @@
+HEADER_CODE=PINE-83
+This header is enough to answer the request.
+...............................................................
+BODY_CODE=IGNORE-92
+The body is outside the requested range.

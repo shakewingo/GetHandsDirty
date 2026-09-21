@@ -1,0 +1,12 @@
+{
+  "name": "active",
+  "output": {
+    "filename": "old.json",
+    "format": "json"
+  },
+  "retry": {
+    "count": 4,
+    "delay_seconds": 2
+  },
+  "enabled": true
+}

@@ -1,0 +1,5 @@
+{
+  "output": "report.json",
+  "retries": 2,
+  "enabled": true
+}

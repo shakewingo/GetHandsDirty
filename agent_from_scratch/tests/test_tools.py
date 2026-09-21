@@ -2,9 +2,8 @@ import json
 import unittest
 from dataclasses import asdict
 
-from agent_from_scratch.tools.base import ERROR_MESSAGES, ToolErrorCode, Tool
+from agent_from_scratch.tools.base import ERROR_MESSAGES, Tool, ToolErrorCode, ToolRegistry
 from agent_from_scratch.tools.calculator import CalculatorTool, OPERATION
-from agent_from_scratch.tools.register import ToolRegistry
 
 
 class RecordingCalculator(CalculatorTool):

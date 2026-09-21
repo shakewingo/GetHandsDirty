@@ -1,0 +1,9 @@
+{
+  "https://docs.example.test/guides/overview": [
+    {
+      "status": 200,
+      "text": "Guide overview\nThis is the beginning of a longer guide.\n",
+      "truncated": true
+    }
+  ]
+}

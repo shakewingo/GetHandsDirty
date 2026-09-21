@@ -1,11 +1,17 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from agent_from_scratch.session import SessionStore
+from agent_from_scratch.session import SessionStore, checkpoint_digest
 from agent_from_scratch.trace import RunStopReason, TraceStore
+
+if TYPE_CHECKING:
+    from llama_cpp import ChatCompletionRequestMessage
 
 
 class SessionTests(unittest.TestCase):
@@ -47,7 +53,7 @@ class SessionTests(unittest.TestCase):
     def test_failed_append_preserves_previous_session(self):
         with TemporaryDirectory() as directory:
             store = SessionStore(directory)
-            messages = [{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "Hello"}]
+            messages: list[ChatCompletionRequestMessage] = [{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "Hello"}]
             store.append("session_1", "first", messages)
             path = Path(directory) / "session_1.jsonl"
             original = path.read_bytes()
@@ -56,11 +62,61 @@ class SessionTests(unittest.TestCase):
                     store.append("session_1", "second", messages)
             self.assertEqual(path.read_bytes(), original)
             with self.assertRaises(ValueError):
-                store.append("session_1", "bad", [{"role": "user", "content": 42}])
+                store.append("session_1", "bad", json.loads('[{"role": "user", "content": 42}]'))
             self.assertEqual(path.read_bytes(), original)
             self.assertEqual(SessionStore(directory).load_records("session_1")[0]["messages"], messages)
             store.reset("session_1")
             self.assertEqual(store.load_records("session_1"), [])
+
+    def test_checkpoint_requires_saved_messages_and_binds_to_their_digest(self):
+        with TemporaryDirectory() as directory:
+            store = SessionStore(directory)
+            history: list[ChatCompletionRequestMessage] = [
+                {"role": "user", "content": "Remember CEDAR-42"},
+                {"role": "assistant", "content": "Noted."},
+            ]
+            config = {"compact_prompt_sha256": "a" * 64, "summary_max_tokens": 512, "model": {}}
+            with self.assertRaises(ValueError):
+                store.append_checkpoint("s", "run1", covered=2, summary="Goal: x",
+                                        history=history, config=config)
+            store.append("s", "run1", history)
+            store.append_checkpoint("s", "run1", covered=2, summary="Goal: x",
+                                    history=history, config=config)
+            record = store.load_checkpoint("s", history)
+            assert record is not None
+            self.assertEqual(record["covered"], 2)
+            self.assertEqual(record["source_sha256"], checkpoint_digest(history))
+            self.assertEqual(store.load_history("s"), history)
+
+    def test_stale_or_out_of_range_checkpoints_are_ignored(self):
+        with TemporaryDirectory() as directory:
+            store = SessionStore(directory)
+            history: list[ChatCompletionRequestMessage] = [{"role": "user", "content": "a"},
+                                                           {"role": "assistant", "content": "b"}]
+            store.append("s", "run1", history)
+            store.append_checkpoint("s", "run1", covered=2, summary="Goal: x", history=history,
+                                    config={"compact_prompt_sha256": "a" * 64,
+                                            "summary_max_tokens": 512, "model": {}})
+            edited: list[ChatCompletionRequestMessage] = [{"role": "user", "content": "EDITED"},
+                                                          history[1]]
+            self.assertIsNone(store.load_checkpoint("s", edited))
+            self.assertIsNone(store.load_checkpoint("s", history[:1]))
+            store.reset("s")
+            self.assertIsNone(store.load_checkpoint("s", history))
+
+    def test_invalid_checkpoint_records_are_rejected_with_a_line_number(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "broken.jsonl"
+            store = SessionStore(directory)
+            base = {"schema_version": 2, "kind": "checkpoint", "run_id": "r",
+                    "created_at": "2026-09-20T00:00:00+00:00", "covered": 1,
+                    "summary": "Goal: x", "source_sha256": "a" * 64, "config": {}}
+            for key, value in (("schema_version", 1), ("covered", 0), ("summary", ""),
+                               ("config", None), ("source_sha256", 42)):
+                with self.subTest(key=key):
+                    path.write_text(json.dumps({**base, key: value}) + "\n")
+                    with self.assertRaisesRegex(ValueError, "line 1"):
+                        store.load_records("broken")
 
     def test_legacy_and_new_runs_replay_only_completed_messages(self):
         with TemporaryDirectory() as directory:
@@ -70,7 +126,7 @@ class SessionTests(unittest.TestCase):
             path.write_text(json.dumps(old) + "\n")
             store.append("mixed", "failed", [], stop_reason=RunStopReason.MODEL_ERROR)
             store.append("mixed", "interrupted", [], stop_reason=RunStopReason.INTERRUPTED)
-            latest = [{"role": "assistant", "content": "Blue"}]
+            latest: list[ChatCompletionRequestMessage] = [{"role": "assistant", "content": "Blue"}]
             store.append("mixed", "new", latest, started_at="2026-09-12T00:00:00+00:00")
             self.assertEqual(store.load_history("mixed"), old["messages"] + latest)
             self.assertEqual(len(store.load_records("mixed")), 4)
@@ -90,6 +146,19 @@ class SessionTests(unittest.TestCase):
                     path.write_text(json.dumps(record) + "\n")
                     with self.assertRaisesRegex(ValueError, "line 1"):
                         SessionStore(directory).load_history("bad")
+
+    def test_new_stop_reasons_round_trip_alongside_old_version_one_records(self):
+        with TemporaryDirectory() as directory:
+            store = SessionStore(directory)
+            store.append("test", "old", [{"role": "user", "content": "Old request"}])
+            store.append("test", "no_progress", [], stop_reason=RunStopReason.NO_PROGRESS)
+            # Retired runtime check records must remain readable and unreplayed.
+            with (Path(directory) / "test.jsonl").open("a") as stream:
+                stream.write(json.dumps({"schema_version": 1, "run_id": "retired",
+                                         "stop_reason": "check_failed", "messages": []}) + "\n")
+            self.assertEqual([r["stop_reason"] for r in store.load_records("test")],
+                             ["final_response", "no_progress", "check_failed"])
+            self.assertEqual(store.load_history("test"), [{"role": "user", "content": "Old request"}])
 
     def test_trace_lookup_handles_legacy_missing_and_escaping_references(self):
         with TemporaryDirectory() as directory:

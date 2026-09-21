@@ -1,0 +1,9 @@
+{
+  "https://docs.example.test/releases/current": [
+    {
+      "status": 200,
+      "text": "Current release\nProduct code: AX-42\nRelease: 2.7\n",
+      "truncated": false
+    }
+  ]
+}
