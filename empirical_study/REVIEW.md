@@ -19,8 +19,10 @@
 | 04 | `42c7228` | Separate interventions and second review fixes |
 | 05 | Final `docs(study): report matched harness pilot and adoption decisions` commit | Paired evidence, negative results and adoption decision |
 
-Runtime comparison revision: `42c7228`, inherited from `d7f3887`.
-All production defaults stay off. The original `memory.py` remains untracked.
+Original comparison revision: `42c7228`, inherited from `d7f3887`.
+Stage 06 merge revision: `90e1f79`, incorporating remote `54e863d`; see
+[Stage 06](STAGE-06.md) for compact integration changes and focused revalidation.
+All experimental flags remain off; the new foundation summary defaults are inherited. The original `memory.py` remains untracked.
 
 ## Replay
 
@@ -57,3 +59,18 @@ turn latency; tool execution, input preparation and compaction are inside it.
 - A feature may prevent a context error without improving artifact correctness.
 - No timing confidence interval, held-out result or false-completion rate is claimed.
   Final-answer claim review is distinct from automated success scoring.
+
+## Stage 06 compact integration replay
+
+At runtime revision 90e1f79, use a fresh output directory and run each profile
+sequentially with `--tasks history_retain,history_edit` (baseline, elision, planning,
+elision_planning). Then compare with the retained Stage 05 evidence:
+
+```sh
+python empirical_study/compare_compact.py outputs/empirical-study/stage-05 outputs/empirical-study/stage-06 empirical_study/stage-06-measurements.json
+```
+
+The old-vs-merged comparison changes multiple foundation mechanisms. Treat it as
+integration revalidation, not an isolated summary-reserve ablation. Checkpoint
+persistence/restart is covered by deterministic tests; these supplied-history model
+probes do not demonstrate cross-process checkpoint effectiveness.

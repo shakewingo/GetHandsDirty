@@ -17,8 +17,13 @@ tracked; raw model transcripts remain local because they can be large.
 | 03 | Opt-in bounded, per-turn persistent plan | [Complete](STAGE-03.md); [model evidence](STAGE-05.md) |
 | 04 | Search, repeat reminders, and post-edit diagnostics as separate interventions | [Complete](STAGE-04.md); [model evidence](STAGE-05.md) |
 | 05 | Matched real-model comparisons, review, and adoption decision | [Complete](STAGE-05.md) |
+| 06 | Merge remote compact enhancements; revalidate harness interactions | [Complete](STAGE-06.md) |
 
-Start with the [review guide](REVIEW.md) and [experiment findings](STAGE-05.md).
+Start with the [latest integration findings](STAGE-06.md), [review guide](REVIEW.md),
+and [original experiment findings](STAGE-05.md).
+
+Stage 05 used runtime `42c7228`. Stage 06 integrates remote foundation `54e863d`
+into runtime `90e1f79`; historical scores are not scores for this new runtime.
 
 Read [design](DESIGN.md), [execution plan](PLAN.md), and [ledger](LEDGER.md).
 The study does not change production defaults based on a small development sample.

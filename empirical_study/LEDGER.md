@@ -105,3 +105,26 @@
 - Adoption: retain research infrastructure; experimental behavior remains opt-in.
   No overall capability or efficiency improvement established by this small pilot.
 - Branch kept for the user's phase-by-phase review; no push, merge or deletion.
+
+## Stage 06 — foundation compact integration (2026-09-21)
+
+- Fetched origin; foundation advanced d7f3887 → 54e863d (11 commits).
+- Merge 90e1f79 has parents f12bec2 and 54e863d; branch remains harness-design.
+- Five conflicting files resolved by preserving both context/harness interfaces.
+- RED→GREEN: compact reload dropped planning protocol; unified startup/reload
+  instruction assembly. Combined candidate test checks plan+elision+rules and fit.
+- Independent review identified old results crashing on new compact metric keys;
+  RED→GREEN legacy/mixed aggregation + CLI tests now preserve unknown counts.
+- Final suite 255 tests passed in 3.979 s; independent reviewer ran 70 related tests.
+- Eight frozen-runtime probes completed: baseline 1/2, elision 0/2, planning 0/2,
+  combined 0/2. 122,828 tokens and 356.91 s including failures. Four summaries
+  applied, no summary retries; combined plan updates attempted four times, all invalid.
+- Ruling: historical scores stay immutable; repeat only focused compact-sensitive
+  cases. This does not close the upstream cross-process real-model evidence gap.
+- Decision: retain upstream compact enhancements and experimental opt-in flags;
+  prioritize evidence recovery/read-edit reliability and simpler plan initialization.
+- Review artifacts: STAGE-06.md, STAGE-06-PLAN.md, stage-06-measurements.json;
+  raw evidence and test logs under outputs/empirical-study/stage-06.
+- Final verification: all 69 source-manifest entries match the frozen model runs;
+  original memory hash unchanged; remote head is an ancestor; 8-task totals and
+  summary activations recomputed; report links and git diff checks pass.

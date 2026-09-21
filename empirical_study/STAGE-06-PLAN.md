@@ -30,12 +30,12 @@ fix integration defects, without treating historical scores as current results.
 - [x] Add regression tests for rule reload with planning and combined candidate
       state; demonstrate failure before fixing material integration issues.
 - [x] Run full suite; independent review of merge and interaction fixes.
-- [ ] Commit merged runtime; run focused real-model history_retention/history_edit
+- [x] Commit merged runtime; run focused real-model history_retain/history_edit
       probes with baseline, elision, planning and elision_planning at the same merged
       revision (the planning profiles also exercise the repaired reload path). Preserve original
       suite/prompt/scoring and compare only task-matched conditions. This tests whether
       the new 512-token summary reserve admits histories blocked in Stage 05.
-- [ ] Record upstream changes, applicability/optimization decisions, test and model
+- [x] Record upstream changes, applicability/optimization decisions, test and model
       outcomes in STAGE-06.md; link README/LEDGER and commit evidence.
 
 The user's request already authorizes merge, investigation and compatibility fixes;
@@ -59,3 +59,9 @@ is recorded as follow-up rather than bundled into this integration.
 - Final merged suite: 255 tests pass in 3.979 s. Independent reviewer ran 70
   targeted tests; no other material integration findings. Original memory.py hash
   unchanged. Runtime is ready to freeze for the 8-case focused panel.
+
+- Runtime frozen at merge 90e1f79. All 8 probes completed: baseline 1/2, other
+  profiles 0/2; four summaries generated/published, no retry. 122,828 tokens,
+  356.91 s. Combined profile had four rejected all-pending plan updates.
+- Stage 06 report separates deterministic checkpoint/retry validation from model
+  evidence and preserves old scores. Experimental defaults remain off.
