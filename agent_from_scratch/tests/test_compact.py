@@ -546,5 +546,14 @@ class CompactTests(unittest.TestCase):
         sent = json.loads(self.requests[0].input_messages[1]["content"])["messages"]
         self.assertIn("elided:", sent[2]["content"])
 
+    def test_publish_measures_the_candidate_with_the_plan_reminder(self):
+        self.state.plan = "[pending] Report 7"
+        seen = []
+        measure = self.model.measure_context.side_effect
+        self.model.measure_context.side_effect = (
+            lambda messages, schemas, **kwargs: seen.append(messages) or measure(messages, schemas, **kwargs))
+        self.assertTrue(self.compact())
+        self.assertIn("[pending] Report 7", seen[-1][-1]["content"])  # the published candidate
+
 if __name__ == "__main__":
     unittest.main()
