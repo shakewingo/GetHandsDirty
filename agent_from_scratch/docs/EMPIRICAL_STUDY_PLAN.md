@@ -85,7 +85,7 @@ and "Evaluation". Design decisions this plan must not contradict:
 - `ContextState.elide(min_chars: int) -> bool`: True when a new stub was added.
 - `AgentLimits.elide_ratio: float | None = 0.6`, `AgentLimits.elide_min_chars: int = 400`.
 
-- [ ] **Step 1: failing tests** (append to `CompactTests`)
+- [x] **Step 1: failing tests** (append to `CompactTests`)
 
 ```python
     def bulky(self, name, size=1000):
@@ -115,10 +115,10 @@ and "Evaluation". Design decisions this plan must not contradict:
         self.assertFalse(ContextState(raw, turn_start=1, last_sent=len(raw)).elide(5000))
 ```
 
-- [ ] **Step 2:** run `python -m unittest agent_from_scratch.tests.test_compact -q`; expect
+- [x] **Step 2:** run `python -m unittest agent_from_scratch.tests.test_compact -q`; expect
   `AttributeError: 'ContextState' object has no attribute 'elide'`.
 
-- [ ] **Step 3: implementation.** In `config.py` add to `AgentLimits`:
+- [x] **Step 3: implementation.** In `config.py` add to `AgentLimits`:
 
 ```python
     elide_ratio: float | None = 0.6  # stub old tool outputs at this share of the usable window; None disables
@@ -172,8 +172,8 @@ and the methods, with `messages()` switched to `view()`:
 `messages()`: `history = self.view(1, self.turn_start)`, `current = self.view(self.turn_start)`,
 and in the summary branch `current = [*pinned, *self.view(self.covered)]`.
 
-- [ ] **Step 4:** rerun; expect OK. Run the full suite; expect 230 OK.
-- [ ] **Step 5:** commit `feat: elide bulky tool outputs in the actor view without touching raw`.
+- [x] **Step 4:** rerun; expect OK. Run the full suite; expect 230 OK.
+- [x] **Step 5:** commit `feat: elide bulky tool outputs in the actor view without touching raw`.
 
 ### Task 1.2: trigger elision at the soft share; summarizer and publish see the same view
 
@@ -182,7 +182,7 @@ and in the summary branch `current = [*pinned, *self.view(self.covered)]`.
 **Interfaces — produces:** `window_share(budget: dict | None) -> float | None`;
 `ModelRequest.elided_messages: int = 0`.
 
-- [ ] **Step 1: failing tests**
+- [x] **Step 1: failing tests**
 
 ```python
     def test_soft_pressure_elides_without_a_summary_call(self):
@@ -212,8 +212,8 @@ and in the summary branch `current = [*pinned, *self.view(self.covered)]`.
         self.assertIn("elided:", sent[2]["content"])
 ```
 
-- [ ] **Step 2:** run; expect `AttributeError` on `elided_messages` and a raw (unstubbed) summarizer input.
-- [ ] **Step 3: implementation.**
+- [x] **Step 2:** run; expect `AttributeError` on `elided_messages` and a raw (unstubbed) summarizer input.
+- [x] **Step 3: implementation.**
 
 `context.py`, next to `context_blocker`:
 
@@ -244,9 +244,9 @@ and pass `elided_messages=len(state.elided)` to the actor's `ModelRequest(...)`.
 `compact.py`: in `_summarize` use `"messages": state.view(state.covered, boundary)`; in
 `_publish` build the candidate with `elided=state.elided`.
 
-- [ ] **Step 4:** rerun the two tests and the full suite; expect 232 OK.
-- [ ] **Step 5:** commit `feat: stage elision at 0.6 of the usable window before summarizing`.
-- [ ] **Step 6:** record `core_lines` in the stage log (end of this file).
+- [x] **Step 4:** rerun the two tests and the full suite; expect 232 OK.
+- [x] **Step 5:** commit `feat: stage elision at 0.6 of the usable window before summarizing`.
+- [x] **Step 6:** record `core_lines` in the stage log (end of this file).
 
 ---
 
@@ -262,7 +262,7 @@ and pass `elided_messages=len(state.elided)` to the actor's `ModelRequest(...)`.
 - `ContextState.plan: str | None = None`: `None` off, `""` no plan yet, text = current plan;
   `messages()` appends one trailing `system` reminder when not `None`.
 
-- [ ] **Step 1: failing tests** (`tests/test_plan.py`)
+- [x] **Step 1: failing tests** (`tests/test_plan.py`)
 
 ```python
 """The plan is re-injected every request and never enters raw history."""
@@ -295,8 +295,8 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(state.raw, raw)
 ```
 
-- [ ] **Step 2:** run `python -m unittest agent_from_scratch.tests.test_plan -q`; expect `ModuleNotFoundError`.
-- [ ] **Step 3: implementation.** `tools/plan.py`:
+- [x] **Step 2:** run `python -m unittest agent_from_scratch.tests.test_plan -q`; expect `ModuleNotFoundError`.
+- [x] **Step 3: implementation.** `tools/plan.py`:
 
 ```python
 """A todo list the harness shows back to the model before every request."""
@@ -351,8 +351,8 @@ and in `messages()` the final return becomes:
 
 `compact.py` `_publish`: the candidate also takes `plan=state.plan`.
 
-- [ ] **Step 4:** rerun; expect OK; full suite 234 OK.
-- [ ] **Step 5:** commit `feat: add update_plan and re-inject the plan outside raw history`.
+- [x] **Step 4:** rerun; expect OK; full suite 234 OK.
+- [x] **Step 5:** commit `feat: add update_plan and re-inject the plan outside raw history`.
 
 ### Task 2.2: wire planning into the turn, and budget for it in the REPL
 
@@ -360,7 +360,7 @@ and in `messages()` the final return becomes:
 
 **Interfaces — consumes:** `PlanTool`, `ContextState.plan`. **Produces:** `AgentLimits.planning: bool = False`.
 
-- [ ] **Step 1: failing tests** (append; reuse `TurnTests` setup via subclassing)
+- [x] **Step 1: failing tests** (append; reuse `TurnTests` setup via subclassing)
 
 ```python
 from dataclasses import replace
@@ -401,8 +401,8 @@ Do not subclass `test_turn.TurnTests`: unittest discovery would rerun every inhe
 under this module. `PlanTurnTests(unittest.TestCase)` carries its own copy of the
 `TurnTests.setUp` and `script` fixtures (scripted `Mock(spec=LLM)`, patched `PROMPTS_DIR`).
 
-- [ ] **Step 2:** run; expect failure: `planning` is not an `AgentLimits` field.
-- [ ] **Step 3: implementation.** `config.py`: `planning: bool = False  # update_plan tool + per-request plan reminder`.
+- [x] **Step 2:** run; expect failure: `planning` is not an `AgentLimits` field.
+- [x] **Step 3: implementation.** `config.py`: `planning: bool = False  # update_plan tool + per-request plan reminder`.
 
 `agent.py` `run_turn`, after creating `state`: `state.plan = "" if self.limits.planning else None`.
 `_run_turn`, before the loop: `planner = PlanTool() if state.plan is not None else None`;
@@ -429,9 +429,9 @@ and tool dispatch becomes
 REPL entry point (`__main__`): `limits=AgentLimits(planning=True, max_iterations=30, max_tool_calls=60)`
 — planning's measured cost for weak models (note, Finding 4) would otherwise hit the 20/40 ceilings.
 
-- [ ] **Step 4:** rerun; full suite 236 OK.
-- [ ] **Step 5:** commit `feat: run update_plan as a per-turn harness tool when planning is on`.
-- [ ] **Step 6:** record `core_lines`.
+- [x] **Step 4:** rerun; full suite 236 OK.
+- [x] **Step 5:** commit `feat: run update_plan as a per-turn harness tool when planning is on`.
+- [x] **Step 6:** record `core_lines`.
 
 ---
 
@@ -452,7 +452,7 @@ otherwise the highest-priority category among its calls, priority `modify > exec
 with categories: explore = `list_files, read_file, glob_files, grep_text, web_fetch, web_search`;
 modify = `write_file, edit_file`; execute = `shell, calculator`; plan = `update_plan`.
 
-- [ ] **Step 1: failing test**
+- [x] **Step 1: failing test**
 
 ```python
 """Trajectory metrics describe run shape with tool categories, not coding stages."""
@@ -486,9 +486,9 @@ class TrajectoryTests(unittest.TestCase):
                           record["stuck_reminders"]), (0, 0, 0))
 ```
 
-- [ ] **Step 2:** run; expect `ModuleNotFoundError: evals.trajectory` until Task 3.2 exists,
+- [x] **Step 2:** run; expect `ModuleNotFoundError: evals.trajectory` until Task 3.2 exists,
   then `KeyError: 'actions'`.
-- [ ] **Step 3: implementation** in `evals/verify.py` (`from ..context import window_share`):
+- [x] **Step 3: implementation** in `evals/verify.py` (`from ..context import window_share`):
 
 ```python
 ACTION_KINDS = {"list_files": "explore", "read_file": "explore", "glob_files": "explore",
@@ -530,7 +530,7 @@ and the returned dict gains:
 `mcnemar_p`; CLI `python -m agent_from_scratch.evals.trajectory RUN [OTHER_RUN]`;
 `evals.run --limits '{"planning": true}'`.
 
-- [ ] **Step 1: failing tests** (append)
+- [x] **Step 1: failing tests** (append)
 
 ```python
     def test_profile_reports_survival_mix_and_overflow(self):
@@ -558,8 +558,8 @@ and the returned dict gains:
         self.assertAlmostEqual(result["mcnemar_p"], 0.0625)
 ```
 
-- [ ] **Step 2:** run; expect failures on the missing functions.
-- [ ] **Step 3: implementation** `evals/trajectory.py`:
+- [x] **Step 2:** run; expect failures on the missing functions.
+- [x] **Step 3: implementation** `evals/trajectory.py`:
 
 ```python
 """Domain-agnostic trajectory profile and paired comparison of eval runs.
@@ -652,8 +652,8 @@ in `metadata.json`; `run_case(..., overrides=overrides)` applies
 `replace(agent.limits, **{**overrides, "max_iterations": task["max_iterations"]})` (the task's
 frozen budget wins); after the loop, `save(out / "trajectory.json", profile(records))`.
 
-- [ ] **Step 4:** rerun; full suite green.
-- [ ] **Step 5:** commit `feat: profile eval trajectories and pair runs with an exact McNemar test`.
+- [x] **Step 4:** rerun; full suite green.
+- [x] **Step 5:** commit `feat: profile eval trajectories and pair runs with an exact McNemar test`.
 
 ### Task 3.3: real-model ablation on the dev suite
 
@@ -689,7 +689,7 @@ Behaviour (thresholds scaled to a 20-call budget; paper: remind 5, stop 8 at 300
 - a reminder is appended after the batch's results, so no call/result pair is split; each
   increments `TurnResult.stuck_reminders`.
 
-- [ ] **Step 1: failing tests** (append to `TurnTests`)
+- [x] **Step 1: failing tests** (append to `TurnTests`)
 
 ```python
     def test_identical_successful_calls_get_one_reminder(self):
@@ -707,8 +707,8 @@ Behaviour (thresholds scaled to a 20-call budget; paper: remind 5, stop 8 at 300
         self.assertEqual((result.stop_reason, result.stuck_reminders), ("no_progress", 1))
 ```
 
-- [ ] **Step 2:** run; expect `stuck_reminders == 0` failures.
-- [ ] **Step 3: implementation.** `config.py`: `stuck_reminder_calls: int = 3  # remind after this many identical successful calls`.
+- [x] **Step 2:** run; expect `stuck_reminders == 0` failures.
+- [x] **Step 3: implementation.** `config.py`: `stuck_reminder_calls: int = 3  # remind after this many identical successful calls`.
 `agent.py` module constants:
 
 ```python
@@ -733,14 +733,14 @@ REPEATED_FAILURE.format(...)`. After the batch loop:
                     result.stuck_reminders += 1
 ```
 
-- [ ] **Step 4:** rerun and full suite; existing stop-at-3 tests stay green.
-- [ ] **Step 5:** commit `feat: remind before a stuck stop and flag repeated successful calls`.
+- [x] **Step 4:** rerun and full suite; existing stop-at-3 tests stay green.
+- [x] **Step 5:** commit `feat: remind before a stuck stop and flag repeated successful calls`.
 
 ### Task 4.2: post-write parse diagnostics for `.py` and `.json`
 
 **Files:** Modify `tools/files.py`. Test `tests/test_general_files.py`.
 
-- [ ] **Step 1: failing test**
+- [x] **Step 1: failing test**
 
 ```python
     def test_writes_report_parse_diagnostics_without_failing(self):
@@ -756,8 +756,8 @@ REPEATED_FAILURE.format(...)`. After the batch loop:
             self.assertIn("SyntaxError", broken.output["diagnostics"])
 ```
 
-- [ ] **Step 2:** run; expect `KeyError: 'diagnostics'`.
-- [ ] **Step 3: implementation** in `_FileTool._replace`, replacing the final `return`:
+- [x] **Step 2:** run; expect `KeyError: 'diagnostics'`.
+- [x] **Step 3: implementation** in `_FileTool._replace`, replacing the final `return`:
 
 ```python
         result = {"path": self._display(target), "bytes_written": len(data), "changed": True,
@@ -776,9 +776,9 @@ REPEATED_FAILURE.format(...)`. After the batch loop:
 (`import json`; append " Results include diagnostics when a written .py or .json file does not
 parse." to the `write_file` and `edit_file` descriptions.)
 
-- [ ] **Step 4:** rerun and full suite.
-- [ ] **Step 5:** commit `feat: report parse diagnostics after writing Python or JSON files`.
-- [ ] **Step 6:** record `core_lines`.
+- [x] **Step 4:** rerun and full suite.
+- [x] **Step 5:** commit `feat: report parse diagnostics after writing Python or JSON files`.
+- [x] **Step 6:** record `core_lines`.
 
 ---
 
@@ -793,7 +793,7 @@ parse." to the `write_file` and `edit_file` descriptions.)
 `{"path", "matches": ["path:line: text"], "truncated"}`. Both skip `ListFilesTool._IGNORED`
 directories and honour `restrict_to_workspace` for every match.
 
-- [ ] **Step 1: failing tests**
+- [x] **Step 1: failing tests**
 
 ```python
 """Search tools find files by name pattern and by content, skipping build/cache trees."""
@@ -835,8 +835,8 @@ class SearchTests(unittest.TestCase):
         self.assertTrue({"glob_files", "grep_text"} <= set(default_registry.schemas()))
 ```
 
-- [ ] **Step 2:** run; expect `ModuleNotFoundError`.
-- [ ] **Step 3: implementation** `tools/search.py`:
+- [x] **Step 2:** run; expect `ModuleNotFoundError`.
+- [x] **Step 3: implementation** `tools/search.py`:
 
 ```python
 """Find files by glob pattern or by regular expression over their contents."""
@@ -915,13 +915,58 @@ class GrepTextTool(_SearchTool):
 `tools/register.py`: import and add `GlobFilesTool(workspace=workspace)` and
 `GrepTextTool(workspace=workspace)` after `ListFilesTool`.
 
-- [ ] **Step 4:** rerun and full suite.
-- [ ] **Step 5:** commit `feat: add glob_files and grep_text search tools`.
-- [ ] **Step 6:** record `core_lines`; update the note's order-of-work section and
+- [x] **Step 4:** rerun and full suite.
+- [x] **Step 5:** commit `feat: add glob_files and grep_text search tools`.
+- [x] **Step 6:** record `core_lines`; update the note's order-of-work section and
   `evals/README.md` tool list; commit `docs: record the empirical-study stages and evidence`.
 
 ---
 
 ## Stage log
 
-Filled in during execution: tests, core line counts, commits and real-model evidence per stage.
+Executed September 21, 2026 on `claude/empirical-study`. Test command as above; Pyright
+reports 0 errors on every touched file (the baseline was also 0).
+
+| Stage | Commits | Tests | Core physical / code |
+|---|---|---:|---:|
+| start (`54e863d`) | — | 228 | 2,804 / 2,257 |
+| 1 — T4 elision | `816f41a`, `3b0e086` | 232 | 2,861 / 2,298 |
+| 2 — planning | `888a242`, `b98ed44` | 237 | 2,917 / 2,342 |
+| 3 — trajectory eval | `4681fbf` (eval-only) | 240 | 2,917 / 2,342 |
+| 4 — stuck + diagnostics | `e589e2a`, `24e9802` | 243 | 2,951 / 2,371 |
+| 5 — search tools | `586226d` | 246 | **3,027** / 2,434 |
+
+**Deviations from the plan text.**
+- `ContextState.elided` stores whole stub tool messages (`dict[int, ChatCompletionRequestMessage]`),
+  not content strings: narrowing on `role == "tool"` keeps the view typed without casts.
+- Task 1.2's summarizer test needed three batches: with one or two, the cut policy keeps
+  every batch verbatim and the elided message is never inside the summarized range.
+- Task 2.1 added a regression test that the compaction candidate carries the plan; it fails
+  without `plan=state.plan` (the publish fit check would measure a smaller prompt than the
+  actor receives).
+- Planning uses the tool description plus the per-request reminder; the paper's separate
+  planning system block (its Figure 15) repeats the same protocol and was not added.
+
+**Task 3.3 — not run.** This host has 3 GB of RAM and no GPU; the evaluator was OOM-killed
+(exit 137) while loading the 4.5 GB Qwen2.5-7B Q4_K_M weights, the same limit recorded in
+[context-memory.md](context-memory.md#real-model-diagnostic-not-run-and-why). The partial
+output directory was deleted. The three ablation commands above are the outstanding evidence.
+
+**Measured instead: the fixed-prompt cost of the new schemas** (exact counts with the project
+template and a vocab-only tokenizer, system prompt plus tool schemas plus a one-word request):
+
+| Registry | Tokens | Share of 5,952 usable |
+|---|---:|---:|
+| previous 8 tools | 2,044 | 34.3% |
+| + `glob_files`, `grep_text` | 2,400 (+356) | 40.3% |
+| + `update_plan` (planning on) | 2,601 (+201) | 43.7% |
+
+The missing-plan reminder adds 34 tokens per request. The paper never meets this cost at
+32k–128k. At 8k it means `elide_ratio=0.6` (3,571 tokens) is reached after only about 970
+tokens of conversation once all tools and planning are on: the ratio is measured on the whole
+prompt, fixed preamble included. Whether to measure B₁ on the conversation part only, trim
+tool descriptions, or expose fewer tools per task is a calibration question for the real-model
+run, not something these deterministic tests can decide.
+
+**Size.** 3,027 physical lines crosses the revised 3,000 alarm in context-memory.md, which
+projected about 2,950 *after* Stage 4A's `memory.py`. That review is now due before Stage 4A.

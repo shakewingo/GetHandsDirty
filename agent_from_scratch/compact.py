@@ -170,7 +170,7 @@ class Compactor:
                                      last_sent=state.last_sent, covered=boundary,
                                      summary=summary, instructions=instructions,
                                      elided=state.elided, plan=state.plan)
-            # Nothing touched by planning or summarizing feeds messages(), so a measurement
+            # Nothing touched by choosing the cut or summarizing feeds messages(), so a measurement
             # the caller took of this same view still describes it exactly.
             if before is None:
                 before = self.llm.measure_context(state.messages(), schemas)

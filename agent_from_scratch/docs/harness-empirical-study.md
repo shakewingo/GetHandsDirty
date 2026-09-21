@@ -173,6 +173,18 @@ only fixed shell commands, so it cannot measure Finding 5 or the post-edit diagn
 Every mechanism in steps 1–2 gets a switch in `AgentLimits`, so each one can be ablated and every
 run's `settings` records which were on.
 
+## Implementation status
+
+All five steps landed on `claude/empirical-study` (September 21, 2026); commits, deviations
+and measurements are in the [plan's stage log](EMPIRICAL_STUDY_PLAN.md#stage-log).
+Deterministic evidence: 246 unit tests (was 228), Pyright clean. **No real-model evidence yet**:
+this host cannot load the 7B model, so the T3/T4/T4+plan ablation is still outstanding.
+
+One measurement changes the calibration question. The new schemas grow the fixed prompt
+from 2,044 to 2,601 tokens (43.7% of the usable window, planning on). The paper set
+B₁ = 0.6 when the preamble was a small fraction of 32k–128k. Here the preamble alone takes
+most of the gap below B₁. Measure it on the real model before tuning the ratio.
+
 ## Size note
 
 HEAD is 2,804 physical core lines against the revised 3,000 alarm in

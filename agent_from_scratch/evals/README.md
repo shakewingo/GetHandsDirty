@@ -81,7 +81,8 @@ failure injection. Their pass count is kept separate from real-model capability 
 ## Stage 2A tools
 
 Implementation, boundaries, and measured model failures: [TOOLS_CHECKPOINT.md](TOOLS_CHECKPOINT.md).
-The default registry in `tools/register.py` now includes eight tools: calculator,
+The default registry in `tools/register.py` now includes ten tools (the eight below plus
+`glob_files` and `grep_text`; see [harness-empirical-study.md](../docs/harness-empirical-study.md)): calculator,
 list/read/write/edit files, general shell, web fetch and web search. Install the tool dependencies
 in the project's Python environment, then restart the REPL and use `/new` for a fresh session:
 
