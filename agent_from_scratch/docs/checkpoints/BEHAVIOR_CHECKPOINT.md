@@ -107,7 +107,7 @@ retain these failures for later context/post-training comparisons.
 
 ## Evidence and reproduction
 
-See [README](README.md) for commands. Local evidence under the repository root:
+See [EVAL_HISTORY](EVAL_HISTORY.md) for commands. Local evidence under the repository root:
 
 - `outputs/stage2b-baseline-20260915/`: metadata, 17 task records/workspaces/traces,
   automatic results/summary, `review.json` and `summary-reviewed.json`.

@@ -204,7 +204,7 @@ Our `SessionStore` keeps that distinction without Nanobot's channels, hooks, or 
 
 **Completion boundary:** Stage 1 is complete for this rescope; context management remains
 Stage 3. Persistence is single-writer and saved at turn end, without exact mid-turn crash resume.
-The [foundation checkpoint](../evals/FOUNDATION_CHECKPOINT.md) records 82 deterministic tests
+The [foundation checkpoint](checkpoints/FOUNDATION_CHECKPOINT.md) records 82 deterministic tests
 and real-model smoke results; those are historical evidence, not tests rerun by this document edit.
 A terminal answer still does not prove task success; premature stopping is an observed model gap.
 
@@ -237,7 +237,7 @@ Prompt rules describe expected behavior; runtime enforces paths, allowed operati
   On interruption, record a pending call as interrupted/unknown if no result exists;
   never imply it succeeded or automatically replay its side effects. Keep the REPL usable.
 
-Evidence: [tools checkpoint](../evals/TOOLS_CHECKPOINT.md). The initial restricted 2A
+Evidence: [tools checkpoint](checkpoints/TOOLS_CHECKPOINT.md). The initial restricted 2A
 implementation had 102 tests; the general-tool follow-up has separate mechanism/live checks.
 The fixed 2B suite below remains the historical behavioral baseline.
 
@@ -260,7 +260,7 @@ No async runtime, provider catalogue or interactive approval engine is added.
   unintended writes, requests/usage/latency, settings and code/fixture hashes. Missing usage
   stays unknown. Train/test skeletons are reserved; their task sets are not yet generated.
 
-**Evidence:** [2B checkpoint](../evals/BEHAVIOR_CHECKPOINT.md), **118 tests**, 17/17 scripted
+**Evidence:** [2B checkpoint](checkpoints/BEHAVIOR_CHECKPOINT.md), **118 tests**, 17/17 scripted
 solutions; prompt ablations improve **8/17 → 12/17 strict passes**, retaining all original passes.
 The full prompt fixes no-op behavior; nested edits, web JSON/recovery and two answer formats
 still fail. Two false claims and one unintended-write task remain. The selected prompt trades

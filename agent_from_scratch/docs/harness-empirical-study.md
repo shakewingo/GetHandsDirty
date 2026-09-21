@@ -30,14 +30,15 @@ analysis with an LLM judge (94.2% raw agreement, weighted κ 0.929 against three
 
 | Axis | Paper range | This agent |
 |---|---|---|
-| Context window | 32k–128k | **8,000** (`config.N_CTX`), 5,952 usable after the 2,048 output reserve |
+| Context window | 32k–128k | **32,768** (`config.N_CTX`, the model's native length), 30,720 usable after the 2,048 output reserve. It was 8,000 (5,952 usable) when this note was written and the sections below still quote that figure |
 | Model capability | 30B–550B | **Qwen2.5-7B-Instruct Q4_K_M** |
-| Context strategy | T0–T4 | **T3** — summarization only (`compact.py`), no elision |
-| Planning | on / off | **absent** |
-| Action space | predefined / bash-only | predefined tools; no content search or glob |
+| Context strategy | T0–T4 | **T4** — elision at 0.6, then summarization at 0.85 (`context.py`, `compact.py`); T3 by `elide_ratio: null` |
+| Planning | on / off | **opt-in** (`AgentLimits.planning`), off by default |
+| Action space | predefined / bash-only | predefined tools, now with `glob_files` and `grep_text` |
 
-Both axes are **outside the studied range, on the harder side**. Every conclusion below is
-labelled as direct evidence or as extrapolation to this corner.
+The window axis is now **inside the studied range**, at its tightest cell; the model axis is still
+**outside it, on the harder side**. Every conclusion below is labelled as direct evidence or as
+extrapolation to that corner.
 
 ## Finding 1 — context management matters most when the window is tight
 
@@ -177,13 +178,27 @@ run's `settings` records which were on.
 
 All five steps landed on `claude/empirical-study` (September 21, 2026); commits, deviations
 and measurements are in the [plan's stage log](EMPIRICAL_STUDY_PLAN.md#stage-log).
-Deterministic evidence: 246 unit tests (was 228), Pyright clean. **No real-model evidence yet**:
-this host cannot load the 7B model, so the T3/T4/T4+plan ablation is still outstanding.
+Deterministic evidence: 246 unit tests (was 228), Pyright clean; 250 after the eval work below.
 
-One measurement changes the calibration question. The new schemas grow the fixed prompt
-from 2,044 to 2,601 tokens (43.7% of the usable window, planning on). The paper set
-B₁ = 0.6 when the preamble was a small fraction of 32k–128k. Here the preamble alone takes
-most of the gap below B₁. Measure it on the real model before tuning the ratio.
+**Real-model evidence (September 21, 2026, 32k window, one greedy run per condition).** Full
+tables and caveats are in the plan's
+[Task 3.3 section](EMPIRICAL_STUDY_PLAN.md#task-33--run-at-the-32k-window). In short:
+
+- **Finding 2 holds as efficiency.** On a pressure suite whose files outgrow the window, T4
+  removed all summary calls (4 to 0), cut the peak prompt from about 78% to 54% of the usable
+  window, and took 35% less wall clock and 28% fewer tokens than T3, with no accuracy loss seen
+  (`answer_found` 4/4 vs 3/4; the one difference was T3's summary losing a code). Overflow did not
+  discriminate: no condition reached `context_limit` at 32k.
+- **Finding 4 shows its cost side only.** Planning added 34% requests, 77% tokens and 2.5× wall
+  clock on the dev suite for 8/17 vs 9/17, and gained nothing on the pressure suite.
+- **The 17-task dev suite cannot test any of this at 32k.** It peaks at 8% of the usable window,
+  so T3 and T4 were the same experiment. Use `evals/pressure.py` for context work.
+- Still unmeasured: Finding 5 (search tools) and any effect size that survives more than one seed.
+
+One earlier measurement changes the calibration question. The new schemas grow the fixed prompt
+from 2,044 to 2,601 tokens (43.7% of the 8k usable window, planning on). The paper set
+B₁ = 0.6 when the preamble was a small fraction of 32k–128k. At 8k the preamble alone took
+most of the gap below B₁; at 32k it is 8.5% and the question mostly goes away.
 
 **Window change.** `N_CTX` moved from 8,000 to 32,768 on September 21, 2026. The 8k figures in
 this note are kept as they were; what each becomes at 32k is recorded in the plan's

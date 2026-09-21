@@ -1,4 +1,9 @@
-# Tiny agent development checks
+# Tiny agent development checks (history)
+
+> **Historical.** This was `evals/README.md` until September 21, 2026. The current entry point is
+> [evals/README.md](../../evals/README.md). Two things it describes have moved: `evals.foundation`
+> (the Stage 1 read-coverage CLI) was removed, and `measure` now lives in `evals/verify.py`; recover
+> the CLI from git at `5c02cef`. `evals.tools_smoke` is now `examples.tools_smoke`.
 
 Current tools and measured limits: [TOOLS_CHECKPOINT.md](TOOLS_CHECKPOINT.md).
 Earlier loop/session evidence: [FOUNDATION_CHECKPOINT.md](FOUNDATION_CHECKPOINT.md).
@@ -82,7 +87,7 @@ failure injection. Their pass count is kept separate from real-model capability 
 
 Implementation, boundaries, and measured model failures: [TOOLS_CHECKPOINT.md](TOOLS_CHECKPOINT.md).
 The default registry in `tools/register.py` now includes ten tools (the eight below plus
-`glob_files` and `grep_text`; see [harness-empirical-study.md](../docs/harness-empirical-study.md)): calculator,
+`glob_files` and `grep_text`; see [harness-empirical-study.md](../harness-empirical-study.md)): calculator,
 list/read/write/edit files, general shell, web fetch and web search. Install the tool dependencies
 in the project's Python environment, then restart the REPL and use `/new` for a fresh session:
 
@@ -151,8 +156,8 @@ Both tools are synchronous. The demo requires a POSIX main thread (macOS/Linux).
 Reproduce the real-model tool smoke, using a new output directory each time:
 
 ```sh
-python -m agent_from_scratch.evals.tools_smoke --output outputs/tools-smoke-new
-python -m agent_from_scratch.evals.tools_smoke --output outputs/tools-conversation-new --conversation
+python -m agent_from_scratch.examples.tools_smoke --output outputs/tools-smoke-new
+python -m agent_from_scratch.examples.tools_smoke --output outputs/tools-conversation-new --conversation
 ```
 
 The first command runs three autonomous tasks; the second uses explicit user turns
@@ -252,7 +257,7 @@ Blocked entries stay in the trace but are excluded from model-call and usage met
 Behavioral metrics report zero usage for zero actual calls; actual calls with missing usage
 remain unknown. Completed tool effects and raw results are retained, while unsuccessful
 turns remain excluded from session replay. See the
-[fit enforcement notes](../docs/CONTEXT_STATE_DESIGN.md#implemented-request-fit-enforcement).
+[fit enforcement notes](../CONTEXT_STATE_DESIGN.md#implemented-request-fit-enforcement).
 No success-response or parse-error side files
 are created. Session records remain version 1 and contain replayable messages,
 without raw backend envelopes. Old evidence files are not rewritten.

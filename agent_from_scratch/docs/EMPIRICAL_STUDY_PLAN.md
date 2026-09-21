@@ -657,7 +657,12 @@ frozen budget wins); after the loop, `save(out / "trajectory.json", profile(reco
 
 ### Task 3.3: real-model ablation on the dev suite
 
-Three fresh runs of the 17 dev tasks, then profiles and pairwise comparisons:
+- [x] Run September 21, 2026 on a 16 GB Apple-silicon Mac at `N_CTX = 32768`; results and the
+  follow-up pressure suite are in the [stage log](#task-33--run-at-the-32k-window).
+
+Three fresh runs of the 17 dev tasks, then profiles and pairwise comparisons. The commands below
+are the original wording; the entry point is now `python -m agent_from_scratch.evals dev` and
+`... evals compare` (same flags), and outputs go outside the package:
 
 ```sh
 python -m agent_from_scratch.evals.run --output outputs/study-t3 --limits '{"elide_ratio": null}'
@@ -668,10 +673,12 @@ python -m agent_from_scratch.evals.trajectory outputs/study-t4 outputs/study-t4-
 ```
 
 Expected and acceptable: T3 vs T4 may be **identical** — this suite reads 1 KiB windows and
-may never cross 0.6 of 5,952 tokens; that would be recorded as "no pressure reached", not as
+may never cross 0.6 of the usable window; that would be recorded as "no pressure reached", not as
 evidence either way. Planning runs under the suite's frozen per-task `max_iterations` (≤ 20),
 so it measures planning's cost at fixed budget. Record results in the stage log; no
-significance claims at n = 17.
+significance claims at n = 17. **Outcome:** exactly this. At 32k the suite peaks at 8% of the
+usable window, so T3 and T4 are the same experiment; a second suite, `evals/pressure.py`, was
+added to reach the triggers.
 
 ---
 
@@ -947,10 +954,11 @@ reports 0 errors on every touched file (the baseline was also 0).
 - Planning uses the tool description plus the per-request reminder; the paper's separate
   planning system block (its Figure 15) repeats the same protocol and was not added.
 
-**Task 3.3 — not run.** This host has 3 GB of RAM and no GPU; the evaluator was OOM-killed
-(exit 137) while loading the 4.5 GB Qwen2.5-7B Q4_K_M weights, the same limit recorded in
-[context-memory.md](context-memory.md#real-model-diagnostic-not-run-and-why). The partial
-output directory was deleted. The three ablation commands above are the outstanding evidence.
+**Task 3.3 — first attempt, not run.** The first host had 3 GB of RAM and no GPU; the evaluator
+was OOM-killed (exit 137) loading the 4.5 GB Qwen2.5-7B Q4_K_M weights, the same limit recorded in
+[context-memory.md](context-memory.md#real-model-diagnostic-not-run-and-why). The partial output
+directory was deleted. The run below happened later, on a 16 GB Apple-silicon Mac (Metal,
+`n_gpu_layers=-1`, `n_ctx=32768`, about 6 GB resident), which loads the model without trouble.
 
 **Measured instead: the fixed-prompt cost of the new schemas** (exact counts with the project
 template and a vocab-only tokenizer, system prompt plus tool schemas plus a one-word request):
@@ -980,7 +988,7 @@ usable):
 | 8k conclusion | At 32k |
 |---|---|
 | Outside the paper's range: tighter than its tightest 32k budget | **Inside** it, at the tightest cell, where management helped most (+35.7 points); the window axis becomes direct evidence, the 7B model axis stays extrapolation |
-| The existing compaction trigger (`remaining < 768`) sits at ≈ 0.87 of usable, the paper's B₂ | The same absolute headroom would fire at ≈ 0.975, so `compact_headroom_tokens` was replaced by **`compact_ratio = 0.85`** (≈ 26,112 tokens at 32k), a share like `elide_ratio`; the hard fit gate (`context_margin_tokens`) still triggers compaction when the share is unknown. Summarizer fit at 32k is unmeasured |
+| The existing compaction trigger (`remaining < 768`) sits at ≈ 0.87 of usable, the paper's B₂ | The same absolute headroom would fire at ≈ 0.975, so `compact_headroom_tokens` was replaced by **`compact_ratio = 0.85`** (≈ 26,112 tokens at 32k), a share like `elide_ratio`; the hard fit gate (`context_margin_tokens`) still triggers compaction when the share is unknown. Summarizer fit at 32k was unmeasured; now measured, 4 of 4 summary attempts applied on the pressure suite |
 | B₁ = 0.6 ≈ 3,571 tokens | ≈ 18,432 tokens |
 | Fixed preamble 2,601 tokens (all tools + planning) = 43.7% of usable; B₁ reached after ≈ 970 conversation tokens | 8.5% of usable; B₁ after ≈ 15,800 conversation tokens. This preamble cost was the reason for the change |
 | One 16,000-character `read_file` can take over half the usable window | ≈ 13%; the tool cap is no longer an urgent knob |
@@ -988,9 +996,172 @@ usable):
 | KV cache 0.44 GiB; model ≈ 5.3 GB resident | KV cache 1.75 GiB (28 layers × 4 KV heads × 128 × f16 = 56 KiB/token); ≈ 6.7 GB resident |
 
 Consequences: the Stage 2B **12/17 baseline was measured at 8k and is not comparable**; the
-Task 3.3 ablation must first rerun a 32k baseline. `examples/compact_demo.py` and
+Task 3.3 ablation had to rerun a 32k baseline, which scored **9/17** (see
+[below](#task-33--run-at-the-32k-window)). `examples/compact_demo.py` and
 `examples/continuation_demo.py` pin `n_ctx=4096`, so they still create pressure. Every run records
 the backend's effective `n_ctx` in `settings`, so 8k and 32k evidence stay distinguishable.
 
 **Size.** 3,027 physical lines crosses the revised 3,000 alarm in context-memory.md, which
 projected about 2,950 *after* Stage 4A's `memory.py`. That review is now due before Stage 4A.
+Stage 6 below changed only `evals/`, `examples/`, `tests/` and docs, so the core count is unchanged.
+
+### Task 3.3 — run at the 32k window
+
+Run September 21, 2026: greedy decoding (temperature 0), seed 11, **one run per condition**,
+16 GB Apple-silicon Mac, `n_ctx = 32768`. Source was HEAD `5c02cef` plus uncommitted edits that do
+not change behavior (the `window_share` to `window_share_ratio` rename, comments, one config field
+moved); the core-file hashes are identical across all 11 runs. Evidence: `outputs/study-*`
+(`study-t3`, `-t4`, `-t4-plan` for the dev suite; `study-pressure-*` and `study-two-*` for the
+pressure suite; each has `metadata.json`, `results.json`, `trajectory.json` and per-task traces).
+The conditions are T3 (`elide_ratio: null`, summaries only), T4 (the default, elision then
+summaries) and T4+plan (`planning: true`).
+
+**What was missing, and its estimate.** The plan predicted "no pressure reached" for the dev
+suite, and that was right, so the ablation could not test the mechanisms it was written for. The
+suite needed evidence that outgrows the window. Sizing it used the real tokenizer (vocab-only
+load): a 14,000-character file is 2,984 tokens, so a 15,000-character read costs about 3k tokens
+and 0.6 of the usable window (18,432) falls at the 6th read and 0.85 (26,112) at the 8th. That
+sets 9 files of 15,000 characters per task. Cost, measured: a dev run takes 1.6 to 4.4 minutes;
+a 4-task pressure run takes 17 to 27 minutes, because each read adds ~3k tokens of prefill and
+elision invalidates the cached prefix; the full ablation is about 70 minutes.
+
+**Dev suite (17 tasks), Task 3.3 as written.**
+
+| Condition | Passed | Model requests | Total tokens | Wall clock | Peak prompt / usable | Elided | Plan updates |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| T3 | 9/17 | 43 | 52,755 | 96 s | 7.3% | 0 | 0 |
+| T4 | 9/17 | 44 | 55,310 | 105 s | 7.3% | 0 | 0 |
+| T4 + plan | 8/17 | 59 | 97,798 | 265 s | 8.0% | 0 | 12 |
+
+- **T3 vs T4 is one experiment.** No run exceeded 8% of the usable window, elision never fired
+  and no summary was requested. Paired: 9 both, 0 only-T3, 0 only-T4, 8 neither, p = 1.0. One task
+  (`nested_config_update`) took 4 requests in T3 and 5 in T4 with elision at zero in both, so
+  identical settings do not reproduce exactly. That is the noise floor at n = 17.
+- **Planning costs and shows no benefit at this budget.** T4 vs T4+plan: 7 both, 2 only-T4
+  (`second_chunk_code`, `check_fix_fault`), 1 only-plan (`flat_config_update`), 7 neither, p = 1.0.
+  It used 34% more requests, 77% more tokens and 2.5× the wall clock. Two tasks
+  (`already_correct`, `web_release_clean`) ran to `max_iterations` with 8 requests each, up from 3.
+  The model made 12 successful plan updates over 17 tasks.
+- **The 12/17 to 9/17 drop is not caused by the window, and is not a protocol bug.** No run got
+  near 8k, let alone 32k. Three tasks flipped from pass to fail against the selected Stage 2B
+  prompt: `full_document` (right value in a sentence, `The END_MARKER value is FINISH-LIME.`, so a
+  format slip), `flat_config_update` (wrong artifact written) and `already_correct` (an extra
+  `report.json` write on a no-change task). All three are model behavior under the Stage 3A prompt
+  (`9ea0f2c`) and later harness changes, and no verifier or tool error is involved. The
+  current-code baseline is 9/17.
+
+**Pressure suite (4 tasks, `evals/pressure.py`).** The tasks give the model only `list_files`,
+`read_file` and `calculator` over 9 files of about 15,000 characters. `find_report_7` and `_9`
+hide one code in that file, `follow_chain` names the next file at random, and `find_two_reports`
+hides one code in file 3 and one in file 8, so the first has to survive being evicted. `passed`
+needs the exact format; `answer_found` (every expected code appears anywhere in the answer) shows
+whether the evidence survived.
+
+| Task | Cond. | `passed` | `answer_found` | Summaries | Elided | Peak prompt / usable | Seconds | Tokens |
+|---|---|:-:|:-:|---:|---:|---:|---:|---:|
+| find_report_7 | T3 | no | yes | 1 | 0 | 78.6% | 382 | 123,845 |
+| | T4 | no | yes | 0 | 4 | 55.2% | 216 | 87,052 |
+| | T4+plan | yes | yes | 0 | 4 | 57.1% | 240 | 108,121 |
+| find_report_9 | T3 | no | yes | 1 | 0 | 78.2% | 432 | 152,147 |
+| | T4 | no | yes | 0 | 7 | 54.8% | 286 | 110,368 |
+| | T4+plan | no | yes | 0 | 8 | 57.2% | 323 | 123,639 |
+| follow_chain | T3 | yes | yes | 1 | 0 | 75.5% | 372 | 142,536 |
+| | T4 | yes | yes | 0 | 6 | 52.8% | 239 | 102,924 |
+| | T4+plan | no | no | 0 | 0 | 54.6% | 120 | 73,384 |
+| find_two_reports | T3 | no | **no** | 1 | 0 | 78.1% | 439 | 150,518 |
+| | T4 | no | yes | 0 | 7 | 55.1% | 307 | 111,771 |
+| | T4+plan | no | yes | 0 | 7 | 56.5% | 328 | 117,772 |
+| **Total** | T3 | 1/4 | 3/4 | 4 | 0 | 75–79% | 1,625 | 569,046 |
+| | T4 | 1/4 | 4/4 | 0 | 24 | 53–55% | 1,049 | 412,115 |
+| | T4+plan | 1/4 | 3/4 | 0 | 19 | 55–57% | 1,011 | 422,916 |
+
+Every run finished with `final_response`; the `context_limit` rate is 0 in all three conditions.
+
+**Conclusions at 32k.**
+
+1. **Elision does what the design promised.** Against T3, T4 removed every summary call (4 to 0),
+   cut the peak prompt from about 78% to about 54% of the usable window, and took 35% less wall
+   clock and 28% fewer tokens. Summaries still worked when needed: 4 of 4 T3 attempts applied, at
+   the 0.85 trigger (about 26k tokens). So the 8k plan's worry that a summary would not fit the model
+   is resolved at 32k, and elision is the cheaper way to relieve the same pressure.
+2. **No accuracy cost from elision was seen, including where it should hurt.** In
+   `find_two_reports` the model still had to return the code from file 3 after seven elided
+   reads. Under T4 it did (both codes, though in reversed order, so the strict format check
+   failed). Under T3 the summary lost it: the answer named `UD7SPE` correctly and invented
+   `HJ8923` for file 3. That is one task, but it points the way the paper reports (T4 at least
+   matches T3).
+3. **Overflow did not discriminate.** With a 30,720-token window and 3k-token reads, all nine
+   files nearly fit, so the paper's main mechanism (T0 overflow) is not reproduced: even T3
+   never hit `context_limit`. Its value here is efficiency, not survival.
+4. **Strict passes are 1/4 in every condition and mostly measure format.** The 7B model often
+   writes a sentence around the answer when told to reply with only the code (for example
+   `find_report_7` under T3 and T4, and `find_report_9` under all three). Read `answer_found`
+   first: 3/4, 4/4, 3/4.
+5. **Planning again shows cost and no gain.** T4+plan tied on strict passes but lost
+   `follow_chain`: it stopped after four hops and reported a file name as the "final answer".
+   Its totals look like T4's only because that task ended after 120 s; on the other three tasks
+   it was 10% slower (891 s vs 809 s). Its one extra strict pass, `find_report_7`, is a format
+   difference, not extra evidence.
+6. **Limits.** Four tasks, one seed, one run per condition. No pairwise difference is
+   significant, and the McNemar comparison T3 vs T4 has 1 both and 3 neither (p = 1.0). Timings
+   include a few noisy runs. The effects in point 1 are large enough to read as direction; the
+   rest is anecdote.
+
+**A dropped task.** The first pressure suite had `collect_tags`: nine files, one `TAG:` line
+each, report all nine. The model asked for all nine reads in one response, exceeded the
+eight-call batch limit and answered with invented tags. With a "one at a time" prompt it still
+read a single file and answered from filler lines (2 requests, 12% of the window). That is a
+capability limit unrelated to context, so it was replaced by `find_two_reports`. Its runs are kept
+in `outputs/study-pressure-*` and `outputs/study-collect-*` and are not counted above.
+
+**Priorities: what to do before Stage 8, and what to leave until later.** (Decided September 21,
+after Task 3.3; the aim is to reach Stages 8 and 9–11 next.) Two filters sort the open items.
+Does the Stage 8 gate depend on it? Is it specific to the 7B model? Stage 9 swaps the training
+control to a 3–4B checkpoint on vLLM and re-runs the baseline, so 7B-specific tuning is thrown
+away. Stage 8's tasks are short (2–6 tool interactions, at most 8% of a 32k window here), so
+elision, summaries and planning are inert in the primary weight comparison anyway.
+
+| Item | When | Why |
+|---|---|---|
+| Answer-format policy in the verifiers: score artifacts and evidence first, record exact format separately (the `answer_found` pattern) | **Now**, inside Stage 8 | Format slips are the most common failure in both suites (one of three dev regressions, two of three pressure failures). Left unsplit, an SFT gain that is only format learning would read as a capability gain in Stage 11 |
+| Stage 8 benchmark with skeleton-split generated variants on the **current** tool registry (`edit_file`, `glob_files`, `grep_text`) | **Now** | The dev suite cannot exercise the new tools, and its tasks influenced prompt choices, so they cannot serve as the reserved test set. `pressure.py` is the pattern: generate from a seed, store nothing large. Reserve the test skeletons first |
+| Freeze the mechanism settings as untuned defaults: `elide_ratio` 0.6, `compact_ratio` 0.85, planning off, memory off | **Now** | Stage 8 must freeze compact policy before comparing weights. Record them as defaults, not as calibrated values |
+| Keep `pressure` (v2) as the separate long-context harness evaluation; log the T3 summary that lost a code in [context-memory.md](context-memory.md) | **Now**, small | Stage 8 asks for long-session and compact evaluations to stay separate from the main benchmark. Task 3.3 already produced a retained/lost-facts example |
+| Real-model `continuation_demo.py` and `compact_demo.py` (Stage 3's one outstanding gap) | **Now**, about an hour | This host can hold the model now; the demos pin `n_ctx=4096`, so they create pressure without long fixtures |
+| Calibrate `elide_ratio` (a lower and a higher value) | Later, on the new checkpoint | Model- and window-specific; the checkpoint swap invalidates a 7B calibration |
+| Multi-seed noise (Metal greedy decoding differed on `nested_config_update`) | Later, in Stage 8's 3-seed protocol on vLLM | The rollout backend and sampling change; noise measured on Metal does not transfer |
+| Planning ablation (cost with no gain here; one early stop, two `max_iterations`) | Later, on the Stage 8 benchmark with the new checkpoint | A 4B model may react differently, and 17 tasks cannot resolve it. Keep `planning=False` in the freeze |
+| More and harder elision-hostile pressure tasks | Later; a Stage 11 regression check | The 7B model cannot carry several facts across reads (see `collect_tags`), so the test is uninformative until the model can |
+| Search-tool effect (paper's Finding 5) | Later; comes free from the new benchmark's tool set | No separate work |
+
+Settled by triage, no work left: the 12/17 to 9/17 drop (three model-behavior flips, no
+protocol bug), so the Stage 8 gate "fix protocol/evaluator bugs before training" holds for these
+tasks.
+
+**Ordering note for Stage 8.** Its last bullet runs the trainable checkpoint as the base control,
+but the vLLM backend and that checkpoint arrive in Stage 9's first bullet. Build and freeze the
+benchmark and verifiers first, then do the backend and re-baseline before calling the freeze
+manifest complete. The 7B baseline in between only debugs the pipeline.
+
+**Open decision: Stage 4A–4B memory.** `STAGE.md` says to finish it before the Stage 8 freeze.
+The post-training plan already runs the primary weight comparisons with memory disabled or
+identical and read-only, so memory can move to after Stage 11 with the freeze recording
+"memory off". If it does, keep the memory tools out of the frozen registry (they change the
+schemas and so the prompt), and amend `STAGE.md`'s "complete it before the Stage 8 freeze" line
+and Stage 8's memory bullets.
+
+## Stage 6 — evals at the current window
+
+Eval-only changes on top of Task 3.3 (no core lines). 250 tests pass (was 246); the new
+`tests/test_pressure.py` covers determinism, single-window reads, where each answer sits and
+scoring through `run_case`:
+
+| Change | Where |
+|---|---|
+| `python -m agent_from_scratch.evals {dev,pressure,compare}` single entry point | `evals/__main__.py` |
+| Shared run setup (`open_run`, `parse_limits`) and `--n-ctx` for the dev and pressure suites | `evals/run.py` |
+| Window-pressure suite with generated fixtures, `answer_found` and its tests | `evals/pressure.py`, `tests/test_pressure.py` |
+| Removed the Stage 1 read-coverage CLI; `digest` and `measure` moved into `verify.py` | `evals/foundation.py` deleted |
+| Checkpoint docs and the old README moved out of the script folder | `docs/checkpoints/` |
+| Live-network tool demo moved beside the other demos | `examples/tools_smoke.py` |
+| New start-here README | `evals/README.md` |

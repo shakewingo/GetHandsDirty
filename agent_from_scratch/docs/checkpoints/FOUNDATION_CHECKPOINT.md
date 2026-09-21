@@ -2,7 +2,7 @@
 
 历史记录：下文的“当前修订”指 9 月 13 日检查点，测试数量和工具协议也仅适用于该版本。
 现行工具与 schema 见 [TOOLS_CHECKPOINT.md](TOOLS_CHECKPOINT.md)，阶段状态见
-[STAGE.md](../docs/STAGE.md)。
+[STAGE.md](../STAGE.md)。
 
 本次 review 修订相对于 c9b30c8，代码留在工作区供审阅。
 上一版实验和设计保留在 git 历史与本地报告归档，本表只描述当前修订。
@@ -56,4 +56,4 @@ partial 的读取正确、摘要相关，但回答额外复述源码，仍偏长
 
 证据：outputs/foundation-review-20260913/ 中的 smoke、repeat、review.json、
 size.json、tests.log；每组 metadata.json 记录设置、schema和源码/fixture hash。
-复跑方式见 [README.md](README.md)。
+复跑方式见 [EVAL_HISTORY.md](EVAL_HISTORY.md)。
