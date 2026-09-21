@@ -216,6 +216,11 @@ local, so zero. Stable task IDs let `compare` pair runs with the exact McNemar t
 Web tasks, memory, train skeletons and data collection (Stage 9), the vLLM backend (Stage 9),
 and any change to core (`agent.py`, `context.py`, `compact.py`).
 
+Web is deferred, not dropped: once the generator exists, add one or two web skeletons (a
+truncated-page stopping case and a 503 recovery case) behind a small recorded-replay wrapper.
+Adding skeletons after the freeze changes the task list, so they enter as a new benchmark
+version with its own manifest, not as an edit to this one.
+
 ## Traceability to STAGE.md Stage 8
 
 | Stage 8 bullet | Where |
