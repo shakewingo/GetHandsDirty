@@ -21,7 +21,9 @@ MODEL_PATH = (
 # Decoding defaults, matching what every entry point passes today.
 TEMPERATURE = 0.0
 MAX_TOKENS = 2048
-N_CTX = 8000
+# Qwen2.5-7B's native window. The GGUF advertises 131072, which needs YaRN scaling
+# that is not configured here, and would also allocate a 7 GiB KV cache up front.
+N_CTX = 32768
 N_GPU_LAYERS = -1
 
 MAX_TOOL_CALLS_PER_RESPONSE = 8
@@ -37,7 +39,7 @@ class AgentLimits:
     max_tool_calls_per_response: int = MAX_TOOL_CALLS_PER_RESPONSE
 
     context_margin_tokens: int = 256  # token margin to reserve in the context window
-    compact_headroom_tokens: int = 512  # try before the actor reaches the hard fit gate
+    compact_ratio: float = 0.85  # summarize at this share of the usable window, before the hard fit gate
     max_compact_calls: int = 4  # also charged against max_iterations; one call per attempt
     summary_max_tokens: int = 512  # summarizer output reserve, independent of the actor's
     max_summary_calls_per_attempt: int = 2  # one corrective retry at the same cut

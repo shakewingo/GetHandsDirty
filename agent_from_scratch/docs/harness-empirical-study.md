@@ -185,6 +185,10 @@ from 2,044 to 2,601 tokens (43.7% of the usable window, planning on). The paper 
 B₁ = 0.6 when the preamble was a small fraction of 32k–128k. Here the preamble alone takes
 most of the gap below B₁. Measure it on the real model before tuning the ratio.
 
+**Window change.** `N_CTX` moved from 8,000 to 32,768 on September 21, 2026. The 8k figures in
+this note are kept as they were; what each becomes at 32k is recorded in the plan's
+[8k-window conclusions](EMPIRICAL_STUDY_PLAN.md#8k-window-conclusions-superseded-by-n_ctx--32768).
+
 ## Size note
 
 HEAD is 2,804 physical core lines against the revised 3,000 alarm in

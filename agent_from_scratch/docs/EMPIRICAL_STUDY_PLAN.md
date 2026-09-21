@@ -968,5 +968,29 @@ prompt, fixed preamble included. Whether to measure B₁ on the conversation par
 tool descriptions, or expose fewer tools per task is a calibration question for the real-model
 run, not something these deterministic tests can decide.
 
+### 8k-window conclusions, superseded by `N_CTX = 32768`
+
+Everything above was designed and measured at `N_CTX = 8000` (5,952 usable tokens after the
+2,048 output reserve). On September 21, 2026 the window moved to **32,768**, the model's
+native length (GGUF metadata says 131,072, but only with YaRN scaling, which is not
+configured). `MAX_TOKENS` stays 2,048: it bounds full-file `write_file` content, and at 32k it
+is 6% of the window. These are the 8k conclusions and what each becomes at 32k (30,720
+usable):
+
+| 8k conclusion | At 32k |
+|---|---|
+| Outside the paper's range: tighter than its tightest 32k budget | **Inside** it, at the tightest cell, where management helped most (+35.7 points); the window axis becomes direct evidence, the 7B model axis stays extrapolation |
+| The existing compaction trigger (`remaining < 768`) sits at ≈ 0.87 of usable, the paper's B₂ | The same absolute headroom would fire at ≈ 0.975, so `compact_headroom_tokens` was replaced by **`compact_ratio = 0.85`** (≈ 26,112 tokens at 32k), a share like `elide_ratio`; the hard fit gate (`context_margin_tokens`) still triggers compaction when the share is unknown. Summarizer fit at 32k is unmeasured |
+| B₁ = 0.6 ≈ 3,571 tokens | ≈ 18,432 tokens |
+| Fixed preamble 2,601 tokens (all tools + planning) = 43.7% of usable; B₁ reached after ≈ 970 conversation tokens | 8.5% of usable; B₁ after ≈ 15,800 conversation tokens. This preamble cost was the reason for the change |
+| One 16,000-character `read_file` can take over half the usable window | ≈ 13%; the tool cap is no longer an urgent knob |
+| Summary calls spend `max_iterations` slots, so avoiding them matters | Unchanged, but pressure (hence elision and summaries) should now be rare in the 17-task suite |
+| KV cache 0.44 GiB; model ≈ 5.3 GB resident | KV cache 1.75 GiB (28 layers × 4 KV heads × 128 × f16 = 56 KiB/token); ≈ 6.7 GB resident |
+
+Consequences: the Stage 2B **12/17 baseline was measured at 8k and is not comparable**; the
+Task 3.3 ablation must first rerun a 32k baseline. `examples/compact_demo.py` and
+`examples/continuation_demo.py` pin `n_ctx=4096`, so they still create pressure. Every run records
+the backend's effective `n_ctx` in `settings`, so 8k and 32k evidence stay distinguishable.
+
 **Size.** 3,027 physical lines crosses the revised 3,000 alarm in context-memory.md, which
 projected about 2,950 *after* Stage 4A's `memory.py`. That review is now due before Stage 4A.

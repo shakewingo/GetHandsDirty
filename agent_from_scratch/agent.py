@@ -240,8 +240,11 @@ class Agent:
                         and state.elide(self.limits.elide_min_chars)):
                     prepared_messages = state.messages()
                     budget = self.llm.measure_context(prepared_messages, schemas)
-                if compact or not context_fits(budget, self.limits.context_margin_tokens
-                                               + self.limits.compact_headroom_tokens):
+                    share = window_share(budget)
+                # A share, like elision, so the trigger keeps its meaning at any window size.
+                # The hard fit rule still triggers when the share is unknown or margin is short.
+                if (compact or not context_fits(budget, self.limits.context_margin_tokens)
+                        or (share is not None and share >= self.limits.compact_ratio)):
                     compact = False
                     # The actor's request is deliberately not appended yet: it precedes no
                     # summary in the trace, and the compactor reserves the turn's last slot

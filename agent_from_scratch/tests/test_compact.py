@@ -555,5 +555,20 @@ class CompactTests(unittest.TestCase):
         self.assertTrue(self.compact())
         self.assertIn("[pending] Report 7", seen[-1][-1]["content"])  # the published candidate
 
+    def test_summary_trigger_is_a_share_of_the_usable_window(self):
+        # 30,720 usable tokens: 26,000 is 0.846 and 26,200 is 0.853, both far from the fit gate.
+        for prompt, purposes in ((26_000, ["agent"]), (26_200, ["compact", "agent"])):
+            def measure(messages, schemas, prompt=prompt, **kwargs):
+                small = (messages[0]["content"].startswith("Summarize the supplied")
+                         or any((m.get("content") or "").startswith("[Conversation summary:")
+                                for m in messages))
+                count = 1000 if small else prompt
+                return {"count_method": "exact", "prompt_tokens": count, "window_tokens": 32768,
+                        "response_reserve": 2048, "remaining_tokens": 32768 - 2048 - count}
+            with self.subTest(prompt=prompt):
+                self.model.measure_context.side_effect = measure
+                result = Agent(self.model).run_turn("Calculate", self.raw[1:3])
+                self.assertEqual([q.purpose for q in result.model_requests], purposes)
+
 if __name__ == "__main__":
     unittest.main()
