@@ -8,7 +8,7 @@ from pathlib import Path
 
 from loguru import logger
 from ..agent import Agent
-from ..examples.tools_demo import demo_registry
+from .tools_demo import demo_registry
 from ..llm import LLM
 from ..session import SessionStore
 from ..tools.web import WebFetchTool

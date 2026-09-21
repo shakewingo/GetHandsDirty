@@ -1,10 +1,80 @@
 """Fixed post-run verifiers. Never called by the agent or used to generate feedback."""
 
+import hashlib
 import json
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from .foundation import digest, measure
+from ..context import window_share_ratio
+
+
+def digest(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def measure(result, original: bytes, relative_path: str, history_length: int) -> dict:
+    """Score completed traces against a frozen fixture; never steer the runtime."""
+    requests = [q for q in result.model_requests if q.status != "blocked"]
+    actors = [q for q in requests if q.purpose == "agent"]
+    summaries = [q for q in requests if q.purpose == "compact"]
+    observations, chunks, calls = [], [], {}
+    covered = bytearray(len(original))
+    matches = True
+    for message in result.messages[2 + history_length:]:
+        if message["role"] == "assistant":
+            for call in message.get("tool_calls", []):
+                calls[call["id"]] = call["function"]
+        if message["role"] != "tool":
+            continue
+        observation = json.loads(message["content"])
+        observations.append(observation)
+        function = calls.pop(message["tool_call_id"], None)
+        if not observation["ok"] or observation["tool_name"] != "read_file":
+            continue
+        chunk = observation["output"]
+        if chunk["path"] != relative_path:
+            continue
+        chunks.append(chunk)
+        data = chunk["content"].encode("utf-8")
+        offset = chunk["offset"]
+        end = offset + len(data)
+        valid = (function is not None and function["name"] == "read_file"
+                 and observation["call_id"] == message["tool_call_id"]
+                 and json.loads(function["arguments"]).get("offset", 0) == offset
+                 and 0 <= offset <= end <= len(original)
+                 and original[offset:end] == data
+                 and chunk["size_bytes"] == len(original)
+                 and chunk["eof"] is (end == len(original))
+                 and chunk["next_offset"] == (None if chunk["eof"] else end))
+        matches &= valid
+        if valid:
+            covered[offset:end] = b"\1" * len(data)
+    return {
+        "run_id": result.run_id, "stop_reason": result.stop_reason,
+        "model_requests": len(requests),
+        "actor_requests": len(actors),
+        "compact_requests": len(summaries),
+        # A published summary records its measured result and no error; a rejected one does not.
+        "compactions_applied": sum(q.compact_after is not None and q.error_message is None
+                                   for q in summaries),
+        "max_actor_prompt_tokens": max(((q.budget or {}).get("prompt_tokens") or 0
+                                        for q in actors), default=0),
+        "parse_errors": sum(q.status == "parse_error" for q in requests),
+        "tool_errors": [o for o in observations if not o["ok"]],
+        "tool_names": [o["tool_name"] for o in observations],
+        "read_calls": len(chunks), "offsets": [c["offset"] for c in chunks],
+        "covered_bytes": sum(covered), "target_bytes": len(original),
+        "read_coverage_passed": bool(chunks) and all(covered) and matches and any(c["eof"] for c in chunks),
+        "content_matches_fixture": matches,
+        "partial_read_passed": bool(chunks) and matches and sum(covered) == min(1024, len(original))
+        and all(covered[:1024]),
+        "elapsed_seconds": result.elapsed_seconds, "error_message": result.error_message,
+        "final_answer": result.final_answer, "answer_relevant": None,
+        "usage": {key: sum((q.usage or {}).get(key) or 0 for q in requests)
+                  for key in ("prompt_tokens", "completion_tokens", "total_tokens")},
+        "max_prompt_tokens": max(((q.usage or {}).get("prompt_tokens") or 0
+                                  for q in requests), default=0),
+    }
 
 
 def snapshot(workspace: Path) -> dict[str, str]:
@@ -122,6 +192,14 @@ def verify(task: dict, result, workspace: Path, original: Path, before: dict) ->
             "unexpected_changes": unexpected, "read_coverage": coverage}
 
 
+# Tool categories for trajectory labels; deliberately not coding stages.
+ACTION_KINDS = {"list_files": "explore", "read_file": "explore", "glob_files": "explore",
+                "grep_text": "explore", "web_fetch": "explore", "web_search": "explore",
+                "write_file": "modify", "edit_file": "modify", "shell": "execute",
+                "calculator": "execute", "update_plan": "plan"}
+ACTION_PRIORITY = ("modify", "execute", "explore", "plan", "other")
+
+
 def metrics(result) -> dict:
     requests = [q for q in result.model_requests if q.status != "blocked"]
     actors = [q for q in requests if q.purpose == "agent"]
@@ -140,6 +218,15 @@ def metrics(result) -> dict:
             total += value
         usage[key] = total
     invalid = {"invalid_tool_call", "unknown_tool", "invalid_arguments"}
+    # One label per actor request: its most consequential call's category.
+    names = {call["id"]: call["function"]["name"]
+             for m in result.messages for call in m.get("tool_calls", [])}
+    actions = []
+    for request in actors:
+        kinds = {ACTION_KINDS.get(names.get(call_id, ""), "other") for call_id in request.call_ids}
+        actions.append("error" if request.status != "completed" else
+                       next((k for k in ACTION_PRIORITY if k in kinds), "answer"))
+    shares = [share for q in actors if (share := window_share_ratio(q.budget)) is not None]
     return {
         "run_id": result.run_id, "stop_reason": result.stop_reason,
         "final_answer": result.final_answer, "model_requests": len(requests),
@@ -160,6 +247,11 @@ def metrics(result) -> dict:
         "usage": usage,
         "requests_without_usage": sum(not q.usage for q in requests),
         "elapsed_seconds": result.elapsed_seconds,
+        "peak_context_ratio": round(max(shares), 4) if shares else None,
+        "elided_messages": max((q.elided_messages for q in actors), default=0),
+        "plan_updates": sum(r["tool_name"] == "update_plan" and r["ok"] for r in rows),
+        "stuck_reminders": result.stuck_reminders,
+        "actions": actions,
     }
 
 

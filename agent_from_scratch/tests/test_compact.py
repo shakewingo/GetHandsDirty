@@ -492,5 +492,83 @@ class CompactTests(unittest.TestCase):
         self.assertEqual(result.messages[1:3], self.raw[1:3])
 
 
+    def bulky(self, name, size=1000) -> list[ChatCompletionRequestMessage]:
+        return [call(call_id=name).to_message(),
+                {"role": "tool", "tool_call_id": name, "content": json.dumps(
+                    {"call_id": name, "tool_name": "calculator", "ok": True, "output": "x" * size,
+                     "error_code": None, "error_message": None})}]
+
+    def test_elide_stubs_bulky_outputs_outside_the_two_latest_batches(self):
+        raw = [message("system", "rules"), message("user", "go"),
+               *self.bulky("a"), *self.bulky("b"), *self.bulky("c")]
+        original = deepcopy(raw)
+        state = ContextState(raw, turn_start=1, last_sent=len(raw))
+        self.assertTrue(state.elide(400))
+        self.assertEqual(set(state.elided), {3})
+        stub = json.loads(state.messages()[3]["content"])
+        self.assertEqual((stub["call_id"], stub["ok"]), ("a", True))
+        self.assertIn("elided: 1002 chars", stub["output"])
+        self.assertEqual(state.messages()[5:], raw[5:])  # b and c stay verbatim
+        self.assertEqual(raw, original)
+        self.assertFalse(state.elide(400))  # nothing new
+
+    def test_elide_skips_unseen_and_small_outputs(self):
+        raw = [message("system", "rules"), message("user", "go"),
+               *self.bulky("a"), *self.bulky("b"), *self.bulky("c")]
+        self.assertFalse(ContextState(raw, turn_start=1, last_sent=3).elide(400))
+        self.assertFalse(ContextState(raw, turn_start=1, last_sent=len(raw)).elide(5000))
+
+    def test_soft_pressure_elides_without_a_summary_call(self):
+        def measure(messages, schemas, **kwargs):
+            prompt = 3000 if any("elided:" in (m.get("content") or "") for m in messages) else 5000
+            return {"count_method": "exact", "prompt_tokens": prompt, "window_tokens": 8000,
+                    "response_reserve": 512, "remaining_tokens": 8000 - 512 - prompt}
+        self.model.measure_context.side_effect = measure
+        self.model.generate.return_value = answer("Done")
+        history = [message("user", "go"), *self.bulky("a"), *self.bulky("b"), *self.bulky("c"),
+                   message("assistant", "ok")]
+        result = Agent(self.model).run_turn("next", history)
+        self.assertEqual([q.purpose for q in result.model_requests], ["agent"])
+        self.assertEqual(result.model_requests[0].elided_messages, 1)
+        self.assertEqual((result.model_requests[0].budget or {})["prompt_tokens"], 3000)
+        self.assertEqual(result.messages[1:1 + len(history)], history)  # raw keeps the originals
+        disabled = Agent(self.model, limits=replace(AgentLimits(), elide_ratio=None))
+        self.assertEqual(disabled.run_turn("next", history).model_requests[0].elided_messages, 0)
+
+    def test_summarizer_reads_the_elided_view(self):
+        # Three batches: the cut policy keeps the latest two, so only batch a is summarized.
+        raw = [message("system", "rules"), message("user", "old request"),
+               *self.bulky("a"), *self.bulky("b"), *self.bulky("c"), message("user", "Use 7, not 6.")]
+        self.state = ContextState(raw, turn_start=8, last_sent=8)
+        self.assertTrue(self.state.elide(400))
+        self.assertTrue(self.compact())
+        assert self.requests[0].input_messages is not None
+        sent = json.loads(self.requests[0].input_messages[1]["content"])["messages"]
+        self.assertIn("elided:", sent[2]["content"])
+
+    def test_publish_measures_the_candidate_with_the_plan_reminder(self):
+        self.state.plan = "[pending] Report 7"
+        seen = []
+        measure = self.model.measure_context.side_effect
+        self.model.measure_context.side_effect = (
+            lambda messages, schemas, **kwargs: seen.append(messages) or measure(messages, schemas, **kwargs))
+        self.assertTrue(self.compact())
+        self.assertIn("[pending] Report 7", seen[-1][-1]["content"])  # the published candidate
+
+    def test_summary_trigger_is_a_share_of_the_usable_window(self):
+        # 30,720 usable tokens: 26,000 is 0.846 and 26,200 is 0.853, both far from the fit gate.
+        for prompt, purposes in ((26_000, ["agent"]), (26_200, ["compact", "agent"])):
+            def measure(messages, schemas, prompt=prompt, **kwargs):
+                small = (messages[0]["content"].startswith("Summarize the supplied")
+                         or any((m.get("content") or "").startswith("[Conversation summary:")
+                                for m in messages))
+                count = 1000 if small else prompt
+                return {"count_method": "exact", "prompt_tokens": count, "window_tokens": 32768,
+                        "response_reserve": 2048, "remaining_tokens": 32768 - 2048 - count}
+            with self.subTest(prompt=prompt):
+                self.model.measure_context.side_effect = measure
+                result = Agent(self.model).run_turn("Calculate", self.raw[1:3])
+                self.assertEqual([q.purpose for q in result.model_requests], purposes)
+
 if __name__ == "__main__":
     unittest.main()

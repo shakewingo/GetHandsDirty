@@ -8,6 +8,7 @@ Historical byte-offset tools live in evals/legacy_files.py.
 from collections.abc import Iterable
 import difflib
 from itertools import islice
+import json
 import os
 from pathlib import Path
 import stat
@@ -74,8 +75,17 @@ class _FileTool(Tool):
         finally:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
-        return {"path": self._display(target), "bytes_written": len(data), "changed": True,
-                "created": before is None, "version": file_version(target.stat())}
+        result = {"path": self._display(target), "bytes_written": len(data), "changed": True,
+                  "created": before is None, "version": file_version(target.stat())}
+        # Parse-only checks surface a broken file now instead of on the next run.
+        try:
+            if target.suffix.lower() == ".json":
+                json.loads(data)
+            elif target.suffix.lower() == ".py":
+                compile(data, str(target), "exec")
+        except (ValueError, SyntaxError) as error:
+            result["diagnostics"] = f"{type(error).__name__}: {error}"
+        return result
 
     @staticmethod
     def _check_version(before: os.stat_result | None, expected_version: str | None) -> None:
@@ -189,7 +199,8 @@ class WriteFileTool(_FileTool):
     description = (
         "Create or replace a local text file, creating parent directories. Set append=true to append. "
         "Use edit_file for targeted changes. Optionally pass expected_version from read_file. "
-        "Unchanged content is left untouched; existing file permissions are preserved."
+        "Unchanged content is left untouched; existing file permissions are preserved. "
+        "Results include diagnostics when a written .py or .json file does not parse."
     )
     parameters = {
         "type": "object", "properties": {
@@ -218,7 +229,8 @@ class EditFileTool(_FileTool):
         "This edits contents, not the filename. To rename or move a file, use shell with mv. "
         "Ambiguous matches are rejected. Select occurrence (1-based), line_hint, or replace_all; "
         "these are mutually exclusive. expected_replacements and expected_version add optional checks. "
-        "Empty old_text creates a missing/empty file. Preserves other bytes and file permissions."
+        "Empty old_text creates a missing/empty file. Preserves other bytes and file permissions. "
+        "Results include diagnostics when a written .py or .json file does not parse."
     )
     parameters = {
         "type": "object", "properties": {

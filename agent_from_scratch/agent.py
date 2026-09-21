@@ -16,8 +16,9 @@ from .llm import LLM, ResponseError, ResponseErrorCode, ResponseType
 from .session import SessionStore
 from .compact import CompactOutcome, Compactor, compact_prompt_digest
 from .context import (ContextState, InstructionConfig, InstructionLoadError,
-                      context_blocker, context_fits, load_instructions)
+                      context_blocker, context_fits, load_instructions, window_share_ratio)
 from .tools.base import ToolErrorCode, ToolRegistry, ToolResult
+from .tools.plan import PlanTool
 from .tools.register import default_registry, workspace as default_workspace
 from .trace import (ModelRequest, ModelRequestStatus, RunStopReason, TraceStore, TurnResult,
                     used_model_calls)
@@ -47,6 +48,13 @@ def recovery_feedback(error: ResponseError) -> str:
     detail = f"{error} " if error.code == ResponseErrorCode.INVALID_TOOL_CALL else ""
     return ("[Runtime feedback] Your response could not be processed. "
             f"No tool executed for this response. {detail}{hints[error.code]}")
+
+
+REPEATED_CALL = ("[Runtime feedback] You called {tool} with the same arguments {count} times "
+                 "and already have this result. Move on to the next concrete step.")
+REPEATED_FAILURE = ("[Runtime feedback] You called {tool} with the same arguments {count} times "
+                    "and it keeps failing the same way. Repeating it will not work: read the "
+                    "error, then try a different call or reconsider the approach.")
 
 
 class Agent:
@@ -94,7 +102,8 @@ class Agent:
         trace = TraceStore(Path(self.state_dir, "runs") if self.state_dir is not None else None)
 
         turn_start = 1 + len(history or [])
-        state = ContextState(raw=result.messages, turn_start=turn_start, last_sent=turn_start)
+        state = ContextState(raw=result.messages, turn_start=turn_start, last_sent=turn_start,
+                             plan="" if self.limits.planning else None)
         if checkpoint is not None:
             # load_checkpoint already bound this to the supplied history, so covered stays
             # within the turn-start invariant; raw history is replayed unchanged.
@@ -199,8 +208,10 @@ class Agent:
         compactor = Compactor(self.llm, self.limits,
                               reload_instructions=self._reload_instructions)
         last_failure, failure_count = None, 0
+        streak_key, streak = None, 0  # consecutive identical calls, across batches
         tool_attempts = 0
         used_ids = {call["id"] for m in raw_messages for call in m.get("tool_calls", [])}
+        planner = PlanTool() if state.plan is not None else None
 
         def repeated_failure(key: tuple) -> bool:
             nonlocal last_failure, failure_count
@@ -219,9 +230,21 @@ class Agent:
             try:
                 prepared_messages = state.messages()
                 schemas = self.registry.schemas()
+                if planner is not None:
+                    schemas = {**schemas, planner.name: planner.to_schema()}
                 budget = self.llm.measure_context(prepared_messages, schemas)
-                if compact or not context_fits(budget, self.limits.context_margin_tokens
-                                               + self.limits.compact_headroom_tokens):
+                # Cheap first: stubs cost no model call, so they run before the summary trigger.
+                share_ratio = window_share_ratio(budget)
+                if (self.limits.elide_ratio is not None and share_ratio is not None
+                        and share_ratio >= self.limits.elide_ratio
+                        and state.elide(self.limits.elide_min_chars)): # elide record w short stub is added in state
+                    prepared_messages = state.messages() # re-get the correct messages in consideration of elide record from state
+                    budget = self.llm.measure_context(prepared_messages, schemas)
+                    share_ratio = window_share_ratio(budget)
+                # A share_ratio, like elision, so the trigger keeps its meaning at any window size.
+                # The hard fit rule still triggers when the share_ratio is unknown or margin is short.
+                if (compact or not context_fits(budget, self.limits.context_margin_tokens)
+                        or (share_ratio is not None and share_ratio >= self.limits.compact_ratio)):
                     compact = False
                     # The actor's request is deliberately not appended yet: it precedes no
                     # summary in the trace, and the compactor reserves the turn's last slot
@@ -245,6 +268,7 @@ class Agent:
             request = ModelRequest(iteration, len(raw_messages), budget=budget,
                                    covered_boundary=state.covered,
                                    last_sent_boundary=state.last_sent,
+                                   elided_messages=len(state.elided),
                                    input_messages=deepcopy(prepared_messages),
                                    tools=deepcopy(schemas))
             result.model_requests.append(request)
@@ -303,6 +327,7 @@ class Agent:
             if response.type == ResponseType.tool_call:
                 if response.content and on_progress is not None:
                     on_progress(response.content) # print out assistant's any extra content other than just calling tools
+                reminder = None
                 for call in response.tool_calls:
                     if tool_attempts >= self.limits.max_tool_calls:
                         self._finish_pending_tools(result, "Turn tool-call budget exhausted.")
@@ -311,22 +336,39 @@ class Agent:
                         return
                     tool_attempts += 1
                     logger.debug("Tool call detected: {} {}", call.name, call.arguments)
-                    tool_result = self.execute_tool(call.name, call.arguments, call.call_id)
+                    if planner is not None and call.name == planner.name:
+                        # A harness component, not a workspace action: never the registry's.
+                        tool_result = planner.invoke(call.arguments, call.call_id)
+                        if tool_result.ok:
+                            state.plan = planner.render()
+                    else:
+                        tool_result = self.execute_tool(call.name, call.arguments, call.call_id)
                     if tool_result.ok:
                         logger.debug("Tool executed successfully: {} ({})", tool_result.tool_name, tool_result.call_id)
                     else:
                         logger.error("Tool execution failed due to: {}", tool_result.error_message)
                     raw_messages.append(tool_result.to_message())
 
+                    key = (call.name, json.dumps(call.arguments, sort_keys=True, ensure_ascii=False))
+                    streak = streak + 1 if key == streak_key else 1
+                    streak_key = key
                     if tool_result.ok:
                         last_failure, failure_count = None, 0
+                        if streak == self.limits.stuck_reminder_calls:
+                            reminder = REPEATED_CALL.format(tool=call.name, count=streak)
                     else:
                         self._finish_pending_tools(result,
                             "An earlier call failed. Reconsider these calls using its result before retrying.")
-                        if repeated_failure((call.name, json.dumps(call.arguments, sort_keys=True, ensure_ascii=False),
-                                             tool_result.error_code)):
+                        if repeated_failure(key + (tool_result.error_code,)):
                             return
+                        # Warn once, one failure before the stop, so the model gets a last chance.
+                        if failure_count == self.limits.max_same_failures - 1:
+                            reminder = REPEATED_FAILURE.format(tool=call.name, count=failure_count)
                         break
+                # After the whole batch, so no call is separated from its result.
+                if reminder is not None:
+                    raw_messages.append({"role": "user", "content": reminder})
+                    result.stuck_reminders += 1
             elif response.type == ResponseType.direct:
                 result.final_answer = response.content
                 result.stop_reason = RunStopReason.FINAL_RESPONSE
@@ -408,7 +450,9 @@ class Agent:
 
 if __name__ == "__main__":
     llm = LLM()
+    # Planning lengthens weak-model runs, so the REPL raises the turn budgets with it.
     agent = Agent(llm, state_dir="./outputs/sessions",
+                  limits=AgentLimits(planning=True, max_iterations=30, max_tool_calls=60),
                   instruction_config=InstructionConfig(workspace=default_workspace))
     try:
         agent.run_repl()

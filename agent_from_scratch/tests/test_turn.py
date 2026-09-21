@@ -509,6 +509,21 @@ class TurnTests(unittest.TestCase):
                     call(left="bad"), call(left="bad"), call(), answer("4"))
         self.assertEqual(self.agent.run_turn("test").final_answer, "4")
 
+    def test_identical_successful_calls_get_one_reminder(self):
+        self.script(call(), call(), call(), call(), answer("4"))
+        result = self.agent.run_turn("2+2")
+        reminders = [m for m in result.messages if "already have this result" in (m.get("content") or "")]
+        self.assertEqual(len(reminders), 1)
+        self.assertEqual(result.stuck_reminders, 1)
+        self.assertEqual(result.messages.index(reminders[0]), 8)  # after the 3rd call's result
+        self.assertEqual(result.final_answer, "4")
+
+    def test_identical_failures_warn_once_before_the_stop(self):
+        self.script(call(left="bad"), call(left="bad"), call(left="bad"))
+        result = self.agent.run_turn("test")
+        self.assertIn("keeps failing", self.seen[2][-1]["content"])
+        self.assertEqual((result.stop_reason, result.stuck_reminders), ("no_progress", 1))
+
     def test_identical_parse_errors_stop_at_three(self):
         error = ResponseError(ResponseErrorCode.INVALID_TOOL_CALL)
         self.script(error, error, error, answer("Unused"))

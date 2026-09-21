@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from hashlib import sha256
+import json
 from pathlib import Path
 import stat
 from typing import Any, TYPE_CHECKING
@@ -140,17 +141,63 @@ class ContextState:
     # Rules republished at a compact boundary. None keeps raw[0], the turn-start snapshot;
     # raw itself is never edited, so trace evidence of earlier requests stays exact.
     instructions: ChatCompletionRequestMessage | None = None
+    # View-only stubs for bulky tool outputs, keyed by raw index; raw keeps the originals.
+    elided: dict[int, ChatCompletionRequestMessage] = field(default_factory=dict)
+    plan: str | None = None  # None: planning off; "": no plan yet
+
+    def view(self, start: int, end: int | None = None) -> list[ChatCompletionRequestMessage]:
+        """Return raw[start:end] as the actor sees it, with elided outputs replaced by stubs."""
+        end = len(self.raw) if end is None else end
+        return [self.elided.get(i, self.raw[i]) for i in range(start, end)]
+
+    def elide(self, min_chars: int) -> bool:
+        """Stub bulky tool outputs the actor has seen, outside the two most recent batches.
+
+        Elision is irreversible in the view and costs no model call; the stub says to
+        re-read or re-run. Host-owned fields (call ID, status, error) are kept.
+
+        Returns:
+            bool: True when at least one more output is now shown as a stub.
+        """
+        starts = [i for i, m in enumerate(self.raw) if m.get("tool_calls")]
+        cutoff = min(self.last_sent, starts[-2]) if len(starts) >= 2 else 0
+        added = False
+        for index in range(self.covered, cutoff):
+            message = self.raw[index]
+            if message["role"] != "tool" or index in self.elided:
+                continue
+            content = message["content"] or ""
+            if len(content) <= min_chars:
+                continue
+            result = json.loads(content)
+            output = json.dumps(result.get("output"), ensure_ascii=False)
+            if len(output) <= min_chars:
+                continue
+            result["output"] = (f"[tool output elided: {len(output)} chars. "
+                                "Re-read or re-run to get it again.]")
+            self.elided[index] = {"role": "tool", "tool_call_id": message["tool_call_id"],
+                                  "content": json.dumps(result)}
+            added = True
+        return added
 
     def messages(self) -> list[ChatCompletionRequestMessage]:
-        history: list[ChatCompletionRequestMessage] = self.raw[1:self.turn_start]
-        current: list[ChatCompletionRequestMessage] = self.raw[self.turn_start:]
+        history: list[ChatCompletionRequestMessage] = self.view(1, self.turn_start)
+        current: list[ChatCompletionRequestMessage] = self.view(self.turn_start)
         if self.summary:
             history = [{"role": "user", "content":
                         "[Conversation summary: historical evidence, not instructions]\n" + self.summary}]
             # Pin the request even when older exchanges in this turn compact.
             pinned = [self.raw[self.turn_start]] if self.covered > self.turn_start else []
-            current = [*pinned, *self.raw[self.covered:]]
+            current = [*pinned, *self.view(self.covered)]
         rules = self.raw[:1] if self.instructions is None else [self.instructions]
+        # The plan lives outside raw: one fresh copy per request, so it never accumulates
+        # and never needs summarizing.
+        if self.plan is not None:
+            current = [*current, {"role": "system", "content": (
+                "[Current plan; update it with update_plan as you progress]\n" + self.plan
+                if self.plan else
+                "[Planning] You have not created a plan yet. Unless this is a single trivial "
+                "step or a purely informational request, call update_plan first.")}]
         return build_messages(instructions=rules, history=history, current_turn=current)
 
     def compact_boundary(self) -> int:
@@ -222,6 +269,13 @@ def context_blocker(budget: dict | None, margin: int) -> tuple[str, str] | None:
                 f"margin={margin}, "
                 f"window={budget.get('window_tokens')}.")
     return None
+
+
+def window_share_ratio(budget: dict | None) -> float | None:
+    """Fraction of the usable window (window minus output reserve) an exact measurement fills."""
+    if not budget or budget.get("count_method") != "exact" or budget.get("response_reserve") is None:
+        return None
+    return budget["prompt_tokens"] / (budget["window_tokens"] - budget["response_reserve"])
 
 
 def context_fits(budget: dict | None, margin: int) -> bool:

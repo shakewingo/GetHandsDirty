@@ -25,6 +25,18 @@ class GeneralFileTests(unittest.TestCase):
         self.edit = EditFileTool(self.workspace)
         self.list = ListFilesTool(self.workspace)
 
+    def test_writes_report_parse_diagnostics_without_failing(self):
+        bad = self.write.invoke({"path": "c.json", "content": '{"a": 1,}'})
+        self.assertTrue(bad.ok)
+        self.assertIn("JSONDecodeError", bad.output["diagnostics"])
+        self.assertEqual((self.workspace / "c.json").read_text(), '{"a": 1,}')  # still written
+        good = self.write.invoke({"path": "d.json", "content": '{"a": 1}'})
+        self.assertNotIn("diagnostics", good.output)
+        self.write.invoke({"path": "m.py", "content": "x = 1\n"})
+        broken = self.edit.invoke({"path": "m.py", "old_text": "x = 1", "new_text": "x = ("})
+        self.assertIn("SyntaxError", broken.output["diagnostics"])
+        self.assertNotIn("diagnostics", self.write.invoke({"path": "n.txt", "content": "{"}).output)
+
     def test_absolute_relative_home_and_symlink_paths(self):
         target = self.root / "outside.txt"
         target.write_text("outside")

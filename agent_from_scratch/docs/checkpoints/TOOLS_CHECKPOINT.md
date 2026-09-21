@@ -4,7 +4,7 @@ Status reviewed September 16, 2026: **167/167 deterministic tests pass** on the 
 checkout in `transformer-practice`. Sections below retain revision-specific test counts
 and model results; “unchanged” describes that individual change, not all later revisions.
 The structural refactor is recorded at the end. No fresh model or static-analysis run was
-performed for this documentation review. See [STAGE.md](../docs/STAGE.md) for the Stage 3 handoff.
+performed for this documentation review. See [STAGE.md](../STAGE.md) for the Stage 3 handoff.
 
 ## Sequential tool batches
 
@@ -121,7 +121,7 @@ Actual token budgeting/compaction remains Stage 3; character limits do not guara
 The default REPL now uses general `shell(command, working_dir?)`, HTTP/HTTPS
 `web_fetch(url, extract_mode?)`, and `web_search(query, count?)`. The old command map
 and host-list mode remain available for the original fixture demo and benchmark.
-This rescope follows the [nanobot shell/web design](../tools/THIRD_PARTY.md), adapted
+This rescope follows the [nanobot shell/web design](../../tools/THIRD_PARTY.md), adapted
 to our synchronous loop and structured `ToolResult`/trace contract.
 
 - Shell executes local programs, model-authored scripts, pipes, redirects and environment
@@ -169,7 +169,7 @@ entry points now release the model in `finally` through `LLM.close()`.
 These are live diagnostics, not a replacement benchmark or a general success-rate estimate.
 At this general-tool revision, the system prompt, one-call protocol and final-answer stop
 policy were unchanged. The sequential-batch section above records the later protocol change.
-The earlier 12/17 remains the restricted fixture-tool baseline. See [README](README.md)
+The earlier 12/17 remains the restricted fixture-tool baseline. See [EVAL_HISTORY](EVAL_HISTORY.md)
 for installation, fresh-session startup and the general-tools demo.
 
 ## Original restricted Stage 2A evidence
@@ -211,7 +211,7 @@ Shell cleans up its process group on timeout/Ctrl-C and after completion, then r
 the direct child. Configure only trusted foreground commands that neither daemonize
 nor interpret workspace data as code. This is a POSIX local tool, not a general sandbox;
 cwd and fixed argv do not isolate arbitrary programs. The example verifier stays outside
-agent-writable state. Launch/configuration commands are in [README.md](README.md).
+agent-writable state. Launch/configuration commands are in [EVAL_HISTORY.md](EVAL_HISTORY.md).
 
 ## Verification
 

@@ -1,6 +1,6 @@
 # Build a tiny agent: a two-week sprint
 
-Updated September 17, 2026. Sprint: **September 13–26**; earlier experiments are carried-in work.
+Updated September 21, 2026. Sprint: **September 13–26**; earlier experiments are carried-in work.
 This is the implementation scope. [REPORT_ANALYSIS.md](REPORT_ANALYSIS.md) retains the broader learning rationale.
 
 ## The finished project
@@ -43,9 +43,9 @@ as pilots; mark missing required outcomes incomplete instead of silently extendi
 | Completed | **3 — implementation complete** | Context budgeting, automatic/manual compact, rule reload at the boundary, versioned checkpoints and restart replay; real-model evidence for 3B items 2-4 and 3C still outstanding |
 | Next | **4A–4B — required** | Bounded durable memory, search/read, correction/forget, fresh-session recall |
 | Before training | **8 — required** | Resettable benchmark, isolated splits, measured baseline, frozen harness |
-| Research | **9 — draft, required outcome** | Verified trajectories → adapter update/reload → base/adapter comparison |
-| Later experiment | **10 — draft, conditional** | Reward study; online RL only if justified |
-| Delivery | **11 — draft, required outcome** | Held-out results and reproducible demo; automated search optional |
+| Research | **9 — draft, required outcome** | 3–4B HF checkpoint on vLLM → verified trajectories → QLoRA SFT/reload → base/adapter comparison |
+| Later experiment | **10 — draft, conditional** | 2–3 rounds of expert iteration (weak-RSI question); GRPO pilot only if justified |
+| Delivery | **11 — draft, required outcome** | Held-out paired results and reproducible demo; dev-only recipe search optional |
 | Future branches | **4C / 5 / 6 / 7 — optional** | Dream / skills and MCP / jobs / child agent and planning |
 
 Numbering follows the scratch notes: old Stage 1.1 is now Stage 1; old 1.2 tools move
@@ -204,7 +204,7 @@ Our `SessionStore` keeps that distinction without Nanobot's channels, hooks, or 
 
 **Completion boundary:** Stage 1 is complete for this rescope; context management remains
 Stage 3. Persistence is single-writer and saved at turn end, without exact mid-turn crash resume.
-The [foundation checkpoint](../evals/FOUNDATION_CHECKPOINT.md) records 82 deterministic tests
+The [foundation checkpoint](checkpoints/FOUNDATION_CHECKPOINT.md) records 82 deterministic tests
 and real-model smoke results; those are historical evidence, not tests rerun by this document edit.
 A terminal answer still does not prove task success; premature stopping is an observed model gap.
 
@@ -237,7 +237,7 @@ Prompt rules describe expected behavior; runtime enforces paths, allowed operati
   On interruption, record a pending call as interrupted/unknown if no result exists;
   never imply it succeeded or automatically replay its side effects. Keep the REPL usable.
 
-Evidence: [tools checkpoint](../evals/TOOLS_CHECKPOINT.md). The initial restricted 2A
+Evidence: [tools checkpoint](checkpoints/TOOLS_CHECKPOINT.md). The initial restricted 2A
 implementation had 102 tests; the general-tool follow-up has separate mechanism/live checks.
 The fixed 2B suite below remains the historical behavioral baseline.
 
@@ -260,7 +260,7 @@ No async runtime, provider catalogue or interactive approval engine is added.
   unintended writes, requests/usage/latency, settings and code/fixture hashes. Missing usage
   stays unknown. Train/test skeletons are reserved; their task sets are not yet generated.
 
-**Evidence:** [2B checkpoint](../evals/BEHAVIOR_CHECKPOINT.md), **118 tests**, 17/17 scripted
+**Evidence:** [2B checkpoint](checkpoints/BEHAVIOR_CHECKPOINT.md), **118 tests**, 17/17 scripted
 solutions; prompt ablations improve **8/17 → 12/17 strict passes**, retaining all original passes.
 The full prompt fixes no-op behavior; nested edits, web JSON/recovery and two answer formats
 still fail. Two false claims and one unintended-write task remain. The selected prompt trades
@@ -530,31 +530,116 @@ Build on Stage 2 after Stages 3–4A/B. The local workspace is a learning benchm
 includes interpretable failures. Save task-level results and a frozen manifest in `docs/benchmark.md`.
 Fix protocol/evaluator bugs before training; do not require the base model to solve every task.
 
+### Post-training plan for Stages 9–11 (decided September 21)
+
+**Trainable model:** a 3–4B instruct checkpoint in HF safetensors, first candidate
+[Qwen3-4B-Instruct-2507](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507). The Qwen2.5-7B GGUF
+stays the Stage 2–4 engineering model, not the training control. A smaller model fails more often,
+leaving headroom and pass@k variance, and it makes iteration and an RL pilot fit the budget. The
+cost is a fresh baseline and a revalidated tool template on the new checkpoint.
+
+**Backend:** GGUF is inference-only, so training uses bf16/QLoRA HF weights. Rollouts and all
+weight comparisons run on one rented-GPU vLLM server with LoRA adapters, behind an
+OpenAI-compatible `llm.py` backend. The control is **the same checkpoint, backend and precision
+with the adapter disabled**. The chat/tool template used to render training examples must be
+token-identical to the one used at inference. Merging into a quantized GGUF for local demos is
+allowed only after the comparison, and it gets its own spot check.
+
+**Budget:** US$100 in total, including teacher API calls, GPU hours, storage and failed runs.
+These are rough allocations to recheck against live prices before renting:
+
+| Item | Assumed scale | Estimate |
+|---|---|---:|
+| Trajectory data (teacher API + base self-sampling) | 1–2k trajectories × ~4k tokens | $10–25 |
+| QLoRA SFT, including one or two reruns | 2–8M tokens, 1–3 epochs, one 24–48 GB GPU | $5–15 |
+| Evaluation (base/adapter/rounds × 3 seeds) | 1–3 GPU-hours on vLLM | $3–10 |
+| Expert-iteration rounds (Stage 10) | 2–3 × (sampling + SFT) | $15–30 |
+| GRPO pilot (Stage 10, conditional) | a few GPU-hours | $0–30 |
+| Reserve: idle time, debugging, failures | ~25% | ~$20 |
+
+Every rental session has an hour cap and ends with the pod stopped. Spend is recorded in each
+experiment's ledger row.
+
+**Data:** the environment is the dataset. Train examples come from procedurally generated variants
+of **train skeletons** (layout, distractors, values, dependency length, injected fault position).
+Skeletons are split before variants are created, so no test skeleton shapes training. Public
+function-calling data (for example `Salesforce/xlam-function-calling-60k`, APIGen-MT,
+`NousResearch/hermes-function-calling-v1`, `THUDM/AgentInstruct`) is at most a ~20% regularizing
+mix, and only after each license is checked. Its single-call distribution differs from our
+multi-step file/shell tasks.
+
+**Evaluation layers:**
+1. Primary: 50–100 new reserved test skeletons, never used for prompt or recipe tuning. The
+   Stage 2B dev tasks already influenced prompt choices and do not qualify.
+2. Optional external reference: a locally adapted BFCL multi-turn subset, labeled as a local
+   adaptation and never reported as an official score.
+3. Regression: a small IFEval/general-QA subset to catch damage outside tool use.
+
+Paired comparisons use [`evals/trajectory.py`](../evals/trajectory.py) (exact McNemar over
+task IDs).
+
+**Terminology:** STaR/ReST-style expert iteration and self-generated data are *self-improvement*.
+RSI in the strict sense means the system also gets better at producing the next improvement, and a
+rising score alone does not show that. Automated recipe search is *automated research*. Karpathy's
+autoresearch belongs to this last category and is not RSI: a fixed agent edits another small
+model's training code, keeps or reverts each change against a fixed metric, and never improves
+itself. Its protocol is what we adopt: fixed evaluator, limited change surface, time-boxed runs,
+keep/revert, and a full ledger. Harness self-modification (STOP, Gödel Agent, Darwin Gödel
+Machine) is out of scope: a 3–4B actor cannot do it, so a teacher API would do the real work and
+the attribution would be muddled.
+
 ## Stage 9 — verified trajectories and adapter SFT · draft
 
-**Required outcome; details will be rescoped near Stage 8.** Choose a trainable checkpoint and
-compute cap; validate its tool template. Generate short trajectories in real resettable fixtures,
-verify outcomes, deduplicate/split, and supervise intended assistant actions/answers with correct
-loss masks. Begin with a tiny overfit/save/reload smoke test, then a small LoRA/QLoRA pilot.
-**Output:** changed adapter weights reloaded into the ordinary loop, dataset/config records, and
-a dev comparison against the same checkpoint/backend/precision with adapters disabled. The current
-GGUF runtime is engineering evidence, not automatically the training format or comparison control.
+**Required outcome.** It depends on the Stage 8 freeze, re-measured on the new checkpoint.
 
-## Stage 10 — verified rewards and outcome learning · draft, conditional
+- [ ] Add the OpenAI-compatible vLLM backend. Validate the 3–4B checkpoint's tool template
+  against parser/measurement, and re-run the Stage 8 baseline on it (adapter off). Keep the GGUF
+  path working for the existing tests and demos.
+- [ ] Write the train-skeleton task generator, with fault injection for recovery cases. Reserve
+  the test skeletons first.
+- [ ] Collect data along two tracks, each recorded with provenance:
+  (a) teacher distillation, where a stronger API model runs **inside our harness**;
+  (b) rejection-sampling fine-tuning (RFT/STaR), which samples N base rollouts per task.
+  Keep only verifier-passed trajectories, then deduplicate. Export from the schema-5 trace
+  `input_messages`, so each example is exactly what the model saw.
+- [ ] Loss masks cover assistant tokens only; tool observations and runtime feedback are context.
+  First run a tiny overfit → save → reload smoke test, then a QLoRA pilot.
 
-After SFT, test terminal outcome rewards, reset behavior, and reward exploits. Attempt online RL
-only if success varies, rewards are trustworthy, and measured rollout cost fits the chosen cap.
-**Output if selected:** reward diagnostics and, only if actual updates/reload occurred, an RL
-comparison against SFT under the same harness. A reward lab alone is not an RL-trained model.
+**Output:** adapter weights reloaded into the ordinary loop, dataset/config/cost records, and a
+dev comparison of base, teacher-SFT and RFT-SFT against the same checkpoint/backend/precision with
+the adapter off.
+
+## Stage 10 — expert iteration and outcome learning · draft, conditional
+
+**Primary: 2–3 rounds of expert iteration.** M0 samples → the verifier filters → SFT produces M1
+→ **M1 samples** the next data → M2 … Each round keeps the same task pool, sampling budget,
+verifier and training recipe. The measured weak-RSI question is:
+**is M_k a better data generator than M_{k-1}?** Report per round the verified-trajectory yield,
+hard-task coverage, dev pass rate, and whether round k+1's gain is at least round k's. Diminishing
+returns, drift, or collapse are valid results. Only verifier-passed data enters training.
+
+**Conditional: a GRPO pilot.** Run it only if tasks show mixed outcomes across samples
+(0 < pass@k < 1; all-pass or all-fail groups give zero advantage), the terminal reward survives an
+exploit review (fake "done" artifacts, verifier bypasses, reset leaks), and the measured rollout
+cost fits the remaining budget. **Output if selected:** reward diagnostics, and only if real
+updates were reloaded, a comparison against the best SFT round under the same harness. A reward
+lab alone is not an RL-trained model.
 
 ## Stage 11 — final comparison and delivery · draft
 
-**Required outcome:** after dev selection, run the frozen base and chosen adapter on the reserved
-test set. Report paired wins/losses, counts, costs, uncertainty, regressions, and limitations;
-do not promise gains or treat a local improvement as broad agent generalization. Package setup,
-fixture reset/eval, adapter reload, and a demo covering tools → recovery → compact → restart →
-corrected memory. Keep `docs/results.md` and `docs/demo.md`. Bounded automated hypothesis search
-remains optional and dev-only; missing runtime/training evidence stays explicitly incomplete.
+**Required outcome:** after dev selection, run the frozen base, the chosen SFT adapter and each
+expert-iteration round on the reserved test set. Report paired wins/losses, counts, costs,
+uncertainty, regressions and limitations. Do not promise gains, and do not treat a local
+improvement as broad agent generalization. Package setup, fixture reset/eval, adapter reload, and
+a demo covering tools → recovery → compact → restart → corrected memory. Keep `docs/results.md`
+and `docs/demo.md`.
+
+**Optional, dev-only: autoresearch-style recipe search.** A coding agent proposes one bounded
+change at a time, drawn from data mix, filter threshold, LoRA rank/lr, epochs, and the
+teacher/RFT ratio. Each change gets a time/cost cap, a dev evaluation, keep/revert, and a
+ledger row that includes failed hypotheses. The agent never sees the test set, and the evaluator,
+harness and splits stay frozen. Report it as automated research, not RSI. Missing
+runtime/training evidence stays explicitly incomplete.
 
 ## Reference map and next step
 

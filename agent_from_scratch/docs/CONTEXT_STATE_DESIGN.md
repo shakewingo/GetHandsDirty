@@ -215,7 +215,7 @@ inputs/schemas and purpose (`agent`/`compact`); the old raw-prefix
 interpretation remains valid only for older records without `input_messages`, and the
 per-request measurement is `budget`, named `context` in records at schema 4 and earlier.
 Session saving still slices the **raw** list using history length, never a compacted view.
-`measure` in `evals/foundation.py` and `exchanges` in `evals/verify.py` still consume unchanged
+`measure` in `evals/verify.py` (formerly `evals/foundation.py`) and `exchanges` in `evals/verify.py` still consume unchanged
 raw evidence; their request/usage accounting includes summary calls. Explicit persisted
 deltas/checkpoints remain Stage 3C. See [implementation and evidence](context-memory.md).
 
