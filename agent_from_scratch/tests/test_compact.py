@@ -518,5 +518,33 @@ class CompactTests(unittest.TestCase):
         self.assertFalse(ContextState(raw, turn_start=1, last_sent=3).elide(400))
         self.assertFalse(ContextState(raw, turn_start=1, last_sent=len(raw)).elide(5000))
 
+    def test_soft_pressure_elides_without_a_summary_call(self):
+        def measure(messages, schemas, **kwargs):
+            prompt = 3000 if any("elided:" in (m.get("content") or "") for m in messages) else 5000
+            return {"count_method": "exact", "prompt_tokens": prompt, "window_tokens": 8000,
+                    "response_reserve": 512, "remaining_tokens": 8000 - 512 - prompt}
+        self.model.measure_context.side_effect = measure
+        self.model.generate.return_value = answer("Done")
+        history = [message("user", "go"), *self.bulky("a"), *self.bulky("b"), *self.bulky("c"),
+                   message("assistant", "ok")]
+        result = Agent(self.model).run_turn("next", history)
+        self.assertEqual([q.purpose for q in result.model_requests], ["agent"])
+        self.assertEqual(result.model_requests[0].elided_messages, 1)
+        self.assertEqual((result.model_requests[0].budget or {})["prompt_tokens"], 3000)
+        self.assertEqual(result.messages[1:1 + len(history)], history)  # raw keeps the originals
+        disabled = Agent(self.model, limits=replace(AgentLimits(), elide_ratio=None))
+        self.assertEqual(disabled.run_turn("next", history).model_requests[0].elided_messages, 0)
+
+    def test_summarizer_reads_the_elided_view(self):
+        # Three batches: the cut policy keeps the latest two, so only batch a is summarized.
+        raw = [message("system", "rules"), message("user", "old request"),
+               *self.bulky("a"), *self.bulky("b"), *self.bulky("c"), message("user", "Use 7, not 6.")]
+        self.state = ContextState(raw, turn_start=8, last_sent=8)
+        self.assertTrue(self.state.elide(400))
+        self.assertTrue(self.compact())
+        assert self.requests[0].input_messages is not None
+        sent = json.loads(self.requests[0].input_messages[1]["content"])["messages"]
+        self.assertIn("elided:", sent[2]["content"])
+
 if __name__ == "__main__":
     unittest.main()

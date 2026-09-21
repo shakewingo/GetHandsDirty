@@ -56,6 +56,7 @@ class ModelRequest:
     compact_before: dict | None = None
     compact_after: dict | None = None
     instructions: dict | None = None  # Rule provenance when a compact boundary reloaded them.
+    elided_messages: int = 0  # Tool outputs shown as stubs in this request's view.
 
 
 def used_model_calls(requests: list[ModelRequest]) -> int:

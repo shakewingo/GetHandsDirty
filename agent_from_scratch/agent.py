@@ -16,7 +16,7 @@ from .llm import LLM, ResponseError, ResponseErrorCode, ResponseType
 from .session import SessionStore
 from .compact import CompactOutcome, Compactor, compact_prompt_digest
 from .context import (ContextState, InstructionConfig, InstructionLoadError,
-                      context_blocker, context_fits, load_instructions)
+                      context_blocker, context_fits, load_instructions, window_share)
 from .tools.base import ToolErrorCode, ToolRegistry, ToolResult
 from .tools.register import default_registry, workspace as default_workspace
 from .trace import (ModelRequest, ModelRequestStatus, RunStopReason, TraceStore, TurnResult,
@@ -220,6 +220,13 @@ class Agent:
                 prepared_messages = state.messages()
                 schemas = self.registry.schemas()
                 budget = self.llm.measure_context(prepared_messages, schemas)
+                # Cheap first: stubs cost no model call, so they run before the summary trigger.
+                share = window_share(budget)
+                if (self.limits.elide_ratio is not None and share is not None
+                        and share >= self.limits.elide_ratio
+                        and state.elide(self.limits.elide_min_chars)):
+                    prepared_messages = state.messages()
+                    budget = self.llm.measure_context(prepared_messages, schemas)
                 if compact or not context_fits(budget, self.limits.context_margin_tokens
                                                + self.limits.compact_headroom_tokens):
                     compact = False
@@ -245,6 +252,7 @@ class Agent:
             request = ModelRequest(iteration, len(raw_messages), budget=budget,
                                    covered_boundary=state.covered,
                                    last_sent_boundary=state.last_sent,
+                                   elided_messages=len(state.elided),
                                    input_messages=deepcopy(prepared_messages),
                                    tools=deepcopy(schemas))
             result.model_requests.append(request)

@@ -128,7 +128,7 @@ class Compactor:
                 {"role": "system", "content": instructions},
                 {"role": "user", "content": json.dumps({
                     "previous_summary": state.summary,
-                    "messages": state.raw[state.covered:boundary],
+                    "messages": state.view(state.covered, boundary),
                     "current_request": state.raw[state.turn_start].get("content"),
                 }, ensure_ascii=False)},
             ]
@@ -168,7 +168,8 @@ class Compactor:
                     instructions = {"role": "system", "content": text}
             candidate = ContextState(raw=state.raw, turn_start=state.turn_start,
                                      last_sent=state.last_sent, covered=boundary,
-                                     summary=summary, instructions=instructions)
+                                     summary=summary, instructions=instructions,
+                                     elided=state.elided)
             # Nothing touched by planning or summarizing feeds messages(), so a measurement
             # the caller took of this same view still describes it exactly.
             if before is None:

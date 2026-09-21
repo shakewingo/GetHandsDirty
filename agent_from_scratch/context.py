@@ -262,5 +262,12 @@ def context_blocker(budget: dict | None, margin: int) -> tuple[str, str] | None:
     return None
 
 
+def window_share(budget: dict | None) -> float | None:
+    """Fraction of the usable window (window minus output reserve) an exact measurement fills."""
+    if not budget or budget.get("count_method") != "exact" or budget.get("response_reserve") is None:
+        return None
+    return budget["prompt_tokens"] / (budget["window_tokens"] - budget["response_reserve"])
+
+
 def context_fits(budget: dict | None, margin: int) -> bool:
     return context_blocker(budget, margin) is None
