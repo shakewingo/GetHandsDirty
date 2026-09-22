@@ -328,6 +328,34 @@ def _solution_transient_read_failure(task: Task) -> list:
     return calls + [answer(task.expect.answer.value)]
 
 
+def _build_flaky_write_retry(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    config = {"mode": rng.choice(["draft", "staged"]), "count": rng.randint(1, 9)}
+    _write(root, "state.json", _json(config))
+    expected = {**config, "mode": "final"}
+    fault = fault_signal = None
+    if ctx.condition == "fault":
+        fault = Fault(tool="write_file", on_call=1, message="Simulated transient write failure.")
+        fault_signal = ("write_file", "Simulated transient write failure.")
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+               pair_id=ctx.pair_id, condition=ctx.condition, max_iterations=6,
+               prompt=("Change state.json's mode field to 'final', keeping every other field, "
+                      "and save it. If the write fails, try it again. Reply DONE only after "
+                      "the file is saved."),
+               tools=("write_file",),
+               expect=Expect(answer=Answer(value="DONE", format="required"),
+                            files={"state.json": _json(expected)}),
+               claim_tokens=("DONE",), fault=fault, fault_signal=fault_signal,
+               debug={"expected": expected})
+
+
+def _solution_flaky_write_retry(task: Task) -> list:
+    expected = task.debug["expected"]
+    calls = [call("write_file", path="state.json", content=json.dumps(expected))]
+    if task.condition == "fault":
+        calls.append(call("write_file", path="state.json", content=json.dumps(expected)))
+    return calls + [answer("DONE")]
+
+
 @dataclass(frozen=True)
 class Skeleton:
     """A generator: `build` makes one Task from a seed and an optional clean/fault condition;
@@ -374,3 +402,5 @@ SKELETONS.append(Skeleton(name="rename_key_all_files", family="updates", split="
 SKELETONS.append(Skeleton(name="append_list_item", family="updates", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_append_list_item, solution=_solution_append_list_item))
 
 SKELETONS.append(Skeleton(name="transient_read_failure", family="recovery", split="test", seeds=(0, 1, 2), recovery=True, build=_build_transient_read_failure, solution=_solution_transient_read_failure))
+
+SKELETONS.append(Skeleton(name="flaky_write_retry", family="recovery", split="test", seeds=(0, 1, 2), recovery=True, build=_build_flaky_write_retry, solution=_solution_flaky_write_retry))
