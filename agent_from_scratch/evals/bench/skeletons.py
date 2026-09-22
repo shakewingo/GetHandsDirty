@@ -160,6 +160,37 @@ def _solution_deep_chain_lookup(task: Task) -> list:
         answer(task.expect.answer.value)]
 
 
+SERVICES = ("billing", "search", "auth", "ingest")
+TEAMS = ("atlas", "vega", "orion", "lyra")
+
+
+def _build_grep_locate(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    service = rng.choice(SERVICES)
+    owner = f"team-{rng.choice(TEAMS)}"
+    count = rng.randint(8, 14)
+    target = rng.randrange(count)
+    for i in range(count):
+        path = f"services/group_{i // 4}/svc_{i}.conf"
+        if i == target:
+            _write(root, path, f"service = {service}\nowner[{service}] = {owner}\n")
+        else:
+            _write(root, path, f"service = {rng.choice(SERVICES)}\n"
+                               f"owner[other] = team-{rng.choice(TEAMS)}\n")
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+               pair_id=ctx.pair_id, condition=ctx.condition, max_iterations=6,
+               prompt=(f"Somewhere under services/ a config line reads 'owner[{service}] = "
+                      "<name>'. Find it and report only <name>."),
+               tools=("grep_text", "read_file"),
+               expect=Expect(answer=Answer(value=owner), evidence=(owner,),
+                            process=("no_write_attempts",)),
+               debug={"service": service, "path": f"services/group_{target // 4}/svc_{target}.conf"})
+
+
+def _solution_grep_locate(task: Task) -> list:
+    return [call("grep_text", query=f"owner\\[{task.debug['service']}\\]"),
+           call("read_file", path=task.debug["path"]), answer(task.expect.answer.value)]
+
+
 @dataclass(frozen=True)
 class Skeleton:
     """A generator: `build` makes one Task from a seed and an optional clean/fault condition;
@@ -194,3 +225,5 @@ SKELETONS.append(Skeleton(
     build=_build_no_op_correct_config, solution=_solution_no_op_correct_config))
 
 SKELETONS.append(Skeleton(name="deep_chain_lookup", family="inspection", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_deep_chain_lookup, solution=_solution_deep_chain_lookup))
+
+SKELETONS.append(Skeleton(name="grep_locate", family="inspection", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_grep_locate, solution=_solution_grep_locate))
