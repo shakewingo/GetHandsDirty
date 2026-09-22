@@ -58,12 +58,19 @@ class SkeletonGateTests(unittest.TestCase):
                 skeleton.build(random.Random(f"bench:{ctx.name}:{ctx.seed}:{ctx.condition}"), b, ctx)
                 self.assertEqual(snapshot(a), snapshot(b))
 
-    def test_registered_skeletons_are_unique_and_declare_the_right_split(self):
+    def test_registered_skeletons_match_splits_json_exactly(self):
         names = [skeleton.name for skeleton in SKELETONS]
         self.assertEqual(len(names), len(set(names)), "duplicate skeleton name")
         splits = json.loads(SPLITS_PATH.read_text())
+        listed = {name for group in (splits["dev"], splits["test"], splits["train"]) for name in group}
+        self.assertEqual(set(names), listed)
         for skeleton in SKELETONS:
             self.assertIn(skeleton.name, splits[skeleton.split])
+        self.assertEqual(len([s for s in SKELETONS if s.split == "dev"]), 4)
+        self.assertEqual(len([s for s in SKELETONS if s.split == "test"]), 10)
+        dev_total = sum(len(s.seeds) * (2 if s.recovery else 1) for s in SKELETONS if s.split == "dev")
+        test_total = sum(len(s.seeds) * (2 if s.recovery else 1) for s in SKELETONS if s.split == "test")
+        self.assertEqual((dev_total, test_total), (15, 60))
 
 
 if __name__ == "__main__":
