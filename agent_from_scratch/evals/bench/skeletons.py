@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 import random
 
-from .spec import BuildContext, Task
+from .spec import Answer, BuildContext, Expect, Task
 from ...llm import LLMResponse, ResponseType
 from ...tools.base import ToolCall
 
@@ -36,6 +36,32 @@ def _json(value) -> str:
     return json.dumps(value, indent=2) + "\n"
 
 
+def _build_pointer_lookup(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    profiles = [f"profile_{c}" for c in "abcdefgh"]
+    rng.shuffle(profiles)
+    active, decoys = profiles[0], profiles[1:1 + rng.randint(2, 3)]
+    outputs = {name: f"{name}-report.json" for name in [active, *decoys]}
+    _write(root, "manifest.json", _json({"active_profile": active}))
+    for name in [active, *decoys]:
+        _write(root, f"profiles/{name}.json", _json({"output": outputs[name]}))
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+               pair_id=ctx.pair_id, condition=ctx.condition, max_iterations=6,
+               prompt=("Use manifest.json to find the active profile, then read that profile "
+                      "file under profiles/ and report only its output filename. Do not "
+                      "change any files."),
+               tools=("list_files", "read_file"),
+               expect=Expect(answer=Answer(value=outputs[active]),
+                            evidence=(active, outputs[active]), process=("no_write_attempts",)),
+               debug={"active_profile": active})
+
+
+def _solution_pointer_lookup(task: Task) -> list:
+    active = task.debug["active_profile"]
+    return [call("read_file", path="manifest.json"),
+           call("read_file", path=f"profiles/{active}.json"),
+           answer(task.expect.answer.value)]
+
+
 @dataclass(frozen=True)
 class Skeleton:
     """A generator: `build` makes one Task from a seed and an optional clean/fault condition;
@@ -52,3 +78,7 @@ class Skeleton:
 
 
 SKELETONS: list[Skeleton] = []
+
+SKELETONS.append(Skeleton(
+    name="pointer_lookup", family="inspection", split="dev", seeds=(0, 1, 2), recovery=False,
+    build=_build_pointer_lookup, solution=_solution_pointer_lookup))
