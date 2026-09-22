@@ -296,3 +296,64 @@ review above. Source fingerprint `ece7ac5b6790923d05f59bb3c553cfe00e3fa99eca695b
 - The REPL gained `/compact`.
 - Validation: 206 tests; 42 Python files with zero Pyright errors/warnings. No new
   real-model diagnostic was run for this structural change.
+
+## September 22 handoff log: the real-model compaction demos, finally run
+
+The gap named at the end of the "Real-model diagnostic: not run, and why" section above (the
+host that wrote it had 3 GB RAM and no GPU) is closed on a different host that can hold the 7B
+weights:
+
+```sh
+python -m agent_from_scratch.examples.continuation_demo --output outputs/continuation-demo
+python -m agent_from_scratch.examples.compact_demo --output outputs/compact-demo
+```
+
+**Automatic compaction did not fire in either demo.** Both share the same pressured-history
+fixture (`continuation_demo.pressured_history`, reused by `compact_demo`), which grows filler
+until `remaining_tokens` first lands in `[256, 768)` at `n_ctx=4096`. That band predates
+`compact_ratio`: it targets remaining headroom, not the prompt/usable-window share the current
+trigger actually checks. In this run it landed at `remaining_tokens=758`, i.e.
+`share_ratio = 2826 / (4096 - 512) ≈ 0.7885` — comfortably under the `compact_ratio=0.85` gate.
+`continuation_demo`'s `first_turn` case shows exactly one `purpose="agent"` request, no
+`"compact"` request; `compact_demo`'s `full` and `automatic` cases (2826 tokens each) show the
+same. **Next smallest gap:** `pressured_history`'s target band needs recalibrating against
+`compact_ratio` (e.g. target `share_ratio` directly instead of `remaining_tokens`) before either
+demo can be trusted to exercise automatic compaction at all.
+
+**Forced (manual) compaction did fire, in `compact_demo`'s `manual` case, and retained both
+facts.** Passing `compact=True` summarizes before the first generation regardless of the ratio
+trigger: one `purpose="compact"` request (2,951 prompt tokens, the pre-compaction size plus the
+summarizer's own framing) followed by one `purpose="agent"` request at only **393 prompt
+tokens** — the compacted view. The model's answer,
+`'{"project_code": "CEDAR-42", "limit": 7}'`, is correct on both counts: the original fact
+(`CEDAR-42`) survived the summary, and the correction applied in the same turn (`6 kg` → `7 kg`)
+was not reverted by it. This is the retained-facts evidence Stage 3's gate asked for, even
+though it came from the forced path rather than the automatic one.
+
+`compact_demo`'s fourth case, `oversized`, is a clean deliberate failure: a 6,302-token request
+against the 4,096-token window is blocked before generation with `context_limit`
+(`"Request exceeds the context budget: prompt=6302, output_reserve=512, margin=256,
+window=4096."`), never reaching the model. This is the hard-fit gate working as designed.
+
+`continuation_demo`'s two restart cases (`restart_with_checkpoint`, using a fresh `SessionStore`
+checkpoint, and `restart_raw_control`, replaying full raw history) both answered
+`'CEDAR-42\n7 kg'` correctly, at identical prompt sizes (2,859 tokens each) — expected, since
+with no compaction in `first_turn` there was no summary checkpoint to differ from the raw
+history in the first place. `stale_checkpoint_ignored` confirmed the fourth case works as
+designed: editing the first history message makes `load_checkpoint` return `None`
+(`checkpoint_found: False`), so a diverged history is never replayed against a stale summary.
+
+**A second, independent real-model example of summarization losing a fact** — this time under
+automatic T3 (summarize-only) compaction rather than a forced demo — is in
+[EMPIRICAL_STUDY_PLAN.md](EMPIRICAL_STUDY_PLAN.md#task-33--run-at-the-32k-window)'s Task 3.3
+section: the pressure-suite `find_two_reports` task hides one code in file 3 and one in file 8.
+Under T4 (elision) both survived seven elided reads. Under T3 (summary only, no elision) the
+model's own summary lost the file-3 code: it answered the file-8 code correctly (`UD7SPE`) but
+invented a wrong value (`HJ8923`) for file 3, the one the summary had folded away. Read
+alongside this session's `manual` case above, the two examples bound the mechanism from both
+sides: a summary *can* retain the facts it is asked to fold (two facts, one correction, one
+compact call), and a summary *can* lose one (two facts spread further apart in the transcript,
+folded automatically without elision first).
+
+Validation: no code changed this session; both demos ran against the existing `examples/`
+scripts unmodified. Full suite unaffected (283 tests, unrelated to this log entry).
