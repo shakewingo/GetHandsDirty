@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 import random
 
-from .spec import Answer, BuildContext, Expect, Task
+from .spec import Answer, BuildContext, Expect, Fault, Task
 from ...llm import LLMResponse, ResponseType
 from ...tools.base import ToolCall
 
@@ -300,6 +300,34 @@ def _solution_append_list_item(task: Task) -> list:
            call("write_file", path=f"{target}.json", content=json.dumps(expected)), answer("DONE")]
 
 
+def _build_transient_read_failure(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    value = f"CODE-{rng.randint(1000, 9999)}"
+    _write(root, "pointer.json", _json({"next": "detail.json"}))
+    _write(root, "detail.json", _json({"value": value}))
+    fault = fault_signal = None
+    if ctx.condition == "fault":
+        # call #2 on the shared read_file tool is the first attempt at detail.json.
+        fault = Fault(tool="read_file", on_call=2, message="Simulated transient read failure.")
+        fault_signal = ("read_file", "Simulated transient read failure.")
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+               pair_id=ctx.pair_id, condition=ctx.condition, max_iterations=6,
+               prompt=("Read pointer.json, then read the file it names under 'next', then "
+                      "report only the value field of that file. If a read fails, try it "
+                      "again."),
+               tools=("read_file",),
+               expect=Expect(answer=Answer(value=value), evidence=(value,),
+                            process=("no_write_attempts",)),
+               fault=fault, fault_signal=fault_signal, debug={"value": value})
+
+
+def _solution_transient_read_failure(task: Task) -> list:
+    calls = [call("read_file", path="pointer.json")]
+    if task.condition == "fault":
+        calls.append(call("read_file", path="detail.json"))  # this attempt is made to fail
+    calls.append(call("read_file", path="detail.json"))
+    return calls + [answer(task.expect.answer.value)]
+
+
 @dataclass(frozen=True)
 class Skeleton:
     """A generator: `build` makes one Task from a seed and an optional clean/fault condition;
@@ -344,3 +372,5 @@ SKELETONS.append(Skeleton(name="pointer_nested_edit", family="updates", split="t
 SKELETONS.append(Skeleton(name="rename_key_all_files", family="updates", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_rename_key_all_files, solution=_solution_rename_key_all_files))
 
 SKELETONS.append(Skeleton(name="append_list_item", family="updates", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_append_list_item, solution=_solution_append_list_item))
+
+SKELETONS.append(Skeleton(name="transient_read_failure", family="recovery", split="test", seeds=(0, 1, 2), recovery=True, build=_build_transient_read_failure, solution=_solution_transient_read_failure))
