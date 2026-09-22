@@ -216,6 +216,33 @@ def _solution_sum_across_files(task: Task) -> list:
         answer(task.expect.answer.value)]
 
 
+def _build_pointer_nested_edit(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    active, spare = ("settings_a", "settings_b") if rng.random() < 0.5 else ("settings_b", "settings_a")
+    _write(root, "manifest.json", _json({"active": active}))
+    base = {"name": active, "output": {"filename": "old.json", "format": "json"}, "enabled": True}
+    _write(root, f"{active}.json", _json(base))
+    _write(root, f"{spare}.json", _json({"name": spare,
+        "output": {"filename": "keep.json", "format": "json"}, "enabled": True}))
+    new_filename = "analysis.json"
+    expected = {**base, "output": {**base["output"], "filename": new_filename}}
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+               pair_id=ctx.pair_id, condition=ctx.condition, max_iterations=6,
+               prompt=(f"Read manifest.json to find the active settings file, then change "
+                      f"only its output.filename field to {new_filename!r}, keeping every "
+                      "other field. Do not touch the other settings file. Reply DONE."),
+               tools=("read_file", "write_file"),
+               expect=Expect(answer=Answer(value="DONE", format="required"),
+                            files={f"{active}.json": _json(expected)}, evidence=(active,)),
+               claim_tokens=("DONE",), debug={"active": active})
+
+
+def _solution_pointer_nested_edit(task: Task) -> list:
+    active = task.debug["active"]
+    expected = json.loads(task.expect.files[f"{active}.json"])
+    return [call("read_file", path="manifest.json"), call("read_file", path=f"{active}.json"),
+           call("write_file", path=f"{active}.json", content=json.dumps(expected)), answer("DONE")]
+
+
 @dataclass(frozen=True)
 class Skeleton:
     """A generator: `build` makes one Task from a seed and an optional clean/fault condition;
@@ -254,3 +281,5 @@ SKELETONS.append(Skeleton(name="deep_chain_lookup", family="inspection", split="
 SKELETONS.append(Skeleton(name="grep_locate", family="inspection", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_grep_locate, solution=_solution_grep_locate))
 
 SKELETONS.append(Skeleton(name="sum_across_files", family="inspection", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_sum_across_files, solution=_solution_sum_across_files))
+
+SKELETONS.append(Skeleton(name="pointer_nested_edit", family="updates", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_pointer_nested_edit, solution=_solution_pointer_nested_edit))
