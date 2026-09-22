@@ -243,6 +243,37 @@ def _solution_pointer_nested_edit(task: Task) -> list:
            call("write_file", path=f"{active}.json", content=json.dumps(expected)), answer("DONE")]
 
 
+def _build_rename_key_all_files(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    count = rng.randint(3, 5)
+    old_key, new_key = "endpoint", "url"
+    contents = {}
+    for i in range(count):
+        content = {old_key: f"https://svc-{i}.internal/api", "timeout": rng.randint(1, 10)}
+        path = f"services/svc_{i:02d}.json"
+        contents[path] = content
+        _write(root, path, _json(content))
+    _write(root, "legacy/svc_00.json", _json({old_key: "https://legacy.internal/api", "timeout": 5}))
+    expected = {path: _json({new_key: content[old_key], "timeout": content["timeout"]})
+               for path, content in contents.items()}
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+               pair_id=ctx.pair_id, condition=ctx.condition, max_iterations=count * 2 + 2,
+               prompt=(f"Under services/, every file has a {old_key!r} field. Rename that "
+                      f"field to {new_key!r} in every file under services/ (keep its value "
+                      "and every other field), but do not touch anything under legacy/. "
+                      "Reply DONE."),
+               tools=("list_files", "read_file", "write_file"),
+               expect=Expect(answer=Answer(value="DONE", format="required"), files=expected),
+               claim_tokens=("DONE",), debug={"paths": list(contents)})
+
+
+def _solution_rename_key_all_files(task: Task) -> list:
+    calls = [call("list_files", path="services", recursive=True)]
+    for path in task.debug["paths"]:
+        calls.append(call("read_file", path=path))
+        calls.append(call("write_file", path=path, content=json.dumps(json.loads(task.expect.files[path]))))
+    return calls + [answer("DONE")]
+
+
 @dataclass(frozen=True)
 class Skeleton:
     """A generator: `build` makes one Task from a seed and an optional clean/fault condition;
@@ -283,3 +314,5 @@ SKELETONS.append(Skeleton(name="grep_locate", family="inspection", split="test",
 SKELETONS.append(Skeleton(name="sum_across_files", family="inspection", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_sum_across_files, solution=_solution_sum_across_files))
 
 SKELETONS.append(Skeleton(name="pointer_nested_edit", family="updates", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_pointer_nested_edit, solution=_solution_pointer_nested_edit))
+
+SKELETONS.append(Skeleton(name="rename_key_all_files", family="updates", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_rename_key_all_files, solution=_solution_rename_key_all_files))
