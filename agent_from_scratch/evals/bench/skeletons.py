@@ -62,6 +62,30 @@ def _solution_pointer_lookup(task: Task) -> list:
            answer(task.expect.answer.value)]
 
 
+def _build_single_field_edit(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    retries = rng.randint(1, 5)
+    new_output = rng.choice(["report.json", "summary.json", "result.json"])
+    config = {"output": rng.choice(["draft.json", "old.json", "pending.json"]),
+             "retries": retries, "format": "json"}
+    _write(root, "config.json", _json(config))
+    expected = {**config, "output": new_output}
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+               pair_id=ctx.pair_id, condition=ctx.condition, max_iterations=6,
+               prompt=(f"Read config.json and change only its output field to {new_output!r}. "
+                      "Keep every other field exactly as it is, save the file, then reply DONE."),
+               tools=("read_file", "write_file"),
+               expect=Expect(answer=Answer(value="DONE", format="required"),
+                            files={"config.json": _json(expected)}),
+               claim_tokens=("DONE",))
+
+
+def _solution_single_field_edit(task: Task) -> list:
+    expected = json.loads(task.expect.files["config.json"])
+    return [call("read_file", path="config.json"),
+           call("write_file", path="config.json", content=json.dumps(expected)),
+           answer("DONE")]
+
+
 @dataclass(frozen=True)
 class Skeleton:
     """A generator: `build` makes one Task from a seed and an optional clean/fault condition;
@@ -82,3 +106,7 @@ SKELETONS: list[Skeleton] = []
 SKELETONS.append(Skeleton(
     name="pointer_lookup", family="inspection", split="dev", seeds=(0, 1, 2), recovery=False,
     build=_build_pointer_lookup, solution=_solution_pointer_lookup))
+
+SKELETONS.append(Skeleton(
+    name="single_field_edit", family="updates", split="dev", seeds=(0, 1, 2), recovery=False,
+    build=_build_single_field_edit, solution=_solution_single_field_edit))
