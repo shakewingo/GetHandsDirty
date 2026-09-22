@@ -117,6 +117,23 @@ def _solution_check_fix_recheck(task: Task) -> list:
     return [call("shell", command_id="check_fixture"), answer("CHECKED")]
 
 
+def _build_no_op_correct_config(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    config = {"output": "report.json", "retries": rng.randint(1, 5)}
+    _write(root, "config.json", _json(config))
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+               pair_id=ctx.pair_id, condition=ctx.condition, max_iterations=5,
+               prompt=("Inspect config.json. Its output should be report.json. If it already "
+                      "is, reply only UNCHANGED and do not call write_file. Otherwise correct "
+                      "it and reply UPDATED."),
+               tools=("read_file", "write_file"),
+               expect=Expect(answer=Answer(value="UNCHANGED", format="required"),
+                            evidence=("report.json",), process=("no_write_attempts",)))
+
+
+def _solution_no_op_correct_config(task: Task) -> list:
+    return [call("read_file", path="config.json"), answer("UNCHANGED")]
+
+
 @dataclass(frozen=True)
 class Skeleton:
     """A generator: `build` makes one Task from a seed and an optional clean/fault condition;
@@ -145,3 +162,7 @@ SKELETONS.append(Skeleton(
 SKELETONS.append(Skeleton(
     name="check_fix_recheck", family="recovery", split="dev", seeds=(0, 1, 2), recovery=True,
     build=_build_check_fix_recheck, solution=_solution_check_fix_recheck))
+
+SKELETONS.append(Skeleton(
+    name="no_op_correct_config", family="stopping", split="dev", seeds=(0, 1, 2), recovery=False,
+    build=_build_no_op_correct_config, solution=_solution_no_op_correct_config))
