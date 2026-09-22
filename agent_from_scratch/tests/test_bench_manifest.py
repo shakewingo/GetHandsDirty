@@ -28,6 +28,19 @@ class ManifestTests(unittest.TestCase):
             drift = manifest_drift()
         self.assertIn("memory", drift)
 
+    def test_manifest_drift_never_gates_on_git_revision(self):
+        # Regression: committing the frozen manifest always changes HEAD, so a manifest that
+        # only differs by git_revision (exactly what happens the instant `freeze` is committed)
+        # must not be reported as drift.
+        frozen = build_manifest()
+        frozen["git_revision"] = "0" * 40
+        with patch("agent_from_scratch.evals.bench.manifest.MANIFEST_PATH") as path:
+            path.exists.return_value = True
+            import json
+            path.read_text.return_value = json.dumps(frozen)
+            drift = manifest_drift()
+        self.assertNotIn("git_revision", drift)
+
 
 if __name__ == "__main__":
     unittest.main()

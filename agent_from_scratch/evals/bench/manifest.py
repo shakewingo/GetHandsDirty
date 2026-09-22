@@ -56,13 +56,18 @@ def save_manifest() -> None:
 
 
 def manifest_drift() -> dict[str, tuple]:
-    """Fields that differ from the committed manifest; {} if unfrozen or unchanged."""
+    """Fields that differ from the committed manifest; {} if unfrozen or unchanged.
+
+    `git_revision` is recorded for provenance but never compared: committing the frozen
+    manifest itself always changes HEAD, so gating on it would make every freeze self-drift
+    against its own commit the moment it lands.
+    """
     if not MANIFEST_PATH.exists():
         return {}
     frozen = json.loads(MANIFEST_PATH.read_text())
     current = build_manifest()
     drift = {key: (frozen.get(key), current.get(key)) for key in frozen
-            if key != "tasks" and frozen.get(key) != current.get(key)}
+            if key not in ("tasks", "git_revision") and frozen.get(key) != current.get(key)}
     if {t["id"]: t for t in frozen.get("tasks", [])} != {t["id"]: t for t in current.get("tasks", [])}:
         drift["tasks"] = "task set or content changed"
     return drift
