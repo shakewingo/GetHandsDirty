@@ -530,6 +530,15 @@ Build on Stage 2 after Stages 3–4A/B. The local workspace is a learning benchm
 includes interpretable failures. Save task-level results and a frozen manifest in `docs/benchmark.md`.
 Fix protocol/evaluator bugs before training; do not require the base model to solve every task.
 
+### Stage 8 extra — Telegram bot deployment · optional, outside the sprint gate
+
+Decided September 22. A side experiment, not a Stage 8 gate item and not part of the Stage
+9–11 training line: run the existing agent as a long-lived process reachable from a phone over
+Telegram, so the loop/tools/memory work can be poked at outside a terminal session. Keeps the
+local Qwen2.5-7B GGUF backend and `Agent.run_turn`/`SessionStore` unchanged; adds one new
+long-polling module and a launchd job on an always-on Mac mini, since this laptop cannot stay
+powered on. Design: [telegram-bot-design.md](superpowers/specs/2026-09-22-telegram-bot-design.md).
+
 ### Post-training plan for Stages 9–11 (decided September 21)
 
 **Trainable model:** a 3–4B instruct checkpoint in HF safetensors, first candidate
