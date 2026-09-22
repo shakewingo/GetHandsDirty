@@ -5,6 +5,7 @@ Design: docs/superpowers/specs/2026-09-22-telegram-bot-design.md
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -15,8 +16,10 @@ import httpx
 from loguru import logger
 
 from ..agent import Agent
-from ..context import InstructionLoadError
+from ..context import InstructionConfig, InstructionLoadError
+from ..llm import LLM
 from ..session import SessionStore
+from ..tools.register import workspace as default_workspace
 from ..trace import RunStopReason, TurnResult
 
 DEFAULT_API_BASE = "https://api.telegram.org"
@@ -235,3 +238,24 @@ def poll_loop(agent: Agent, store: SessionStore, client: Any, allowed_user_id: i
                                      compact_pending=compact_pending, offset_path=offset_path)
         if new_offset is not None:
             offset = new_offset
+
+
+def main() -> None:
+    try:
+        config = load_config_from_env(os.environ)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+    Path(config.state_dir).mkdir(parents=True, exist_ok=True)
+    llm = LLM()
+    agent = Agent(llm, state_dir=config.state_dir,
+                  instruction_config=InstructionConfig(workspace=default_workspace))
+    store = SessionStore(Path(config.state_dir, "sessions"))
+    client = TelegramClient(config.token)
+    try:
+        poll_loop(agent, store, client, config.allowed_user_id, state_dir=config.state_dir)
+    finally:
+        client.close()
+
+
+if __name__ == "__main__":
+    main()
