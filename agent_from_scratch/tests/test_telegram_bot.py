@@ -4,12 +4,15 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+
+import httpx
 
 from agent_from_scratch.agent import Agent
 from agent_from_scratch.bots.telegram_bot import (
-    MAX_MESSAGE_LENGTH, SESSION_RESET_COMMANDS, TelegramAPIError, TelegramClient,
-    extract_message, format_reply, handle_update, is_allowed, load_offset, save_offset,
+    BotConfig, DEFAULT_STATE_DIR, MAX_MESSAGE_LENGTH, SESSION_RESET_COMMANDS, TelegramAPIError,
+    TelegramClient, extract_message, format_reply, handle_update, is_allowed,
+    load_config_from_env, load_offset, poll_loop, process_updates, save_offset,
     truncate_for_telegram,
 )
 from agent_from_scratch.context import InstructionLoadError
@@ -233,6 +236,95 @@ class HandleUpdateTests(unittest.TestCase):
         self.agent.run_turn = Mock(side_effect=RuntimeError("boom"))
         self._handle(_text_update(1, "hello"))
         self.client.send_message.assert_called_once_with(1, "Internal error: boom")
+
+
+class LoadConfigFromEnvTests(unittest.TestCase):
+    def test_reads_required_and_optional_values(self):
+        env = {"TELEGRAM_BOT_TOKEN": "tok", "TELEGRAM_ALLOWED_USER_ID": "99",
+               "TELEGRAM_STATE_DIR": "/tmp/x"}
+        config = load_config_from_env(env)
+        self.assertEqual(config, BotConfig(token="tok", allowed_user_id=99, state_dir="/tmp/x"))
+
+    def test_state_dir_defaults_when_absent(self):
+        env = {"TELEGRAM_BOT_TOKEN": "tok", "TELEGRAM_ALLOWED_USER_ID": "99"}
+        config = load_config_from_env(env)
+        self.assertEqual(config.state_dir, DEFAULT_STATE_DIR)
+
+    def test_raises_when_token_missing(self):
+        with self.assertRaises(ValueError):
+            load_config_from_env({"TELEGRAM_ALLOWED_USER_ID": "99"})
+
+    def test_raises_when_allowed_user_id_is_not_an_integer(self):
+        with self.assertRaises(ValueError):
+            load_config_from_env({"TELEGRAM_BOT_TOKEN": "tok", "TELEGRAM_ALLOWED_USER_ID": "abc"})
+
+
+class ProcessUpdatesTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.state_dir = self.directory.name
+        self.agent = Agent(Mock(spec=LLM), state_dir=self.state_dir)
+        self.agent.run_turn = Mock(return_value=TurnResult(
+            messages=[], stop_reason=RunStopReason.FINAL_RESPONSE, final_answer="ok"))
+        self.store = SessionStore(Path(self.state_dir, "sessions"))
+        self.client = Mock()
+        self.offset_path = Path(self.state_dir, "offset.txt")
+
+    def test_advances_offset_and_persists_it(self):
+        updates = [_text_update(1, "hi", update_id=10), _text_update(1, "there", update_id=11)]
+        next_offset = process_updates(updates, agent=self.agent, store=self.store,
+                                      client=self.client, allowed_user_id=99,
+                                      active_sessions={}, compact_pending={},
+                                      offset_path=self.offset_path)
+        self.assertEqual(next_offset, 12)
+        self.assertEqual(load_offset(self.offset_path), 12)
+        self.assertEqual(self.client.send_message.call_count, 2)
+
+    def test_empty_batch_returns_none_and_leaves_offset_untouched(self):
+        result = process_updates([], agent=self.agent, store=self.store, client=self.client,
+                                 allowed_user_id=99, active_sessions={}, compact_pending={},
+                                 offset_path=self.offset_path)
+        self.assertIsNone(result)
+        self.assertFalse(self.offset_path.exists())
+
+    def test_one_bad_update_does_not_stop_the_batch(self):
+        self.agent.run_turn = Mock(side_effect=[
+            RuntimeError("boom"),
+            TurnResult(messages=[], stop_reason=RunStopReason.FINAL_RESPONSE, final_answer="ok"),
+        ])
+        updates = [_text_update(1, "first", update_id=1), _text_update(1, "second", update_id=2)]
+        next_offset = process_updates(updates, agent=self.agent, store=self.store,
+                                      client=self.client, allowed_user_id=99,
+                                      active_sessions={}, compact_pending={},
+                                      offset_path=self.offset_path)
+        self.assertEqual(next_offset, 3)
+        self.assertEqual(self.client.send_message.call_count, 2)
+
+
+class PollLoopTests(unittest.TestCase):
+    def test_retries_after_a_telegram_api_error(self):
+        client = Mock()
+        client.get_updates.side_effect = [TelegramAPIError("boom"), StopIteration]
+        with TemporaryDirectory() as directory:
+            agent = Agent(Mock(spec=LLM), state_dir=directory)
+            store = SessionStore(Path(directory, "sessions"))
+            with patch("agent_from_scratch.bots.telegram_bot.time.sleep") as sleep_mock:
+                with self.assertRaises(StopIteration):
+                    poll_loop(agent, store, client, 99, state_dir=directory, backoff_seconds=0.01)
+            sleep_mock.assert_called_once_with(0.01)
+        self.assertEqual(client.get_updates.call_count, 2)
+
+    def test_retries_after_a_network_error(self):
+        client = Mock()
+        client.get_updates.side_effect = [httpx.ConnectError("offline"), StopIteration]
+        with TemporaryDirectory() as directory:
+            agent = Agent(Mock(spec=LLM), state_dir=directory)
+            store = SessionStore(Path(directory, "sessions"))
+            with patch("agent_from_scratch.bots.telegram_bot.time.sleep"):
+                with self.assertRaises(StopIteration):
+                    poll_loop(agent, store, client, 99, state_dir=directory, backoff_seconds=0.01)
+        self.assertEqual(client.get_updates.call_count, 2)
 
 
 if __name__ == "__main__":

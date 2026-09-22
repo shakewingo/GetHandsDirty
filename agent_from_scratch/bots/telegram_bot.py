@@ -5,6 +5,9 @@ Design: docs/superpowers/specs/2026-09-22-telegram-bot-design.md
 
 from __future__ import annotations
 
+import time
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +24,7 @@ LONG_POLL_TIMEOUT = 30
 MAX_MESSAGE_LENGTH = 4096
 _TRUNCATION_MARKER = "\n… [truncated]"
 SESSION_RESET_COMMANDS = {"/new", "/reset"}
+DEFAULT_STATE_DIR = "./outputs/telegram_sessions"
 
 
 class TelegramAPIError(RuntimeError):
@@ -173,3 +177,61 @@ def handle_update(update: dict[str, Any], *, agent: Agent, store: SessionStore,
         client.send_message(chat_id, f"Internal error: {error}")
         return
     client.send_message(chat_id, format_reply(result))
+
+
+@dataclass(frozen=True)
+class BotConfig:
+    token: str
+    allowed_user_id: int
+    state_dir: str
+
+
+def load_config_from_env(env: Mapping[str, str]) -> BotConfig:
+    token = env.get("TELEGRAM_BOT_TOKEN")
+    allowed_raw = env.get("TELEGRAM_ALLOWED_USER_ID")
+    if not token or not allowed_raw:
+        raise ValueError("TELEGRAM_BOT_TOKEN and TELEGRAM_ALLOWED_USER_ID must be set.")
+    try:
+        allowed_user_id = int(allowed_raw)
+    except ValueError as error:
+        raise ValueError(f"TELEGRAM_ALLOWED_USER_ID must be an integer: {error}") from error
+    state_dir = env.get("TELEGRAM_STATE_DIR", DEFAULT_STATE_DIR)
+    return BotConfig(token=token, allowed_user_id=allowed_user_id, state_dir=state_dir)
+
+
+def process_updates(updates: list[dict[str, Any]], *, agent: Agent, store: SessionStore,
+                    client: Any, allowed_user_id: int, active_sessions: dict[Any, str],
+                    compact_pending: dict[Any, bool], offset_path: Path) -> int | None:
+    """Handle one batch of updates; return the next getUpdates offset, or None if unchanged."""
+    next_offset = None
+    for update in updates:
+        try:
+            handle_update(update, agent=agent, store=store, client=client,
+                          allowed_user_id=allowed_user_id, active_sessions=active_sessions,
+                          compact_pending=compact_pending)
+        except Exception:
+            logger.exception("Failed to handle update {}", update.get("update_id"))
+        next_offset = update["update_id"] + 1
+        save_offset(offset_path, next_offset)
+    return next_offset
+
+
+def poll_loop(agent: Agent, store: SessionStore, client: Any, allowed_user_id: int,
+             *, state_dir: str, backoff_seconds: float = 5.0) -> None:
+    offset_path = Path(state_dir, "telegram_offset.txt")
+    offset = load_offset(offset_path)
+    active_sessions: dict[Any, str] = {}
+    compact_pending: dict[Any, bool] = {}
+    while True:
+        try:
+            updates = client.get_updates(offset)
+        except (httpx.HTTPError, TelegramAPIError) as error:
+            logger.warning("getUpdates failed, retrying: {}", error)
+            time.sleep(backoff_seconds)
+            continue
+        new_offset = process_updates(updates, agent=agent, store=store, client=client,
+                                     allowed_user_id=allowed_user_id,
+                                     active_sessions=active_sessions,
+                                     compact_pending=compact_pending, offset_path=offset_path)
+        if new_offset is not None:
+            offset = new_offset
