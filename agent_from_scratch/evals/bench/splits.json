@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "dev": ["pointer_lookup", "single_field_edit", "check_fix_recheck", "no_op_correct_config"],
+  "test": ["deep_chain_lookup", "grep_locate", "sum_across_files", "pointer_nested_edit",
+           "rename_key_all_files", "append_list_item", "transient_read_failure",
+           "flaky_write_retry", "ambiguous_choice_stop", "missing_file_report"],
+  "train": []
+}

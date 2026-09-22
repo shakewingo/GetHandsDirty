@@ -41,8 +41,8 @@ as pilots; mark missing required outcomes incomplete instead of silently extendi
 | Completed | **1 — complete** | Multiple user turns, persisted Session history, structured per-turn state and traces |
 | Completed | **2 — implementation complete** | General filesystem/shell/search/fetch; restricted 2B baseline 8/17 → 12/17 |
 | Completed | **3 — implementation complete** | Context budgeting, automatic/manual compact, rule reload at the boundary, versioned checkpoints and restart replay; real-model evidence for 3B items 2-4 and 3C still outstanding |
-| Next | **4A–4B — required** | Bounded durable memory, search/read, correction/forget, fresh-session recall |
-| Before training | **8 — required** | Resettable benchmark, isolated splits, measured baseline, frozen harness |
+| Deferred past 11 | **4A–4B — deferred (decided September 22, 2026)** | Bounded durable memory, search/read, correction/forget, fresh-session recall |
+| Completed | **8 — benchmark and freeze complete; trainable-checkpoint run is Stage 9's** | Resettable benchmark, isolated splits, measured baseline, frozen harness |
 | Research | **9 — draft, required outcome** | 3–4B HF checkpoint on vLLM → verified trajectories → QLoRA SFT/reload → base/adapter comparison |
 | Later experiment | **10 — draft, conditional** | 2–3 rounds of expert iteration (weak-RSI question); GRPO pilot only if justified |
 | Delivery | **11 — draft, required outcome** | Held-out paired results and reproducible demo; dev-only recipe search optional |
@@ -431,7 +431,11 @@ Test pressure immediately after a tool result/parser error, a failing summarizer
 write failure, and restart. Keep prompt-size measurements and real-model retained/lost facts
 in `docs/context-memory.md`; compare full history versus compact on tasks fitting both.
 
-## Stage 4 — durable memory · 4A–4B required
+## Stage 4 — durable memory · 4A–4B deferred past Stage 11 (decided September 22, 2026)
+
+The Stage 8 freeze records `memory: off`; the primary weight comparisons in Stages 9–11 run
+with memory disabled, so 4A–4B is no longer a precondition of the freeze. Revisit after
+Stage 11. See [docs/STAGE8_DESIGN.md](STAGE8_DESIGN.md).
 
 Read: book Chapters 2/5; Appendix A.4/A.8. [Nanobot memory][nb-memory] separates an archive
 journal from durable facts, with [Dream-managed memory rules][nb-memory-skill]. Its builder
@@ -507,24 +511,38 @@ concurrent writes. Nanobot reference: [restricted subagent][nb-child]; this desi
 
 ## Stage 8 — benchmark and harness freeze · required
 
-Build on Stage 2 after Stages 3–4A/B. The local workspace is a learning benchmark, not a domain product.
+Build on Stage 2 after Stage 3. 4A–4B is deferred past Stage 11 (above), so this stage proceeds
+without it, freezing `memory: off`. The local workspace is a learning benchmark, not a domain product.
+Implementation: [docs/STAGE8_DESIGN.md](STAGE8_DESIGN.md) and its
+[implementation plan](STAGE8_PLAN.md); results in `docs/benchmark.md`.
 
-- [ ] Cover inspection/reporting, constrained updates, recovery/verification, and appropriate
+- [x] Cover inspection/reporting, constrained updates, recovery/verification, and appropriate
   stopping with roughly 2–6 dependent tool interactions. Vary layout, distractors, values,
-  dependency chains, and fault positions; allow multiple valid solutions.
-- [ ] Keep train, dev, and final test isolated by task skeleton before creating variants;
+  dependency chains, and fault positions; allow multiple valid solutions. 14 generated skeletons
+  (4 dev, 10 test), one per family combination, any valid tool path passes.
+- [x] Keep train, dev, and final test isolated by task skeleton before creating variants;
   reset workspace/session/memory per task. Start from the 12–20 dev cases; target 50–100 reserved
   final cases if affordable, explicitly labelling smaller samples as pilots. A public benchmark
   subset is optional; identify adaptations and never present a local score as its official score.
-- [ ] Verify final artifacts/constraints independently. Report counts/denominators, false
+  15 dev tasks, 60 reserved test tasks, `evals/bench/splits.json` fixed before any test skeleton
+  was implemented. Each task gets a fresh temporary workspace and no memory.
+- [x] Verify final artifacts/constraints independently. Report counts/denominators, false
   completion, invalid calls, matched-fault recovery, stopping, tokens, requests, latency, and cost.
   Keep long-session/compact/restart and delayed-memory recall in separate harness evaluations.
-- [ ] Compare full history/compact on fitting tasks and memory off/on from identical facts.
+  `evals/bench/verify.py`'s `bench_summary()` reports all of these; long-context evaluation stays
+  in the separate `pressure` suite (`docs/EMPIRICAL_STUDY_PLAN.md`).
+- [x] Compare full history/compact on fitting tasks and memory off/on from identical facts.
   Freeze code, prompts, tools, checkpoint/template, decoding, budgets, compact policy, memory
-  snapshot/policy, task splits, and verifiers before comparing weights.
+  snapshot/policy, task splits, and verifiers before comparing weights. `evals/bench/manifest.py`
+  freezes source, prompts, chat template, decoding, `AgentLimits` (including compact policy),
+  `memory: off`, splits and the verifier itself, all without loading a model. The full-history/
+  compact comparison itself runs through the existing `pressure`/`compare` commands, not `bench`;
+  memory is off rather than compared, since 4A–4B is deferred.
 - [ ] Run the intended trainable checkpoint as the base control. Primary weight comparisons
   use short tasks and disabled or identical read-only memory; no cross-task accumulation or
   evaluator coaching. For long-context comparisons, hold the summarizer checkpoint/config fixed.
+  Front half done here (the benchmark and freeze mechanics exist); the trainable-checkpoint run
+  is Stage 9's first bullet, since Stage 9 has not happened yet.
 
 **Gate/output:** scripted valid solutions pass and fake “done” outputs fail; real-model baseline
 includes interpretable failures. Save task-level results and a frozen manifest in `docs/benchmark.md`.
@@ -665,10 +683,11 @@ The capped memory index remains planned Stage 4 work.
 
 **Next coding session:** run `examples/continuation_demo.py` and `examples/compact_demo.py`
 on a host that can hold the 7B weights, and record the retained/lost facts in
-[context-memory.md](context-memory.md); that is Stage 3's one outstanding gap. Then start
-Stage 4A–4B memory, which attaches at the compact boundary beside the reloaded rules.
-Complete it before the Stage 8 freeze. For each session record: what I built, what I broke, what the evidence shows,
-what I can explain unaided, and the next smallest gap.
+[context-memory.md](context-memory.md); that is Stage 3's one outstanding gap. Then the
+Stage 8 benchmark is built, frozen and run against the real 7B model (`docs/benchmark.md`);
+start Stage 9 next — the vLLM backend, a 3–4B trainable checkpoint, and re-running the Stage 8
+baseline on it as the actual base control. For each session record: what I built, what I broke,
+what the evidence shows, what I can explain unaided, and the next smallest gap.
 
 [ch1]: ../../../harness-books/book1-claude-code/chapter-01-why-harness-engineering.md
 [ch2]: ../../../harness-books/book1-claude-code/chapter-02-prompt-is-control-plane.md

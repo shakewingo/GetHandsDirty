@@ -12,6 +12,7 @@ python -m agent_from_scratch.evals COMMAND --output outputs/NEW_NAME [options]
 | Did I break anything the agent could already do? | `dev`: 17 small tasks (reading, editing, recovery, stopping) | real | ~2 min, ~4.5 min with planning |
 | Does context management hold when evidence outgrows the window? | `pressure`: 4 tasks over 9 files of ~15k characters | real | ~15–25 min |
 | How do two runs differ? | `compare outputs/A outputs/B`: paired outcomes, exact McNemar p, trajectory shape | none | instant |
+| Does a change hold on the frozen Stage 8 benchmark? | `bench --split dev` (15 tasks, current tools) or `bench --split test --final` (60 tasks, needs a frozen manifest) | real | dev: ~6 min; test: ~46 min |
 | Do the units still work? | `python -m unittest discover -s agent_from_scratch/tests -q` | scripted | seconds |
 | Does it feel right by hand? | `python -m agent_from_scratch.agent` (REPL) | real | — |
 
@@ -50,11 +51,16 @@ Run them one after another: each process holds about 6 GB, and two together slow
 | `trajectory.py` | `profile()` and `compare()`; the `compare` command |
 | `tasks.jsonl`, `splits.json`, `fixtures/` | the frozen dev suite: prompts, permitted tools, verifiers, workspaces |
 | `legacy_files.py`, `check.py` | the dev suite's frozen byte-offset file tools and its trusted check command |
+| `bench/` | Stage 8 generated benchmark: 14 skeletons (4 dev, 10 test × 6 variants), one content-first verifier, freeze manifest. Shapes and rationale: [docs/STAGE8_DESIGN.md](../docs/STAGE8_DESIGN.md) |
 | `core_lines.py` | core-size audit for the review trigger in [context-memory.md](../docs/context-memory.md); not an eval |
 
 The Stage 1, 2A and 2B checkpoints and the old per-stage README are in
 [docs/checkpoints/](../docs/checkpoints/). The live-network tool demos are in
 `examples/tools_smoke.py` and `examples/tools_demo.py`.
+
+`freeze` writes `evals/bench/manifest.json`, hashing everything the test split must not drift
+from (source, prompts, decoding, limits, the task set itself). Run it once, after the last
+skeleton lands; `bench --split test --final` refuses to run if the tree has since drifted.
 
 ## Reading a run directory
 
