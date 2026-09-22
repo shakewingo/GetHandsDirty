@@ -9,8 +9,12 @@ from typing import Any
 
 import httpx
 
+from ..trace import RunStopReason, TurnResult
+
 DEFAULT_API_BASE = "https://api.telegram.org"
 LONG_POLL_TIMEOUT = 30
+MAX_MESSAGE_LENGTH = 4096
+_TRUNCATION_MARKER = "\n… [truncated]"
 
 
 class TelegramAPIError(RuntimeError):
@@ -49,3 +53,49 @@ class TelegramClient:
 
     def close(self) -> None:
         self._client.close()
+
+
+def is_allowed(update: dict[str, Any], allowed_user_id: int) -> bool:
+    message = update.get("message")
+    if not isinstance(message, dict):
+        return False
+    sender = message.get("from")
+    return isinstance(sender, dict) and sender.get("id") == allowed_user_id
+
+
+def extract_message(update: dict[str, Any]) -> tuple[int | str, str] | None:
+    message = update.get("message")
+    if not isinstance(message, dict):
+        return None
+    chat = message.get("chat")
+    text = message.get("text")
+    if not isinstance(chat, dict) or "id" not in chat:
+        return None
+    if not isinstance(text, str) or not text.strip():
+        return None
+    return chat["id"], text
+
+
+def truncate_for_telegram(text: str) -> str:
+    if len(text) <= MAX_MESSAGE_LENGTH:
+        return text
+    return text[: MAX_MESSAGE_LENGTH - len(_TRUNCATION_MARKER)] + _TRUNCATION_MARKER
+
+
+def format_reply(result: TurnResult) -> str:
+    """Mirror Agent.run_repl's per-RunStopReason branches (agent.py:433-448), as text."""
+    if result.stop_reason == RunStopReason.FINAL_RESPONSE:
+        text = result.final_answer or ""
+    elif result.stop_reason == RunStopReason.MODEL_ERROR:
+        text = f"Stopped: model error occurred: {result.error_message}"
+    elif result.stop_reason == RunStopReason.MAX_ITERATIONS:
+        text = "Stopped: reached maximum iterations."
+    elif result.stop_reason == RunStopReason.INTERRUPTED:
+        text = "Turn interrupted."
+    elif result.stop_reason == RunStopReason.CONTEXT_LIMIT:
+        text = (f"Stopped: {result.error_message}\n"
+               "Completed tool actions remain in effect. "
+               "This turn is not included in replayable session history.")
+    else:
+        text = f"Stopped: {result.stop_reason}. {result.error_message or ''}"
+    return truncate_for_telegram(text)
