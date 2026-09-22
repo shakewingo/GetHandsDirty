@@ -58,6 +58,24 @@ class SkeletonGateTests(unittest.TestCase):
                 skeleton.build(random.Random(f"bench:{ctx.name}:{ctx.seed}:{ctx.condition}"), b, ctx)
                 self.assertEqual(snapshot(a), snapshot(b))
 
+    def test_advisory_answers_tolerate_a_reply_wrapped_in_prose(self):
+        # Regression: the Task 24 real-model dev pilot found single_field_edit,
+        # pointer_nested_edit, rename_key_all_files, append_list_item and flaky_write_retry
+        # wrongly declared format="required" for their claim token, so a model that did the
+        # actual work correctly but wrapped "DONE" in a sentence still failed. Only skeletons
+        # whose reply IS the deliverable (format="required") may demand an exact match; every
+        # other skeleton's solution must still pass with its answer wrapped in prose.
+        for index, (skeleton, ctx) in enumerate(specs()):
+            task = self._task(skeleton, ctx)
+            if task.expect.answer is None or task.expect.answer.format == "required":
+                continue
+            with self.subTest(id=ctx.id):
+                script = skeleton.solution(task)
+                wrapped = script[:-1] + [answer(f"All done — the value is {task.expect.answer.value}.")]
+                output = Path(self.enterContext(TemporaryDirectory())) / f"wrapped-{index}"
+                record = run_case(_model(wrapped), skeleton, ctx, output)
+                self.assertTrue(record["passed"], record["checks"])
+
     def test_registered_skeletons_match_splits_json_exactly(self):
         names = [skeleton.name for skeleton in SKELETONS]
         self.assertEqual(len(names), len(set(names)), "duplicate skeleton name")

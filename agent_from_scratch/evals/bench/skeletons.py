@@ -74,7 +74,7 @@ def _build_single_field_edit(rng: random.Random, root: Path, ctx: BuildContext) 
                prompt=(f"Read config.json and change only its output field to {new_output!r}. "
                       "Keep every other field exactly as it is, save the file, then reply DONE."),
                tools=("read_file", "write_file"),
-               expect=Expect(answer=Answer(value="DONE", format="required"),
+               expect=Expect(answer=Answer(value="DONE"),
                             files={"config.json": _json(expected)}),
                claim_tokens=("DONE",))
 
@@ -231,7 +231,7 @@ def _build_pointer_nested_edit(rng: random.Random, root: Path, ctx: BuildContext
                       f"only its output.filename field to {new_filename!r}, keeping every "
                       "other field. Do not touch the other settings file. Reply DONE."),
                tools=("read_file", "write_file"),
-               expect=Expect(answer=Answer(value="DONE", format="required"),
+               expect=Expect(answer=Answer(value="DONE"),
                             files={f"{active}.json": _json(expected)}, evidence=(active,)),
                claim_tokens=("DONE",), debug={"active": active})
 
@@ -262,7 +262,7 @@ def _build_rename_key_all_files(rng: random.Random, root: Path, ctx: BuildContex
                       "and every other field), but do not touch anything under legacy/. "
                       "Reply DONE."),
                tools=("list_files", "read_file", "write_file"),
-               expect=Expect(answer=Answer(value="DONE", format="required"), files=expected),
+               expect=Expect(answer=Answer(value="DONE"), files=expected),
                claim_tokens=("DONE",), debug={"paths": list(contents)})
 
 
@@ -288,7 +288,7 @@ def _build_append_list_item(rng: random.Random, root: Path, ctx: BuildContext) -
                       "list, keeping the existing items in order. Do not change any other "
                       "registry file. Reply DONE."),
                tools=("read_file", "write_file"),
-               expect=Expect(answer=Answer(value="DONE", format="required"),
+               expect=Expect(answer=Answer(value="DONE"),
                             files={f"{target}.json": _json({"items": expected_items})}),
                claim_tokens=("DONE",), debug={"target": target})
 
@@ -342,7 +342,7 @@ def _build_flaky_write_retry(rng: random.Random, root: Path, ctx: BuildContext) 
                       "and save it. If the write fails, try it again. Reply DONE only after "
                       "the file is saved."),
                tools=("write_file",),
-               expect=Expect(answer=Answer(value="DONE", format="required"),
+               expect=Expect(answer=Answer(value="DONE"),
                             files={"state.json": _json(expected)}),
                claim_tokens=("DONE",), fault=fault, fault_signal=fault_signal,
                debug={"expected": expected})
