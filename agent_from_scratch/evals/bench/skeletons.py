@@ -275,7 +275,7 @@ def _solution_rename_key_all_files(task: Task) -> list:
 
 
 def _build_append_list_item(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
-    registries = [f"registry_{c}" for c in "ab"[:rng.randint(2, 3)]]
+    registries = [f"registry_{c}" for c in "abc"[:rng.randint(2, 3)]]
     target = rng.choice(registries)
     items = {name: [f"item-{name}-{i}" for i in range(rng.randint(1, 3))] for name in registries}
     for name in registries:
@@ -341,7 +341,7 @@ def _build_flaky_write_retry(rng: random.Random, root: Path, ctx: BuildContext) 
                prompt=("Change state.json's mode field to 'final', keeping every other field, "
                       "and save it. If the write fails, try it again. Reply DONE only after "
                       "the file is saved."),
-               tools=("write_file",),
+               tools=("read_file", "write_file"),
                expect=Expect(answer=Answer(value="DONE"),
                             files={"state.json": _json(expected)}),
                claim_tokens=("DONE",), fault=fault, fault_signal=fault_signal,
@@ -350,7 +350,8 @@ def _build_flaky_write_retry(rng: random.Random, root: Path, ctx: BuildContext) 
 
 def _solution_flaky_write_retry(task: Task) -> list:
     expected = task.debug["expected"]
-    calls = [call("write_file", path="state.json", content=json.dumps(expected))]
+    calls = [call("read_file", path="state.json"),
+            call("write_file", path="state.json", content=json.dumps(expected))]
     if task.condition == "fault":
         calls.append(call("write_file", path="state.json", content=json.dumps(expected)))
     return calls + [answer("DONE")]
