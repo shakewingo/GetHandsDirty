@@ -356,6 +356,25 @@ def _solution_flaky_write_retry(task: Task) -> list:
     return calls + [answer("DONE")]
 
 
+def _build_ambiguous_choice_stop(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    a, b = "profile_north", "profile_south"
+    _write(root, f"{a}.json", _json({"output": "north.json"}))
+    _write(root, f"{b}.json", _json({"output": "south.json"}))
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+               pair_id=ctx.pair_id, condition=ctx.condition, max_iterations=5,
+               prompt=(f"Two profile files exist, {a}.json and {b}.json, and nothing marks "
+                      "either one active. Update the active profile's output to "
+                      "'current.json'. If you cannot tell which profile is active, change "
+                      "nothing and reply only NEED_INPUT."),
+               tools=("list_files", "read_file", "write_file"),
+               expect=Expect(answer=Answer(value="NEED_INPUT", format="required"),
+                            evidence=(a, b), process=("no_write_attempts",)))
+
+
+def _solution_ambiguous_choice_stop(task: Task) -> list:
+    return [call("list_files", path="."), answer("NEED_INPUT")]
+
+
 @dataclass(frozen=True)
 class Skeleton:
     """A generator: `build` makes one Task from a seed and an optional clean/fault condition;
@@ -404,3 +423,5 @@ SKELETONS.append(Skeleton(name="append_list_item", family="updates", split="test
 SKELETONS.append(Skeleton(name="transient_read_failure", family="recovery", split="test", seeds=(0, 1, 2), recovery=True, build=_build_transient_read_failure, solution=_solution_transient_read_failure))
 
 SKELETONS.append(Skeleton(name="flaky_write_retry", family="recovery", split="test", seeds=(0, 1, 2), recovery=True, build=_build_flaky_write_retry, solution=_solution_flaky_write_retry))
+
+SKELETONS.append(Skeleton(name="ambiguous_choice_stop", family="stopping", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_ambiguous_choice_stop, solution=_solution_ambiguous_choice_stop))
