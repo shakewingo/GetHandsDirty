@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import Any
 from unittest.mock import Mock
 
+from agent_from_scratch.agent import Agent
 from agent_from_scratch.bots.telegram_bot import (
-    MAX_MESSAGE_LENGTH, TelegramAPIError, TelegramClient,
-    extract_message, format_reply, is_allowed, truncate_for_telegram,
+    MAX_MESSAGE_LENGTH, SESSION_RESET_COMMANDS, TelegramAPIError, TelegramClient,
+    extract_message, format_reply, handle_update, is_allowed, load_offset, save_offset,
+    truncate_for_telegram,
 )
+from agent_from_scratch.context import InstructionLoadError
+from agent_from_scratch.llm import LLM
+from agent_from_scratch.session import SessionStore
 from agent_from_scratch.trace import RunStopReason, TurnResult
 
 
@@ -132,6 +140,99 @@ class TruncateForTelegramTests(unittest.TestCase):
     def test_long_text_is_cut_to_the_limit(self):
         truncated = truncate_for_telegram("x" * 5000)
         self.assertEqual(len(truncated), MAX_MESSAGE_LENGTH)
+
+
+def _text_update(chat_id, text, update_id=1, sender_id=99):
+    return {"update_id": update_id,
+            "message": {"chat": {"id": chat_id}, "from": {"id": sender_id}, "text": text}}
+
+
+class SessionResetCommandsTests(unittest.TestCase):
+    def test_includes_new_and_reset(self):
+        self.assertEqual(SESSION_RESET_COMMANDS, {"/new", "/reset"})
+
+
+class OffsetPersistenceTests(unittest.TestCase):
+    def test_load_offset_returns_none_when_missing(self):
+        with TemporaryDirectory() as directory:
+            self.assertIsNone(load_offset(Path(directory, "offset.txt")))
+
+    def test_save_and_load_round_trip(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory, "offset.txt")
+            save_offset(path, 42)
+            self.assertEqual(load_offset(path), 42)
+
+    def test_load_offset_returns_none_on_corrupt_file(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory, "offset.txt")
+            path.write_text("not-a-number")
+            self.assertIsNone(load_offset(path))
+
+
+class HandleUpdateTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        state_dir = self.directory.name
+        self.agent = Agent(Mock(spec=LLM), state_dir=state_dir)
+        self.store = SessionStore(Path(state_dir, "sessions"))
+        self.client = Mock()
+        self.active_sessions: dict[Any, str] = {}
+        self.compact_pending: dict[Any, bool] = {}
+        self.allowed_user_id = 99
+
+    def _handle(self, update):
+        handle_update(update, agent=self.agent, store=self.store, client=self.client,
+                      allowed_user_id=self.allowed_user_id, active_sessions=self.active_sessions,
+                      compact_pending=self.compact_pending)
+
+    def test_ignores_sender_outside_allowlist(self):
+        self._handle(_text_update(1, "hello", sender_id=1))
+        self.client.send_message.assert_not_called()
+
+    def test_runs_a_turn_and_sends_final_answer(self):
+        self.agent.run_turn = Mock(return_value=TurnResult(
+            messages=[], stop_reason=RunStopReason.FINAL_RESPONSE, final_answer="42"))
+        self._handle(_text_update(1, "what is 6*7?"))
+        self.agent.run_turn.assert_called_once()
+        args, kwargs = self.agent.run_turn.call_args
+        self.assertEqual(args[0], "what is 6*7?")
+        self.assertEqual(kwargs["session_id"], "1")
+        self.assertFalse(kwargs["compact"])
+        self.client.send_message.assert_called_once_with(1, "42")
+
+    def test_new_command_switches_to_a_fresh_session_and_persists_it(self):
+        self.agent.run_turn = Mock(return_value=TurnResult(
+            messages=[], stop_reason=RunStopReason.FINAL_RESPONSE, final_answer="ok"))
+        self._handle(_text_update(1, "/new", update_id=1))
+        self.agent.run_turn.assert_not_called()
+        new_session_id = self.active_sessions[1]
+        self.assertNotEqual(new_session_id, "1")
+        self._handle(_text_update(1, "hello again", update_id=2))
+        kwargs = self.agent.run_turn.call_args.kwargs
+        self.assertEqual(kwargs["session_id"], new_session_id)
+
+    def test_compact_command_is_applied_to_the_next_turn_only(self):
+        self.agent.run_turn = Mock(return_value=TurnResult(
+            messages=[], stop_reason=RunStopReason.FINAL_RESPONSE, final_answer="ok"))
+        self._handle(_text_update(1, "/compact", update_id=1))
+        self.client.send_message.assert_called_once()
+        self._handle(_text_update(1, "continue", update_id=2))
+        self.assertTrue(self.agent.run_turn.call_args.kwargs["compact"])
+        self._handle(_text_update(1, "again", update_id=3))
+        self.assertFalse(self.agent.run_turn.call_args.kwargs["compact"])
+
+    def test_instruction_load_error_replies_without_crashing(self):
+        self.agent.run_turn = Mock(side_effect=InstructionLoadError("bad rules file"))
+        self._handle(_text_update(1, "hello"))
+        self.client.send_message.assert_called_once_with(
+            1, "Instructions unavailable: bad rules file")
+
+    def test_unexpected_error_replies_and_does_not_propagate(self):
+        self.agent.run_turn = Mock(side_effect=RuntimeError("boom"))
+        self._handle(_text_update(1, "hello"))
+        self.client.send_message.assert_called_once_with(1, "Internal error: boom")
 
 
 if __name__ == "__main__":

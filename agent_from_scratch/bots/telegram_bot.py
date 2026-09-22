@@ -5,16 +5,22 @@ Design: docs/superpowers/specs/2026-09-22-telegram-bot-design.md
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import httpx
+from loguru import logger
 
+from ..agent import Agent
+from ..context import InstructionLoadError
+from ..session import SessionStore
 from ..trace import RunStopReason, TurnResult
 
 DEFAULT_API_BASE = "https://api.telegram.org"
 LONG_POLL_TIMEOUT = 30
 MAX_MESSAGE_LENGTH = 4096
 _TRUNCATION_MARKER = "\n… [truncated]"
+SESSION_RESET_COMMANDS = {"/new", "/reset"}
 
 
 class TelegramAPIError(RuntimeError):
@@ -99,3 +105,71 @@ def format_reply(result: TurnResult) -> str:
     else:
         text = f"Stopped: {result.stop_reason}. {result.error_message or ''}"
     return truncate_for_telegram(text)
+
+
+def load_offset(path: Path) -> int | None:
+    try:
+        return int(path.read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def save_offset(path: Path, offset: int) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(str(offset))
+
+
+def handle_update(update: dict[str, Any], *, agent: Agent, store: SessionStore,
+                  client: Any, allowed_user_id: int,
+                  active_sessions: dict[Any, str], compact_pending: dict[Any, bool]) -> None:
+    """Process one Telegram update: allowlist, then command dispatch, then one agent turn."""
+    if not is_allowed(update, allowed_user_id):
+        sender = (update.get("message") or {}).get("from") or {}
+        logger.warning("Ignoring message from disallowed sender {}", sender.get("id"))
+        return
+    parsed = extract_message(update)
+    if parsed is None:
+        return
+    chat_id, text = parsed
+    session_id = active_sessions.setdefault(chat_id, str(chat_id))
+    command = text.strip()
+
+    if command == "/compact":
+        # Compaction runs inside a turn, against that turn's own view, so the request that
+        # follows is the earliest point this can take effect (mirrors agent.py:406-411).
+        compact_pending[chat_id] = True
+        client.send_message(chat_id, "The next message will summarize earlier history before acting.")
+        return
+
+    if command in SESSION_RESET_COMMANDS or command.startswith("/session "):
+        try:
+            new_session_id = agent._session_command(command, session_id, store)
+        except (OSError, ValueError) as error:
+            client.send_message(chat_id, f"Could not update session: {error}")
+            return
+        active_sessions[chat_id] = new_session_id
+        client.send_message(chat_id, f"Session: {new_session_id}")
+        return
+
+    try:
+        history = store.load_history(session_id)
+        checkpoint = store.load_checkpoint(session_id, history)
+    except (OSError, ValueError) as error:
+        client.send_message(chat_id,
+            f"Session unavailable: {error}. Use /new, /reset, or /session <id> to recover.")
+        return
+
+    compact = compact_pending.pop(chat_id, False)
+    try:
+        result = agent.run_turn(text, history, session_id=session_id, compact=compact,
+                                checkpoint=checkpoint)
+    except InstructionLoadError as error:
+        if compact:
+            compact_pending[chat_id] = True  # the turn never started; a pending compact still applies
+        client.send_message(chat_id, f"Instructions unavailable: {error}")
+        return
+    except Exception as error:  # noqa: BLE001 - one bad turn must not end 24/7 availability
+        logger.exception("Turn failed for session {}", session_id)
+        client.send_message(chat_id, f"Internal error: {error}")
+        return
+    client.send_message(chat_id, format_reply(result))
