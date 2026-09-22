@@ -274,6 +274,32 @@ def _solution_rename_key_all_files(task: Task) -> list:
     return calls + [answer("DONE")]
 
 
+def _build_append_list_item(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    registries = [f"registry_{c}" for c in "ab"[:rng.randint(2, 3)]]
+    target = rng.choice(registries)
+    items = {name: [f"item-{name}-{i}" for i in range(rng.randint(1, 3))] for name in registries}
+    for name in registries:
+        _write(root, f"{name}.json", _json({"items": items[name]}))
+    new_item = f"item-new-{rng.randint(100, 999)}"
+    expected_items = [*items[target], new_item]
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+               pair_id=ctx.pair_id, condition=ctx.condition, max_iterations=6,
+               prompt=(f"Read {target}.json and append {new_item!r} to the end of its items "
+                      "list, keeping the existing items in order. Do not change any other "
+                      "registry file. Reply DONE."),
+               tools=("read_file", "write_file"),
+               expect=Expect(answer=Answer(value="DONE", format="required"),
+                            files={f"{target}.json": _json({"items": expected_items})}),
+               claim_tokens=("DONE",), debug={"target": target})
+
+
+def _solution_append_list_item(task: Task) -> list:
+    target = task.debug["target"]
+    expected = json.loads(task.expect.files[f"{target}.json"])
+    return [call("read_file", path=f"{target}.json"),
+           call("write_file", path=f"{target}.json", content=json.dumps(expected)), answer("DONE")]
+
+
 @dataclass(frozen=True)
 class Skeleton:
     """A generator: `build` makes one Task from a seed and an optional clean/fault condition;
@@ -316,3 +342,5 @@ SKELETONS.append(Skeleton(name="sum_across_files", family="inspection", split="t
 SKELETONS.append(Skeleton(name="pointer_nested_edit", family="updates", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_pointer_nested_edit, solution=_solution_pointer_nested_edit))
 
 SKELETONS.append(Skeleton(name="rename_key_all_files", family="updates", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_rename_key_all_files, solution=_solution_rename_key_all_files))
+
+SKELETONS.append(Skeleton(name="append_list_item", family="updates", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_append_list_item, solution=_solution_append_list_item))
