@@ -12,7 +12,7 @@ python -m agent_from_scratch.evals COMMAND --output outputs/NEW_NAME [options]
 | Did I break anything the agent could already do? | `dev`: 17 small tasks (reading, editing, recovery, stopping) | real | ~2 min, ~4.5 min with planning |
 | Does context management hold when evidence outgrows the window? | `pressure`: 4 tasks over 9 files of ~15k characters | real | ~15–25 min |
 | How do two runs differ? | `compare outputs/A outputs/B`: paired outcomes, exact McNemar p, trajectory shape | none | instant |
-| Does a change hold on the frozen Stage 8 benchmark? | `bench --split dev` (15 tasks, current tools) or `bench --split test --final` (60 tasks, needs a frozen manifest) | real | dev: ~1 min; test: ~5 min |
+| Does a change hold on the frozen Stage 8 benchmark? | `bench --split dev` (15 tasks, current tools) or `bench --split test --final` (60 tasks, needs a frozen manifest) | real | dev: ~6 min; test: ~46 min |
 | Do the units still work? | `python -m unittest discover -s agent_from_scratch/tests -q` | scripted | seconds |
 | Does it feel right by hand? | `python -m agent_from_scratch.agent` (REPL) | real | — |
 
