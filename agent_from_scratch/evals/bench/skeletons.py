@@ -134,6 +134,32 @@ def _solution_no_op_correct_config(task: Task) -> list:
     return [call("read_file", path="config.json"), answer("UNCHANGED")]
 
 
+def _build_deep_chain_lookup(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    depth = rng.randint(3, 5)
+    names = [f"node_{i}_{rng.choice('abcdefgh')}.json" for i in range(depth + 1)]
+    final_value = f"VALUE-{rng.randint(1000, 9999)}"
+    for i in range(depth):
+        decoy = f"node_{i}_{rng.choice('xyzqrs')}.json"
+        _write(root, decoy, _json({"note": "not the path to follow"}))
+        _write(root, names[i], _json({"next": names[i + 1]}))
+    _write(root, names[depth], _json({"value": final_value}))
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+               pair_id=ctx.pair_id, condition=ctx.condition, max_iterations=depth + 3,
+               prompt=(f"Start at {names[0]}. Each file names the next one under its 'next' "
+                      "field; some other files exist but are not part of the chain. Follow "
+                      "the chain until a file has a 'value' field instead, then report only "
+                      "that value."),
+               tools=("list_files", "read_file"),
+               expect=Expect(answer=Answer(value=final_value), evidence=(final_value,),
+                            process=("no_write_attempts",)),
+               debug={"chain": names})
+
+
+def _solution_deep_chain_lookup(task: Task) -> list:
+    return [call("read_file", path=name) for name in task.debug["chain"]] + [
+        answer(task.expect.answer.value)]
+
+
 @dataclass(frozen=True)
 class Skeleton:
     """A generator: `build` makes one Task from a seed and an optional clean/fault condition;
@@ -166,3 +192,5 @@ SKELETONS.append(Skeleton(
 SKELETONS.append(Skeleton(
     name="no_op_correct_config", family="stopping", split="dev", seeds=(0, 1, 2), recovery=False,
     build=_build_no_op_correct_config, solution=_solution_no_op_correct_config))
+
+SKELETONS.append(Skeleton(name="deep_chain_lookup", family="inspection", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_deep_chain_lookup, solution=_solution_deep_chain_lookup))
