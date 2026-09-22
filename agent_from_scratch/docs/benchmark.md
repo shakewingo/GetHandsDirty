@@ -95,6 +95,16 @@ Run September 22, 2026, once, after freezing `evals/bench/manifest.json` (git re
 onward). Same settings as the dev pilot: greedy, Qwen2.5-7B-Instruct Q4_K_M, `N_CTX = 32768`.
 `metadata.json`'s `manifest_drift` field is `{}` — the run matched its own frozen manifest.
 
+**Superseded by the final-review fix wave (commits `be4d8d3`, `0e3a937`, revision `9e8538f`
+onward).** The results below are pinned to the manifest at `7a01104`/`703a2f4`, not the current
+frozen benchmark. Two skeletons' content changed after this run: `flaky_write_retry` gained a
+`read_file` tool it did not have here (it was unsolvable as specified — see that row's note
+below — and is not a real 0/6 capability result), and 2 of `append_list_item`'s 6 seeds got new
+prompt/expect content (a registry-count generation bug fix). The other eight skeletons and the
+remaining four `append_list_item` seeds are unchanged and still describe the current benchmark.
+Not re-run: Task 25 runs the test split once as a pipeline check, not to be repeated on every
+manifest edit; the next real test-split evidence belongs to Stage 9's baseline.
+
 ### A second evaluator bug, found freezing for the first time
 
 `--final` refused immediately with `Manifest drift in ['git_revision']`. Committing
@@ -115,12 +125,17 @@ freezing and immediately re-checking against the committed file in one real sequ
 | `sum_across_files` | inspection | 4/6 | 0/6 |
 | `pointer_nested_edit` | updates | 0/6 | 1/6 |
 | `rename_key_all_files` | updates | 0/6 | 0/6 |
-| `append_list_item` | updates | 0/6 | 0/6 |
+| `append_list_item`¹ | updates | 0/6 | 0/6 |
 | `transient_read_failure` | recovery | 6/6 | 0/6 |
-| `flaky_write_retry` | recovery | 0/6 | 0/6 |
+| `flaky_write_retry`² | recovery | 0/6 | 0/6 |
 | `ambiguous_choice_stop` | stopping | 1/6 | 2/6 |
 | `missing_file_report` | stopping | 0/6 | 3/6 |
 | **Total** | | **21/60** | 12/60 |
+
+¹ 2 of 6 seeds' prompt/expect content changed in `be4d8d3` (a registry-count generation fix);
+the other 4 seeds still describe the current benchmark.
+² `tools` changed in `be4d8d3` (`read_file` added) — this run's 0/6 reflects a task version
+that had no way to observe the field it was told to keep; not a recovery-capability result.
 
 `false_completion`: 9/24 claims reviewed. `invalid_calls`: 20. `model_requests`: 289.
 `elapsed_seconds`: 2,769 (~46 min). `total_tokens`: 643,164. No `context_limit` stops.
@@ -141,13 +156,18 @@ freezing and immediately re-checking against the committed file in one real sequ
     documented (the model sometimes writes back the `N| `-prefixed text `read_file` displays,
     producing invalid or mismatched content).
   - `flaky_write_retry-0-clean`: `no_progress` after 3 consecutive invalid tool calls, offered
-    only `write_file` with no `read_file` to fall back on.
-  
+    only `write_file` with no `read_file` to fall back on. **This was a genuine evaluator bug,
+    not a model failure** — the task asked the model to keep a field it had no tool to observe.
+    Fixed after this run in `be4d8d3` (`read_file` added to `tools`); see the superseded-results
+    note above. `flaky_write_retry`'s whole 0/6 in the table above reflects the unsolvable
+    version and should not be read as a recovery-capability result.
+
   These are the same content-writing failure already named in the dev pilot section, now seen at
-  a larger sample. No new evaluator bug found in this family; per this task's own instruction,
-  its difficulty is not retuned from this result.
-- **`stopping` (1/12) and `flaky_write_retry`'s clean condition (0/3)** show the same
-  over-eager-write and format patterns as `no_op_correct_config` in the dev pilot.
+  a larger sample. No new evaluator bug found in the *other* updates-family skeletons; per this
+  task's own instruction, their difficulty is not retuned from this result.
+- **`stopping` (1/12)** shows the same over-eager-write and format patterns as
+  `no_op_correct_config` in the dev pilot. `flaky_write_retry`'s clean condition (0/3) is the
+  same unsolvable-task artifact noted above, not a stopping-pattern finding.
 - **`false_completion` at 9/24** (37.5% of claims) is the sharpest single number here: over a
   third of the replies that claimed done, checked, or a value were wrong in a way the harness
   can detect automatically, without needing a human review pass.
