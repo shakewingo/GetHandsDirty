@@ -191,6 +191,31 @@ def _solution_grep_locate(task: Task) -> list:
            call("read_file", path=task.debug["path"]), answer(task.expect.answer.value)]
 
 
+def _build_sum_across_files(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    count = rng.randint(3, 5)
+    amounts = [rng.randint(10, 500) for _ in range(count)]
+    for i, amount in enumerate(amounts):
+        _write(root, f"invoices/inv_{i:02d}.json", _json({"amount": amount, "status": "final"}))
+    for i in range(rng.randint(1, 2)):
+        _write(root, f"invoices/void_{i:02d}.json", _json({"amount": rng.randint(10, 500), "status": "void"}))
+    total = sum(amounts)
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+               pair_id=ctx.pair_id, condition=ctx.condition, max_iterations=count + 3,
+               prompt=("Under invoices/, files named inv_NN.json count; files named "
+                      "void_NN.json do not. Read every inv_NN.json file and reply with only "
+                      "the total of their amount fields, as a plain integer."),
+               tools=("list_files", "read_file", "calculator"),
+               expect=Expect(answer=Answer(value=str(total)),
+                            evidence=tuple(str(a) for a in amounts), process=("no_write_attempts",)),
+               debug={"count": count})
+
+
+def _solution_sum_across_files(task: Task) -> list:
+    n = task.debug["count"]
+    return [call("read_file", path=f"invoices/inv_{i:02d}.json") for i in range(n)] + [
+        answer(task.expect.answer.value)]
+
+
 @dataclass(frozen=True)
 class Skeleton:
     """A generator: `build` makes one Task from a seed and an optional clean/fault condition;
@@ -227,3 +252,5 @@ SKELETONS.append(Skeleton(
 SKELETONS.append(Skeleton(name="deep_chain_lookup", family="inspection", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_deep_chain_lookup, solution=_solution_deep_chain_lookup))
 
 SKELETONS.append(Skeleton(name="grep_locate", family="inspection", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_grep_locate, solution=_solution_grep_locate))
+
+SKELETONS.append(Skeleton(name="sum_across_files", family="inspection", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_sum_across_files, solution=_solution_sum_across_files))
