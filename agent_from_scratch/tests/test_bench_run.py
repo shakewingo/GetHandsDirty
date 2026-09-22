@@ -99,5 +99,11 @@ class RunFrameworkTests(unittest.TestCase):
             skeletons.SKELETONS[:] = original
 
 
+class DispatcherTests(unittest.TestCase):
+    def test_bench_is_a_registered_command(self):
+        from agent_from_scratch.evals.__main__ import COMMANDS
+        self.assertEqual(COMMANDS["bench"], "bench.run")
+
+
 if __name__ == "__main__":
     unittest.main()
