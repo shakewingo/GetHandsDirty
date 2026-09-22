@@ -86,6 +86,77 @@ The 7B model is not the training control; see `docs/STAGE8_DESIGN.md`'s real-mod
 
 ## Test-split pipeline check (60 tasks)
 
-Not yet run. See `STAGE8_PLAN.md` Task 25: freeze the manifest, then run
-`bench --split test --final` once as a pipeline check, no prompt/limit/tool tuning from its
-results.
+```sh
+python -m agent_from_scratch.evals freeze
+python -m agent_from_scratch.evals bench --output outputs/bench-test-run --split test --final
+```
+
+Run September 22, 2026, once, after freezing `evals/bench/manifest.json` (git revision `7a01104`
+onward). Same settings as the dev pilot: greedy, Qwen2.5-7B-Instruct Q4_K_M, `N_CTX = 32768`.
+`metadata.json`'s `manifest_drift` field is `{}` — the run matched its own frozen manifest.
+
+### A second evaluator bug, found freezing for the first time
+
+`--final` refused immediately with `Manifest drift in ['git_revision']`. Committing
+`evals/bench/manifest.json` always changes `HEAD`, and the manifest recorded that revision as a
+field `manifest_drift()` compared — so every freeze would self-drift against its own commit the
+instant it landed, permanently. Fixed in `3da39b9`: `git_revision` stays in the manifest for
+provenance but is excluded from the drift comparison, with a regression test
+(`test_manifest_drift_never_gates_on_git_revision`). This is a design gap the dev pilot could
+not have surfaced, since Task 20/21's tests build and check a manifest in memory without ever
+freezing and immediately re-checking against the committed file in one real sequence.
+
+### Result
+
+| Skeleton | Family | Passed | `format_exact` |
+|---|---|---:|---:|
+| `deep_chain_lookup` | inspection | 4/6 | 0/6 |
+| `grep_locate` | inspection | 6/6 | 6/6 |
+| `sum_across_files` | inspection | 4/6 | 0/6 |
+| `pointer_nested_edit` | updates | 0/6 | 1/6 |
+| `rename_key_all_files` | updates | 0/6 | 0/6 |
+| `append_list_item` | updates | 0/6 | 0/6 |
+| `transient_read_failure` | recovery | 6/6 | 0/6 |
+| `flaky_write_retry` | recovery | 0/6 | 0/6 |
+| `ambiguous_choice_stop` | stopping | 1/6 | 2/6 |
+| `missing_file_report` | stopping | 0/6 | 3/6 |
+| **Total** | | **21/60** | 12/60 |
+
+`false_completion`: 9/24 claims reviewed. `invalid_calls`: 20. `model_requests`: 289.
+`elapsed_seconds`: 2,769 (~46 min). `total_tokens`: 643,164. No `context_limit` stops.
+
+### Reading the family split
+
+- **`inspection` (14/18) and the `transient_read_failure` recovery pair (6/6) are the model's
+  strength here**: multi-file reads with a clear single value to report. `grep_locate` is a
+  clean 6/6 — a `grep_text` query plus one confirming read is well within reach.
+- **`updates` is 0/18**, even with the `format="required"` bug already fixed (confirmed: several
+  of these replies now pass `answer_content` and are correctly graded `advisory`, but still fail
+  on `files` or `normal_finish`). Sampled representative failures directly rather than inferring
+  from the aggregate:
+  - `pointer_nested_edit-0`: `max_iterations` reached with no answer — manifest read, settings
+    read, and a correct write did not fit the skeleton's 6-request budget for this seed.
+  - `rename_key_all_files-0`, `append_list_item-0`: finished normally, claimed `DONE` truthfully
+    in tone, but the written JSON was wrong — the same failure mode the dev pilot already
+    documented (the model sometimes writes back the `N| `-prefixed text `read_file` displays,
+    producing invalid or mismatched content).
+  - `flaky_write_retry-0-clean`: `no_progress` after 3 consecutive invalid tool calls, offered
+    only `write_file` with no `read_file` to fall back on.
+  
+  These are the same content-writing failure already named in the dev pilot section, now seen at
+  a larger sample. No new evaluator bug found in this family; per this task's own instruction,
+  its difficulty is not retuned from this result.
+- **`stopping` (1/12) and `flaky_write_retry`'s clean condition (0/3)** show the same
+  over-eager-write and format patterns as `no_op_correct_config` in the dev pilot.
+- **`false_completion` at 9/24** (37.5% of claims) is the sharpest single number here: over a
+  third of the replies that claimed done, checked, or a value were wrong in a way the harness
+  can detect automatically, without needing a human review pass.
+
+### Reading these numbers
+
+Also a **pipeline check on one greedy sample**, run once as instructed — not a capability score
+and not compared against the dev pilot's rate (different families, different task counts). Its
+purpose was to confirm the frozen benchmark runs end to end at this scale with interpretable
+failures, which it did, and to catch pipeline-level bugs before Stage 9, which it also did (the
+`git_revision` drift gate above). The 7B model is not the training control; the real base
+control is the Stage 9 checkpoint on vLLM, per `docs/STAGE8_DESIGN.md`'s real-model protocol.
