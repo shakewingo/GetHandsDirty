@@ -13,7 +13,7 @@ import subprocess
 from tempfile import TemporaryDirectory
 
 from .run import specs
-from ..verify import digest
+from ..verify import digest, snapshot
 from ...config import AgentLimits, CHAT_TEMPLATE_PATH, MAX_TOKENS, N_CTX, TEMPERATURE
 
 HERE = Path(__file__).resolve().parent
@@ -23,7 +23,8 @@ MANIFEST_PATH = HERE / "manifest.json"
 
 def _source_hashes() -> dict[str, str]:
     return {p.relative_to(ROOT).as_posix(): digest(p.read_bytes()) for p in ROOT.rglob("*")
-           if p.is_file() and p.suffix in {".py", ".jinja"} and "__pycache__" not in p.parts}
+           if p.is_file() and p.suffix in {".py", ".jinja"} and "__pycache__" not in p.parts
+           and "tests" not in p.parts}
 
 
 def build_manifest() -> dict:
@@ -37,10 +38,15 @@ def build_manifest() -> dict:
             workspace = Path(temporary)
             rng = random.Random(f"bench:{ctx.name}:{ctx.seed}:{ctx.condition}")
             task = skeleton.build(rng, workspace, ctx)
+            fault = dataclasses.asdict(task.fault) if task.fault is not None else None
             tasks.append({"id": task.id, "skeleton": task.skeleton, "split": task.split,
                          "prompt_sha256": digest(task.prompt.encode()),
                          "expect_sha256": digest(json.dumps(dataclasses.asdict(task.expect),
-                                                            sort_keys=True).encode())})
+                                                            sort_keys=True).encode()),
+                         "fault_sha256": digest(json.dumps(fault, sort_keys=True).encode()),
+                         "tools_sha256": digest(json.dumps(task.tools).encode()),
+                         "workspace_sha256": digest(json.dumps(snapshot(workspace),
+                                                               sort_keys=True).encode())})
     return {"source_sha256": _source_hashes(),
            "system_prompt_sha256": digest((ROOT / "prompts/system.md").read_bytes()),
            "chat_template_sha256": digest(CHAT_TEMPLATE_PATH.read_bytes()),
@@ -66,7 +72,7 @@ def manifest_drift() -> dict[str, tuple]:
         return {}
     frozen = json.loads(MANIFEST_PATH.read_text())
     current = build_manifest()
-    drift = {key: (frozen.get(key), current.get(key)) for key in frozen
+    drift = {key: (frozen.get(key), current.get(key)) for key in frozen.keys() | current.keys()
             if key not in ("tasks", "git_revision") and frozen.get(key) != current.get(key)}
     if {t["id"]: t for t in frozen.get("tasks", [])} != {t["id"]: t for t in current.get("tasks", [])}:
         drift["tasks"] = "task set or content changed"
