@@ -186,3 +186,104 @@ purpose was to confirm the frozen benchmark runs end to end at this scale with i
 failures, which it did, and to catch pipeline-level bugs before Stage 9, which it also did (the
 `git_revision` drift gate above). The 7B model is not the training control; the real base
 control is the Stage 9 checkpoint on vLLM, per `docs/STAGE8_DESIGN.md`'s real-model protocol.
+
+## Protocol freeze on the control checkpoint (September 26, 2026)
+
+The 7B results above are the engineering model's pipeline checks. Before the control run, the
+benchmark was revised from dev-pilot evidence and re-frozen with the evaluation protocol; details
+and rationale are in `STAGE8_DESIGN.md`, *Revision after the 7B pilot*:
+
+- `read_file` now says its `N| ` prefixes must never be copied into `write_file` or `edit_file`;
+  a `.json` write or edit that does not parse is refused and the file left unchanged.
+- Every skeleton that edits a file offers `edit_file` (except `flaky_write_retry`).
+- Dev grew from 15 to 64 tasks: four new skeletons (`max_timeout_service`, `delete_key`,
+  `transient_list_failure`, `locked_config_stop`) and more seeds. Test is still 60 tasks; 27
+  existing tasks changed only their tool list, none their prompt, workspace or expectation.
+- The manifest freezes `model` (Qwen/Qwen3-4B-Instruct-2507 at revision `cdbee75f`, bf16, vLLM),
+  `decoding` (T 0.7, top-p 0.8, top-k 20, min-p 0, max 2048 tokens: the model card's values),
+  `seeds` [0, 1, 2] and `n_ctx` 32768. `bench --final` refuses a backend that does not match.
+
+The 7B numbers above are not comparable with anything measured under this protocol.
+
+### Local pipeline check on Qwen3-4B (September 27, 2026)
+
+```sh
+python -m agent_from_scratch.evals bench --backend llama_cpp --split dev --seed 0 \
+  --model-path <unsloth/Qwen3-4B-Instruct-2507-GGUF @ a06e946, Q8_0> --output outputs/q3-4b-dev-s0
+```
+
+The control's weights as a Q8_0 GGUF through llama.cpp on the Mac, at the frozen sampling and
+window, one seed. It checks the pipeline and task specs before the GPU session; it is **not** the
+baseline (not bf16, not vLLM, one sample). Result: **34/64** in 11.6 min, 246 requests, 439,702
+tokens. Measured prompt tokens equal the model's reported `prompt_tokens` on **243/243**
+requests; the model emits parseable `<tool_call>` JSON (3 slips where the opening tag was
+missing, each answered by the runtime's parse feedback). `<tool_call>` is a non-special token in
+this tokenizer, so vLLM's default `skip_special_tokens` keeps it too.
+
+| Skeleton | Passed | Failure pattern |
+|---|---:|---|
+| `single_field_edit` | 10/10 | — (the skeleton that exposed the `N| ` bug on the 7B) |
+| `max_timeout_service` | 6/6 | — |
+| `check_fix_recheck` | 9/10 | One fault run pasted `N| `-prefixed text into `edit_file`'s `old_text`, fixed the file by `write_file`, then hit `max_iterations` before replying |
+| `locked_config_stop` | 5/6 | One unlocked run sent its last `edit_file` call without the opening `<tool_call>` tag |
+| `transient_list_failure` | 3/6 | Clean 3/3, fault 0/3: after retrying the failed listing, the model answered with the file name instead of reading the file |
+| `delete_key` | 1/6 | Used 4-space indentation in `old_text` (the file has 2) and repeated it despite `nearby_lines` returning the exact line |
+| `pointer_lookup` | 0/10 | Reported the profile file's name without reading the profile (see the fix below) |
+| `no_op_correct_config` | 0/10 | Read a correct config, wrote nothing, and replied `UPDATED` |
+
+Two task-spec/error-message fixes followed, both recorded in `STAGE8_DESIGN.md`'s revision table:
+`pointer_lookup`'s "report only its output filename" had a second reading (the profile file's
+own name) and now asks for "the value of its output field" (re-run: 0/10 → 4/10; the other six
+still skip reading the profile); and `edit_file`'s not-found error now names the `N| ` prefix
+when `old_text` starts with one. The other failures are model behaviour and stay as training
+targets: answering from a listing without reading, ignoring error feedback, and false claims.
+
+**Known metric gap.** `false_completion` counts a claim only when the task's state checks fail,
+so `no_op_correct_config`'s `UPDATED` (state correct, claim false) is scored as a failed answer
+but not as a false completion. Read its answer failures alongside the false-completion rate.
+
+### Runbook: control baseline on a rented GPU
+
+One session, one GPU with ≥ 24 GB (the bf16 weights are ~8 GB; the rest is KV cache at a 32k
+window). Set an hour cap and stop the pod at the end; record the cost in the ledger.
+
+```sh
+# On the pod, at the commit that holds the frozen manifest
+git clone https://github.com/shakewingo/GetHandsDirty.git && cd GetHandsDirty
+git checkout <frozen commit>
+# vLLM 0.30.0 is the version VLLMClient's fields (/v1/models ModelCard id/root/max_model_len,
+# /tokenize prompt/add_special_tokens -> count, completion top_k/min_p/seed/stop) were checked against.
+pip install vllm==0.30.0 loguru -r agent_from_scratch/requirements-tools.txt
+
+# Serve the pinned control. --enable-lora keeps the server identical for later adapter runs;
+# no tool parser: the client sends raw prompts rendered from prompts/qwen_chat.jinja.
+vllm serve Qwen/Qwen3-4B-Instruct-2507 --revision cdbee75f17c01a7cc42f958dc650907174af0554 \
+  --dtype bfloat16 --max-model-len 32768 --enable-lora --max-lora-rank 64 --port 8000 &
+```
+
+1. **Smoke and validate** on a few dev tasks. The client refuses to start if the template's
+   `<|im_start|>`/`<|im_end|>` are not single tokens or the server window is under 32k.
+
+   ```sh
+   python -m agent_from_scratch.evals bench --backend vllm --split dev --seed 0 \
+     --tasks pointer_lookup-0,single_field_edit-0,check_fix_recheck-0-fault,locked_config_stop-0 \
+     --output outputs/ctl-smoke
+   python - <<'PY'
+   import glob, json
+   rows = [q for f in glob.glob("outputs/ctl-smoke/*/state/runs/*.jsonl") for line in open(f)
+           for q in json.loads(line)["model_requests"] if q["status"] == "completed" and q["purpose"] == "agent"]
+   bad = [q for q in rows if q["budget"]["prompt_tokens"] != q["usage"]["prompt_tokens"]]
+   print(f"{len(bad)} of {len(rows)} requests where measured != served prompt tokens")
+   PY
+   ```
+
+   Expect 0 mismatches (the same check prints `0 of 64` on the 7B dev pilot). Also read a few
+   raw replies in the traces: tool calls must arrive as `<tool_call>` blocks that parse, not as
+   `parse_errors`.
+2. **Dev × 3.** `for s in 0 1 2; do python -m agent_from_scratch.evals bench --backend vllm
+   --split dev --seed $s --output outputs/ctl-dev-s$s; done`, then
+   `python -m agent_from_scratch.evals aggregate outputs/ctl-dev-s0 outputs/ctl-dev-s1
+   outputs/ctl-dev-s2 --output outputs/ctl-dev.json`. An evaluator or harness bug found here is
+   fixed, re-frozen and dev re-run; difficulty is not retuned.
+3. **Test × 3, once.** The same loop with `--split test --final` into `outputs/ctl-test-s$s`,
+   then `aggregate`. Record both splits' aggregates here as the Stage 8 control baseline.

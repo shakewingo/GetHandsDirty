@@ -14,7 +14,8 @@ from tempfile import TemporaryDirectory
 
 from .run import specs
 from ..verify import digest, snapshot
-from ...config import AgentLimits, CHAT_TEMPLATE_PATH, MAX_TOKENS, N_CTX, TEMPERATURE
+from ...config import (AgentLimits, BENCH_DECODING, BENCH_MODEL, BENCH_N_CTX, BENCH_SEEDS,
+                       CHAT_TEMPLATE_PATH)
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -50,7 +51,8 @@ def build_manifest() -> dict:
     return {"source_sha256": _source_hashes(),
            "system_prompt_sha256": digest((ROOT / "prompts/system.md").read_bytes()),
            "chat_template_sha256": digest(CHAT_TEMPLATE_PATH.read_bytes()),
-           "n_ctx": N_CTX, "decoding": {"temperature": TEMPERATURE, "max_tokens": MAX_TOKENS},
+           "model": BENCH_MODEL, "n_ctx": BENCH_N_CTX, "decoding": BENCH_DECODING,
+           "seeds": list(BENCH_SEEDS),
            "limits": dataclasses.asdict(AgentLimits()), "memory": "off",
            "splits_sha256": digest((HERE / "splits.json").read_bytes()),
            "tasks": tasks, "verifier_sha256": digest((HERE / "verify.py").read_bytes()),
@@ -77,6 +79,27 @@ def manifest_drift() -> dict[str, tuple]:
     if {t["id"]: t for t in frozen.get("tasks", [])} != {t["id"]: t for t in current.get("tasks", [])}:
         drift["tasks"] = "task set or content changed"
     return drift
+
+
+def protocol_mismatch(settings: dict, seed: int) -> list[str]:
+    """Ways a loaded backend differs from the frozen protocol; [] means a comparable run.
+
+    The served revision is not visible through the OpenAI API, so it is pinned by the launch
+    command in docs/benchmark.md rather than checked here.
+    """
+    problems = []
+    if settings.get("backend") != BENCH_MODEL["backend"]:
+        problems.append(f"backend {settings.get('backend')!r} is not {BENCH_MODEL['backend']!r}")
+    if settings.get("model_root") != BENCH_MODEL["id"]:
+        problems.append(f"served model {settings.get('model_root')!r} is not {BENCH_MODEL['id']!r}")
+    for key, value in BENCH_DECODING.items():
+        if settings.get(key) != value:
+            problems.append(f"{key}={settings.get(key)!r}, frozen {value!r}")
+    if settings.get("n_ctx") != BENCH_N_CTX:
+        problems.append(f"n_ctx={settings.get('n_ctx')!r}, frozen {BENCH_N_CTX}")
+    if seed not in BENCH_SEEDS:
+        problems.append(f"seed {seed} is not one of the frozen samples {list(BENCH_SEEDS)}")
+    return problems
 
 
 def main():

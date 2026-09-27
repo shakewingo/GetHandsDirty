@@ -8,7 +8,7 @@ implementation plan (`STAGE8_PLAN.md`) is written. Branch: `claude/stage-8-bench
 Give Stage 9–11 a benchmark that can be trusted before any weight is trained: generated tasks on
 the **current** tool registry, split by skeleton, scored by one verifier that accepts any valid
 tool path, and frozen with a manifest. It replaces the 17-task dev suite for weight comparisons;
-that suite stays as a legacy dev set (frozen, legacy tools).
+that suite was retired after Stage 8 (see `evals/README.md`).
 
 Why now: the dev suite predates `edit_file`, `glob_files` and `grep_text`, its tasks shaped prompt
 choices so they cannot be a reserved test set, and its strict format check let one failure mode
@@ -22,13 +22,33 @@ the end maps each bullet to a section here.
 | Decision | Choice |
 |---|---|
 | Test size | 10 skeletons × 6 variants = **60** tasks (inside the 50–100 target, so not a pilot) |
-| Dev set | 4 new skeletons = **15** tasks on the current tools (3 + 3 + 6 + 3; recovery keeps three matched pairs), plus the legacy 17 |
+| Dev set | Originally 4 skeletons = **15** tasks; expanded to 8 skeletons = **64** tasks after the 7B pilot (see *Revision after the 7B pilot*) |
 | Definition of a task | Python builder emits a declarative spec; **one generic verifier** interprets it |
 | `passed` | **Content first.** Format is recorded separately and only gates tasks whose reply token is the deliverable |
 | Web tasks | Excluded from this version. Web is not one of Stage 8's four families, and the dev suite's `RecordedWeb` replays extracted text through a frozen legacy interface, so web tasks need their own recorded-response generator. The dev suite's two web failures are **not** web failures: in all three Task 3.3 runs the model batched `web_fetch` with a `write_file` whose JSON `content` was single-quoted and filled with empty placeholders, three identical malformed calls in a row, then `no_progress`. That weakness (dependent calls in one batch, JSON-in-a-string arguments) is still exercised by the update skeletons. Candidate addition later |
 | Memory | Stage 4A–4B deferred past Stage 11; the freeze records `memory: off`. Memory tools must stay out of the frozen registry because they change the prompt |
 | Test-set guard | `--split test` needs `--final` and refuses on manifest drift |
-| 7B real-model use | Pipeline check only; the base control for weight comparisons is the Stage 9 checkpoint |
+| 7B real-model use | Pipeline check only; the base control is Qwen3-4B-Instruct-2507 on vLLM, frozen as the protocol below |
+
+## Revision after the 7B pilot (September 26, 2026)
+
+The 7B dev pilot and test pipeline check (`docs/benchmark.md`) showed most update and stopping
+failures had one harness cause, and that the freeze was a 7B freeze. Before any control-checkpoint
+run, and so before any weight comparison, these changed:
+
+| Change | Why |
+|---|---|
+| `read_file`'s description says the `N| ` prefixes must never be copied into `write_file` **or** `edit_file` content (it named only `edit_file`, which update tasks did not offer) | The model wrote the line-numbered text back verbatim in the dev pilot's `single_field_edit` and `no_op_correct_config` failures |
+| A `.json` write or edit whose content does not parse is **refused** (file unchanged, error names the `N| ` prefix when present); `.py` still writes and reports `diagnostics` | An `ok` result with a buried diagnostic read as success: the pilot's model claimed `DONE` over a `JSONDecodeError` |
+| Every skeleton that edits a file offers `edit_file` beside `write_file`, except `flaky_write_retry` (its fault targets `write_file`) | A targeted edit is a valid path and avoids regenerating whole files, which was ~85% of test-run time |
+| Dev: seeds 0–9 for the original non-recovery skeletons, 0–4 for `check_fix_recheck`, plus four new skeletons (below): **64** tasks | One dev skeleton per family and 15 tasks are too few to select between checkpoints in Stages 9–11 |
+| Protocol frozen on the control checkpoint: model, revision, backend, sampling, k seeds, window | The previous manifest froze the 7B's chat template and greedy decoding and did not record the model at all |
+| `pointer_lookup`'s prompt asks for "the value of its output field" instead of "its output filename" | The local Qwen3-4B dev check read the old phrase as the profile file's own name (0/10 → 4/10 after the fix; the rest skip reading the profile, a real weakness) |
+| `edit_file`'s not-found error names the `N| ` prefix when `old_text` starts with one, as the refused write already does | The same check had the model paste line-numbered text into `old_text` and get only a generic error |
+
+All changes were motivated by dev evidence (the 7B pilot and the local Qwen3-4B check) and apply
+uniformly; no test skeleton's prompt, workspace or expectation changed (27 existing tasks changed
+only their tool list).
 
 ## Layout
 
@@ -116,7 +136,7 @@ narrowed per task by `tools`, plus a shell with only the fixed `check_fixture` c
 task lists `shell` (`evals/bench/check.py`, moved there from `evals/check.py` when the Stage 2B
 `dev` suite was retired).
 
-**Dev (4)**
+**Dev (8)**
 
 | Skeleton | Family | Shape | Verified by |
 |---|---|---|---|
@@ -124,6 +144,10 @@ task lists `shell` (`evals/bench/check.py`, moved there from `evals/check.py` wh
 | `single_field_edit` | updates | change one field of a flat JSON, keep the rest | `files`, `unchanged`, claim `DONE` |
 | `check_fix_recheck` | recovery | run the fixed check, fix the config if it fails, recheck; clean: the check already passes, so no rewrite | `files`, `check_before_write`, `passing_check_after_last_write` (fault) or `no_write_attempts` (clean); reply `CHECKED` (required) |
 | `no_op_correct_config` | stopping | config already correct; reply `UNCHANGED` | `no_write_attempts`, evidence (config read), reply required |
+| `max_timeout_service` | inspection | 4–6 service files; report the one with the largest `timeout_s`; a `disabled/` service with a larger value must be ignored | answer, evidence (winner, value), `no_write_attempts` |
+| `delete_key` | updates | remove `legacy_mode` from `config.json`, keep the rest; `config.example.json` keeps the key and must not change | `files`, `unchanged`, claim `DONE` |
+| `transient_list_failure` | recovery | find the one `final_*.json` under `reports/` and report its id; fault: `list_files` fails on call 1 | answer, evidence (file name, id); pair clean/fault |
+| `locked_config_stop` | stopping | set `config.json`'s output unless `policy.json` locks it; even seeds are locked (reply `LOCKED`, change nothing), odd seeds are not (make the change, reply `DONE`) | locked: `no_write_attempts`, reply required; unlocked: `files`, claim `DONE`; both: evidence (policy read) |
 
 **Test (10)**
 
@@ -140,11 +164,12 @@ task lists `shell` (`evals/bench/check.py`, moved there from `evals/check.py` wh
 | `ambiguous_choice_stop` | stopping | two candidate profiles, no rule to pick one; reply `NEED_INPUT`, change nothing | `no_write_attempts`, `unchanged`, reply required, evidence (both read or listed) |
 | `missing_file_report` | stopping | the requested file is absent (a `.bak` decoy holds a version); reply `MISSING` | `no_write_attempts`, reply required, `reject` the decoy's value, evidence (listing) |
 
-Variants: non-recovery skeletons use seeds 0–5 for test and 0–2 for dev. Recovery skeletons, in
-both splits, use seeds 0–2 × two conditions, so each contributes six tasks that form three matched
-pairs; `pair_id = "<skeleton>-<seed>"`. Test: 8 non-recovery skeletons × 6 + 2 recovery × 6 = 60.
-Dev: 3 + 3 + 6 (`check_fix_recheck`) + 3 = 15, inside Stage 8's 12–20 range. (Design discussion
-said 12 dev tasks; three matched pairs for recovery make it 15.)
+Variants: test non-recovery skeletons use seeds 0–5; test recovery skeletons use seeds 0–2 × two
+conditions, so each contributes six tasks that form three matched pairs;
+`pair_id = "<skeleton>-<seed>"`. Test: 8 non-recovery skeletons × 6 + 2 recovery × 6 = 60.
+Dev: the original three non-recovery skeletons × 10 (seeds 0–9), `check_fix_recheck` 5 pairs,
+the three new non-recovery skeletons × 6, `transient_list_failure` 3 pairs: 30 + 10 + 18 + 6 = 64.
+(The original dev set was 15; seeds 0–2 of the original four still build the same tasks.)
 
 ## Splits and reservation
 
@@ -163,11 +188,16 @@ builder with a test skeleton.
 (temperature, `max_tokens`), `n_ctx`, the full `AgentLimits` (recorded as untuned defaults:
 `elide_ratio` 0.6, `compact_ratio` 0.85, `planning` off), `memory: off`, `splits.json`, the
 generated task list (IDs, prompts, expectations, faults, tools, workspace digests) and the
-verifier, plus the git revision. Model and adapter identity are declared **free variables**.
+verifier, plus the git revision. Since the September 26 revision it also freezes the evaluation
+protocol from `config.py`: `model` (id, pinned revision, dtype, backend), `decoding` (sampling and
+`max_tokens`), `seeds` and `n_ctx`. Only the adapter is a free variable: it is the thing compared.
 
 Every `bench` run records `manifest_drift`, the fields that differ from the manifest.
 `--split test` requires `--final` and refuses on drift unless `--allow-drift` is given, which is
-recorded. Dev runs never refuse.
+recorded. `--final` also refuses a backend whose settings differ from the frozen protocol
+(`manifest.protocol_mismatch`: backend, served model, sampling, window, seed in `BENCH_SEEDS`);
+the served revision is not visible through the API, so the launch command pins it. Dev runs never
+refuse.
 
 ## Reporting
 
@@ -176,6 +206,8 @@ adds, with denominators: passed and `format_exact` by family and by skeleton, au
 completion, invalid calls, stopping correctness (stopping family pass), the matched-pair table
 (clean pass, fault pass, `fault_encountered`, recovered), tokens, requests and latency. Cost is
 local, so zero. Stable task IDs let `compare` pair runs with the exact McNemar test unchanged.
+`aggregate` combines the k sampled runs of one split into per-task pass counts, mean pass@1,
+pass^k (passed every time), pass@k and the count of mixed-outcome tasks (0 < c < k).
 
 ## Real-model protocol on the 7B
 
@@ -185,6 +217,20 @@ local, so zero. Stable task IDs let `compare` pair runs with the exact McNemar t
    are interpretable. No prompt, limit or tool changes follow from it.
 3. Record everything in `docs/benchmark.md`. The base control for weight comparisons is the
    Stage 9 checkpoint on vLLM, and the manifest is not complete until that baseline exists.
+
+## Real-model protocol on the control checkpoint
+
+Qwen3-4B-Instruct-2507 (bf16, vLLM, LoRA enabled so an adapter later runs on the same server),
+sampled at the frozen settings, k = 3 seeds per task. The steps and commands are the runbook in
+`docs/benchmark.md`:
+
+1. Validate on the live server: the template's control markers are single tokens (checked at
+   client start), `measure_context` equals the server's reported `prompt_tokens`, and a few dev
+   tasks' raw replies parse into tool calls.
+2. Run dev × 3 seeds. Evaluator or harness bugs found here are fixed and re-frozen; test has not
+   been run on this checkpoint, so this is still allowed. Difficulty is not retuned from it.
+3. Run test × 3 seeds **once** under the final freeze, `aggregate` each split, and record the
+   baseline. From here the protocol, harness and test split stay fixed through Stage 11.
 
 ## Independent items
 
@@ -209,7 +255,9 @@ local, so zero. Stable task IDs let `compare` pair runs with the exact McNemar t
 
 - **Base at the floor.** If the 7B passes almost nothing, paired tests lose power. The scripted
   gate still validates the evaluator, and Stage 8 does not require the base to solve every task.
-- **Metal noise.** One greedy seed is a pipeline check; the 3-seed protocol belongs to Stage 9.
+- **Metal noise.** One greedy seed on the 7B was a pipeline check. The control protocol samples
+  k = 3 times per task at the model card's settings, so per-task pass rates, not single outcomes,
+  are what Stages 9–11 compare.
 - **Spec vocabulary.** A future task shape may need a new check kind, which is one function in
   `check.py` and changes the verifier hash, forcing a re-freeze by design.
 

@@ -1,7 +1,11 @@
 """Build Stage 8 benchmark tasks from seeds, run them, and score them.
 
 Usage: python -m agent_from_scratch.evals bench --output DIR --split {dev,test} [--tasks a,b]
-           [--seed N] [--limits '{"planning": true}'] [--final] [--allow-drift]
+           [--seed N] [--backend {llama_cpp,vllm}] [--base-url URL] [--served-model NAME]
+           [--adapter NAME] [--limits '{"planning": true}'] [--final] [--allow-drift]
+
+Every run uses the frozen sampled protocol (config.BENCH_DECODING); `--seed` picks the sample.
+Run once per seed in config.BENCH_SEEDS, then `aggregate` the runs.
 """
 
 import argparse
@@ -16,10 +20,12 @@ from .faults import FaultyTool
 from .skeletons import SKELETONS, Skeleton
 from .spec import BuildContext, Task
 from .verify import bench_summary, check
-from ..run import open_run, parse_limits, save
+from ..run import open_run, parse_limits, save, seed_every_request
 from ..trajectory import profile
 from ..verify import metrics, snapshot
 from ...agent import Agent
+from ...config import BENCH_DECODING, BENCH_MODEL, BENCH_N_CTX, MODEL_PATH, VLLM_BASE_URL
+from ...llm import LLM, VLLMClient
 from ...tools.base import ToolRegistry
 from ...tools.calculator import CalculatorTool
 from ...tools.files import EditFileTool, ListFilesTool, ReadFileTool, WriteFileTool
@@ -89,20 +95,44 @@ def run_case(model, skeleton: Skeleton, ctx: BuildContext, output: Path, *,
         return record
 
 
+def load_model(args):
+    """The backend named by `--backend`, always with the frozen decoding and window."""
+    decoding = dict(BENCH_DECODING)
+    temperature, max_tokens = decoding.pop("temperature"), decoding.pop("max_tokens")
+    if args.backend == "vllm":
+        return VLLMClient(args.base_url, args.served_model, adapter=args.adapter, seed=args.seed,
+                          temperature=temperature, max_tokens=max_tokens, sampling=decoding,
+                          n_ctx=BENCH_N_CTX)
+    return seed_every_request(LLM(str(args.model_path), temperature=temperature, max_tokens=max_tokens,
+                                  sampling=decoding, n_ctx=BENCH_N_CTX), args.seed)
+
+
 def main():
-    from .manifest import manifest_drift
+    from .manifest import manifest_drift, protocol_mismatch
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--split", choices=("dev", "test"), default="dev")
     parser.add_argument("--tasks", help="Comma-separated task IDs; default: every task in --split")
-    parser.add_argument("--seed", type=int, default=11, help="Decoding seed; workspaces are seeded separately")
+    parser.add_argument("--seed", type=int, default=0,
+                        help="Sample index passed to every request; workspaces are seeded separately")
+    parser.add_argument("--backend", choices=("llama_cpp", "vllm"), default="llama_cpp",
+                        help="llama_cpp: the local GGUF, for pipeline checks; vllm: the frozen control")
+    parser.add_argument("--model-path", type=Path, default=MODEL_PATH,
+                        help="GGUF file (--backend llama_cpp); default config.MODEL_PATH")
+    parser.add_argument("--base-url", default=VLLM_BASE_URL, help="vLLM server (--backend vllm)")
+    parser.add_argument("--served-model", default=BENCH_MODEL["id"],
+                        help="Base model name as the vLLM server serves it")
+    parser.add_argument("--adapter", help="LoRA module name on the vLLM server; omit for the base control")
     parser.add_argument("--limits", default="{}", help='JSON AgentLimits overrides')
     parser.add_argument("--final", action="store_true", help="Required to run --split test")
-    parser.add_argument("--allow-drift", action="store_true", help="Run --final despite manifest drift")
+    parser.add_argument("--allow-drift", action="store_true",
+                        help="Run --final despite manifest drift or a protocol mismatch")
     args = parser.parse_args()
     overrides = parse_limits(parser, args.limits)
     if args.split == "test" and not args.final:
         parser.error("Running the test split needs --final (see docs/STAGE8_DESIGN.md).")
+    if args.adapter and args.backend != "vllm":
+        parser.error("--adapter needs --backend vllm.")
     entries = specs(args.split)
     if args.tasks:
         wanted = set(args.tasks.split(","))
@@ -113,9 +143,16 @@ def main():
     if drift and not args.allow_drift:
         parser.error(f"Manifest drift in {sorted(drift)}; rerun with --allow-drift if intended.")
     out = args.output.resolve()
-    model = open_run(out, parser, suite=f"bench-{args.split}-v1", seed=args.seed, overrides=overrides,
-                     split=args.split, final=args.final, manifest_drift=drift,
-                     selected_tasks=[c.id for _, c in entries])
+    if out.exists():
+        parser.error(f"{out} already exists; evidence is never overwritten.")
+    model = load_model(args)
+    mismatch = protocol_mismatch(model.settings(), args.seed) if args.final else []
+    if mismatch and not args.allow_drift:
+        model.close()
+        parser.error(f"Not the frozen protocol: {'; '.join(mismatch)}. Rerun with --allow-drift if intended.")
+    model = open_run(out, parser, suite=f"bench-{args.split}-v2", seed=args.seed, overrides=overrides,
+                     model=model, split=args.split, final=args.final, manifest_drift=drift,
+                     protocol_mismatch=mismatch, selected_tasks=[c.id for _, c in entries])
     records = []
     for skeleton, ctx in entries:
         print("START", ctx.id, flush=True)
@@ -128,6 +165,7 @@ def main():
         if record["stop_reason"] == "interrupted":
             break
     save(out / "trajectory.json", profile(records))
+    model.close()
 
 
 if __name__ == "__main__":

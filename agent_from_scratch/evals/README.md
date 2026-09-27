@@ -9,17 +9,21 @@ python -m agent_from_scratch.evals COMMAND --output outputs/NEW_NAME [options]
 
 | I want to know… | Command | Model | Time (16 GB Mac, 32k window) |
 |---|---|---|---|
-| Did I break anything the agent could already do? | `bench --split dev`: 15 generated tasks (inspection, updates, recovery, stopping) | real | ~6 min |
-| Does it hold on the reserved test split? | `bench --split test --final`: 60 tasks; refuses to run if the frozen manifest has drifted | real | ~46 min |
+| Did I break anything the agent could already do? | `bench --split dev`: 64 generated tasks (inspection, updates, recovery, stopping) | real | ~12 min with the Qwen3-4B Q8_0 GGUF (`--model-path`, measured) |
+| What is the control checkpoint's baseline? | `bench --backend vllm` per seed in `BENCH_SEEDS`, then `aggregate`; `--split test --final` refuses on manifest drift or a protocol mismatch. Runbook: [docs/benchmark.md](../docs/benchmark.md) | real (GPU) | see runbook |
+| How reliable is a split across samples? | `aggregate outputs/s0 outputs/s1 outputs/s2`: per-task pass counts, mean pass@1, pass^k, pass@k, mixed-outcome tasks | none | instant |
 | Does context management hold when evidence outgrows the window? | `pressure`: 4 tasks over 9 files of ~15k characters | real | ~15–25 min |
 | How do two runs differ? | `compare outputs/A outputs/B`: paired outcomes, exact McNemar p, trajectory shape | none | instant |
 | Do the units still work? | `python -m unittest discover -s agent_from_scratch/tests -q` | scripted | seconds |
 | Does it feel right by hand? | `python -m agent_from_scratch.agent` (REPL) | real | — |
 
 `--output` must be a **new** directory outside the package; evidence is never overwritten.
-`--tasks a,b` runs a subset and `--seed N` fixes the per-request seed. `pressure` also takes
-`--n-ctx N` to override the window (recorded in `metadata.json`; runs at different windows are not
-comparable); `bench` always runs at the frozen `N_CTX`.
+`--tasks a,b` runs a subset and `--seed N` fixes the per-request seed. `bench` always uses the
+frozen protocol in `config.py` (`BENCH_DECODING` sampling, `BENCH_N_CTX`), so `--seed` selects
+which sample a run is; `--backend llama_cpp` (default) runs the local GGUF for pipeline checks and
+`--backend vllm --base-url URL [--adapter NAME]` the control checkpoint. `pressure` keeps greedy
+decoding and takes `--n-ctx N` to override the window (recorded in `metadata.json`; runs at
+different windows are not comparable).
 
 ## The loop when you change the agent
 
@@ -28,8 +32,8 @@ comparable); `bench` always runs at the frozen `N_CTX`.
    `--split test`: it is reserved for weight comparisons (Stages 9–11).
 3. `pressure` if you touched context, compaction, planning, or a tool that returns bulky output.
    `bench` cannot see these: its tasks stay far below the window's elision and summary triggers.
-4. `compare` the two runs. Read direction and trajectory, not the p-value; with 15 or 4 tasks the
-   exact McNemar test almost never reaches significance.
+4. `compare` the two runs. Read direction and trajectory, not the p-value; with a few dozen tasks
+   the exact McNemar test rarely reaches significance.
 
 To ablate one mechanism, keep everything else fixed and pass any `AgentLimits` field as JSON.
 `metadata.json` records what was on:
@@ -46,8 +50,8 @@ Run them one after another: each process holds about 6 GB, and two together slow
 
 | File | Role |
 |---|---|
-| `__main__.py` | the `bench` / `freeze` / `pressure` / `compare` dispatcher |
-| `bench/` | Stage 8 generated benchmark: 14 skeletons (4 dev, 10 test × 6 variants), one content-first verifier (`verify.py`), the trusted fixture check command (`check.py`), freeze manifest. Shapes and rationale: [docs/STAGE8_DESIGN.md](../docs/STAGE8_DESIGN.md) |
+| `__main__.py` | the `bench` / `freeze` / `aggregate` / `pressure` / `compare` dispatcher |
+| `bench/` | Stage 8 generated benchmark: 18 skeletons (8 dev = 64 tasks, 10 test = 60 tasks), one content-first verifier (`verify.py`), the trusted fixture check command (`check.py`), freeze manifest and protocol check (`manifest.py`), `aggregate.py` for k-sample runs. Shapes and rationale: [docs/STAGE8_DESIGN.md](../docs/STAGE8_DESIGN.md) |
 | `run.py` | `open_run`, `parse_limits` and `save`, which every suite shares |
 | `verify.py` | shared post-run measurement: `metrics()`, `snapshot()`, `exchanges()`; `pressure`'s answer verifier and `summarize()`. Never fed back to the agent |
 | `trajectory.py` | `profile()` and `compare()`; the `compare` command |

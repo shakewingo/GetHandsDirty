@@ -42,7 +42,7 @@ as pilots; mark missing required outcomes incomplete instead of silently extendi
 | Completed | **2 — implementation complete** | General filesystem/shell/search/fetch; restricted 2B baseline 8/17 → 12/17 |
 | Completed | **3 — implementation complete** | Context budgeting, automatic/manual compact, rule reload at the boundary, versioned checkpoints and restart replay; real-model evidence for 3B items 2-4 and 3C still outstanding |
 | Deferred past 11 | **4A–4B — deferred (decided September 22, 2026)** | Bounded durable memory, search/read, correction/forget, fresh-session recall |
-| Completed | **8 — benchmark and freeze complete; trainable-checkpoint run is Stage 9's** | Resettable benchmark, isolated splits, measured baseline, frozen harness |
+| In progress | **8 — benchmark, protocol and vLLM backend frozen; control-checkpoint baseline run pending a GPU session** | Resettable benchmark, isolated splits, measured baseline, frozen harness |
 | Research | **9 — draft, required outcome** | 3–4B HF checkpoint on vLLM → verified trajectories → QLoRA SFT/reload → base/adapter comparison |
 | Later experiment | **10 — draft, conditional** | 2–3 rounds of expert iteration (weak-RSI question); GRPO pilot only if justified |
 | Delivery | **11 — draft, required outcome** | Held-out paired results and reproducible demo; dev-only recipe search optional |
@@ -519,14 +519,17 @@ Implementation: [docs/STAGE8_DESIGN.md](STAGE8_DESIGN.md) and its
 
 - [x] Cover inspection/reporting, constrained updates, recovery/verification, and appropriate
   stopping with roughly 2–6 dependent tool interactions. Vary layout, distractors, values,
-  dependency chains, and fault positions; allow multiple valid solutions. 14 generated skeletons
-  (4 dev, 10 test), one per family combination, any valid tool path passes.
+  dependency chains, and fault positions; allow multiple valid solutions. 18 generated skeletons
+  (8 dev, 10 test), any valid tool path passes; every skeleton that edits a file offers
+  `edit_file` beside `write_file` (except `flaky_write_retry`, whose fault targets `write_file`).
 - [x] Keep train, dev, and final test isolated by task skeleton before creating variants;
   reset workspace/session/memory per task. Start from the 12–20 dev cases; target 50–100 reserved
   final cases if affordable, explicitly labelling smaller samples as pilots. A public benchmark
   subset is optional; identify adaptations and never present a local score as its official score.
-  15 dev tasks, 60 reserved test tasks, `evals/bench/splits.json` fixed before any test skeleton
-  was implemented. Each task gets a fresh temporary workspace and no memory.
+  60 reserved test tasks, `evals/bench/splits.json` fixed before any test skeleton was
+  implemented. Dev began at 15 tasks and was expanded to 64 (four more skeletons, one per
+  family, and more seeds) after the 7B pilot, so checkpoint selection in Stages 9–11 has enough
+  dev tasks. Each task gets a fresh temporary workspace and no memory.
 - [x] Verify final artifacts/constraints independently. Report counts/denominators, false
   completion, invalid calls, matched-fault recovery, stopping, tokens, requests, latency, and cost.
   Keep long-session/compact/restart and delayed-memory recall in separate harness evaluations.
@@ -539,11 +542,20 @@ Implementation: [docs/STAGE8_DESIGN.md](STAGE8_DESIGN.md) and its
   `memory: off`, splits and the verifier itself, all without loading a model. The full-history/
   compact comparison itself runs through the existing `pressure`/`compare` commands, not `bench`;
   memory is off rather than compared, since 4A–4B is deferred.
-- [ ] Run the intended trainable checkpoint as the base control. Primary weight comparisons
-  use short tasks and disabled or identical read-only memory; no cross-task accumulation or
-  evaluator coaching. For long-context comparisons, hold the summarizer checkpoint/config fixed.
-  Front half done here (the benchmark and freeze mechanics exist); the trainable-checkpoint run
-  is Stage 9's first bullet, since Stage 9 has not happened yet.
+- [x] Freeze the evaluation protocol on the control checkpoint, not the 7B engineering model:
+  `config.BENCH_MODEL` (Qwen3-4B-Instruct-2507 at a pinned revision, bf16, vLLM),
+  `BENCH_DECODING` (the model card's sampling: T 0.7, top-p 0.8, top-k 20), `BENCH_SEEDS`
+  (k = 3 samples per task) and `BENCH_N_CTX`, all in the manifest. `bench --final` refuses a
+  backend whose settings differ (`manifest.protocol_mismatch`). The OpenAI-compatible
+  `llm.VLLMClient` renders the project template itself and parses raw text through
+  `LLM.parse_response`, so training examples can later be exported token-identically; the GGUF
+  path stays for tests and local pipeline checks. `aggregate` combines the k runs.
+- [ ] Run the intended trainable checkpoint as the base control: on a rented GPU, validate the
+  template/parser/measurement on the live server, run dev × 3 seeds (fix and re-freeze if that
+  surfaces a harness bug), then test × 3 seeds once under the final freeze. Primary weight
+  comparisons use short tasks and disabled or identical read-only memory; no cross-task
+  accumulation or evaluator coaching. For long-context comparisons, hold the summarizer
+  checkpoint/config fixed. Runbook in `docs/benchmark.md`.
 
 **Gate/output:** scripted valid solutions pass and fake “done” outputs fail; real-model baseline
 includes interpretable failures. Save task-level results and a frozen manifest in `docs/benchmark.md`.
@@ -609,11 +621,10 @@ the attribution would be muddled.
 
 ## Stage 9 — verified trajectories and adapter SFT · draft
 
-**Required outcome.** It depends on the Stage 8 freeze, re-measured on the new checkpoint.
+**Required outcome.** It starts from Stage 8's frozen protocol and its control-checkpoint
+baseline (the vLLM backend and that baseline run moved into Stage 8 on September 26, so the
+benchmark is comparable before any training starts).
 
-- [ ] Add the OpenAI-compatible vLLM backend. Validate the 3–4B checkpoint's tool template
-  against parser/measurement, and re-run the Stage 8 baseline on it (adapter off). Keep the GGUF
-  path working for the existing tests and demos.
 - [ ] Write the train-skeleton task generator, with fault injection for recovery cases. Reserve
   the test skeletons first.
 - [ ] Collect data along two tracks, each recorded with provenance:
@@ -675,10 +686,10 @@ The capped memory index remains planned Stage 4 work.
 
 **Next coding session:** run `examples/continuation_demo.py` and `examples/compact_demo.py`
 on a host that can hold the 7B weights, and record the retained/lost facts in
-[context-memory.md](context-memory.md); that is Stage 3's one outstanding gap. Then the
-Stage 8 benchmark is built, frozen and run against the real 7B model (`docs/benchmark.md`);
-start Stage 9 next — the vLLM backend, a 3–4B trainable checkpoint, and re-running the Stage 8
-baseline on it as the actual base control. For each session record: what I built, what I broke,
+[context-memory.md](context-memory.md); that is Stage 3's one outstanding gap. The Stage 8
+benchmark, its sampled protocol and the vLLM backend are frozen; finish Stage 8 with the GPU
+session in `docs/benchmark.md` (live template check, dev × 3, then test × 3 on
+Qwen3-4B-Instruct-2507), then start Stage 9's train-skeleton generator. For each session record: what I built, what I broke,
 what the evidence shows, what I can explain unaided, and the next smallest gap.
 
 [ch1]: ../../../harness-books/book1-claude-code/chapter-01-why-harness-engineering.md
