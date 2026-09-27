@@ -198,7 +198,7 @@ def load_config_from_env(env: Mapping[str, str]) -> BotConfig:
         allowed_user_id = int(allowed_raw)
     except ValueError as error:
         raise ValueError(f"TELEGRAM_ALLOWED_USER_ID must be an integer: {error}") from error
-    state_dir = env.get("TELEGRAM_STATE_DIR", DEFAULT_STATE_DIR)
+    state_dir = env.get("TELEGRAM_STATE_DIR") or DEFAULT_STATE_DIR
     return BotConfig(token=token, allowed_user_id=allowed_user_id, state_dir=state_dir)
 
 

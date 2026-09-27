@@ -11,4 +11,13 @@ if [ -f "$ENV_FILE" ]; then
     set +a
 fi
 cd "$SCRIPT_DIR/.."
-exec python3 -m agent_from_scratch.bots.telegram_bot
+# launchd starts jobs with a bare PATH, where python3 is the system Python without this
+# project's dependencies. Prefer $PYTHON, then the repo's .venv, then python3 on PATH.
+if [ -z "${PYTHON:-}" ]; then
+    if [ -x .venv/bin/python ]; then
+        PYTHON=.venv/bin/python
+    else
+        PYTHON=python3
+    fi
+fi
+exec "$PYTHON" -m agent_from_scratch.bots.telegram_bot
