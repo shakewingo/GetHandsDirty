@@ -18,6 +18,9 @@ artifacts/
 /superpower/docs/
 agent_from_scratch/docs/
 
+# Telegram bot secrets (copy from telegram-bot.env.example)
+agent_from_scratch/deploy/telegram-bot.env
+
 # Downloaded model cache (including extensionless blobs and snapshot links)
 /gz-data/hub/
 
