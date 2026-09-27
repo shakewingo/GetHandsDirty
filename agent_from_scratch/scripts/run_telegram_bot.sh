@@ -20,4 +20,6 @@ if [ -z "${PYTHON:-}" ]; then
         PYTHON=python3
     fi
 fi
+# Timestamp each (re)start so crash tracebacks that follow can be dated in the log.
+echo "$(date '+%Y-%m-%d %H:%M:%S') starting telegram bot with $PYTHON"
 exec "$PYTHON" -m agent_from_scratch.bots.telegram_bot

@@ -251,6 +251,7 @@ def main() -> None:
                   instruction_config=InstructionConfig(workspace=default_workspace))
     store = SessionStore(Path(config.state_dir, "sessions"))
     client = TelegramClient(config.token)
+    logger.info("Telegram bot started; polling for updates")
     try:
         poll_loop(agent, store, client, config.allowed_user_id, state_dir=config.state_dir)
     finally:
