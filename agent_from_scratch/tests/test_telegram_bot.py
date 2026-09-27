@@ -250,6 +250,13 @@ class LoadConfigFromEnvTests(unittest.TestCase):
         config = load_config_from_env(env)
         self.assertEqual(config.state_dir, DEFAULT_STATE_DIR)
 
+    def test_state_dir_defaults_when_empty(self):
+        # The env example ships `TELEGRAM_STATE_DIR=`, which the run script exports as "".
+        env = {"TELEGRAM_BOT_TOKEN": "tok", "TELEGRAM_ALLOWED_USER_ID": "99",
+               "TELEGRAM_STATE_DIR": ""}
+        config = load_config_from_env(env)
+        self.assertEqual(config.state_dir, DEFAULT_STATE_DIR)
+
     def test_raises_when_token_missing(self):
         with self.assertRaises(ValueError):
             load_config_from_env({"TELEGRAM_ALLOWED_USER_ID": "99"})
