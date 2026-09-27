@@ -232,6 +232,11 @@ sampled at the frozen settings, k = 3 seeds per task. The steps and commands are
 3. Run test × 3 seeds **once** under the final freeze, `aggregate` each split, and record the
    baseline. From here the protocol, harness and test split stay fixed through Stage 11.
 
+Done September 27, 2026 (`docs/benchmark.md`, *Stage 8 control baseline*). The server command
+is part of the protocol even though the client cannot see it: the run needed
+`VLLM_USE_FLASHINFER_SAMPLER=0` (vLLM's PyTorch sampler instead of FlashInfer's JIT-compiled
+one), so every adapter comparison must launch vLLM exactly as the runbook does.
+
 ## Independent items
 
 - Run `examples/continuation_demo.py` and `examples/compact_demo.py` on the real model

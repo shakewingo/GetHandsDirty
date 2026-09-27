@@ -1,0 +1,147 @@
+{
+  "passed": 35,
+  "total": 64,
+  "by_skeleton": {
+    "pointer_lookup": {
+      "passed": 2,
+      "total": 10,
+      "format_exact": 0
+    },
+    "single_field_edit": {
+      "passed": 10,
+      "total": 10,
+      "format_exact": 10
+    },
+    "check_fix_recheck": {
+      "passed": 9,
+      "total": 10,
+      "format_exact": 9
+    },
+    "no_op_correct_config": {
+      "passed": 0,
+      "total": 10,
+      "format_exact": 0
+    },
+    "max_timeout_service": {
+      "passed": 6,
+      "total": 6,
+      "format_exact": 4
+    },
+    "delete_key": {
+      "passed": 1,
+      "total": 6,
+      "format_exact": 1
+    },
+    "transient_list_failure": {
+      "passed": 3,
+      "total": 6,
+      "format_exact": 0
+    },
+    "locked_config_stop": {
+      "passed": 4,
+      "total": 6,
+      "format_exact": 4
+    }
+  },
+  "by_family": {
+    "inspection": {
+      "passed": 8,
+      "total": 16,
+      "format_exact": 4
+    },
+    "updates": {
+      "passed": 11,
+      "total": 16,
+      "format_exact": 11
+    },
+    "recovery": {
+      "passed": 12,
+      "total": 16,
+      "format_exact": 9
+    },
+    "stopping": {
+      "passed": 4,
+      "total": 16,
+      "format_exact": 4
+    }
+  },
+  "false_completion": {
+    "count": 3,
+    "claimed": 29,
+    "total": 64
+  },
+  "matched_recovery": [
+    {
+      "pair_id": "check_fix_recheck-0",
+      "complete_pair": true,
+      "clean_passed": true,
+      "fault_passed": true,
+      "fault_encountered": true,
+      "recovered": true
+    },
+    {
+      "pair_id": "check_fix_recheck-1",
+      "complete_pair": true,
+      "clean_passed": true,
+      "fault_passed": true,
+      "fault_encountered": true,
+      "recovered": true
+    },
+    {
+      "pair_id": "check_fix_recheck-2",
+      "complete_pair": true,
+      "clean_passed": true,
+      "fault_passed": true,
+      "fault_encountered": true,
+      "recovered": true
+    },
+    {
+      "pair_id": "check_fix_recheck-3",
+      "complete_pair": true,
+      "clean_passed": true,
+      "fault_passed": true,
+      "fault_encountered": true,
+      "recovered": true
+    },
+    {
+      "pair_id": "check_fix_recheck-4",
+      "complete_pair": true,
+      "clean_passed": true,
+      "fault_passed": false,
+      "fault_encountered": true,
+      "recovered": false
+    },
+    {
+      "pair_id": "transient_list_failure-0",
+      "complete_pair": true,
+      "clean_passed": true,
+      "fault_passed": false,
+      "fault_encountered": true,
+      "recovered": false
+    },
+    {
+      "pair_id": "transient_list_failure-1",
+      "complete_pair": true,
+      "clean_passed": true,
+      "fault_passed": false,
+      "fault_encountered": true,
+      "recovered": false
+    },
+    {
+      "pair_id": "transient_list_failure-2",
+      "complete_pair": true,
+      "clean_passed": true,
+      "fault_passed": false,
+      "fault_encountered": true,
+      "recovered": false
+    }
+  ],
+  "invalid_calls": 2,
+  "model_requests": 246,
+  "elapsed_seconds": 164.22,
+  "usage": {
+    "prompt_tokens": 409092,
+    "completion_tokens": 8480,
+    "total_tokens": 417572
+  }
+}

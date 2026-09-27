@@ -242,27 +242,58 @@ targets: answering from a listing without reading, ignoring error feedback, and 
 so `no_op_correct_config`'s `UPDATED` (state correct, claim false) is scored as a failed answer
 but not as a false completion. Read its answer failures alongside the false-completion rate.
 
-### Runbook: control baseline on a rented GPU
+### Runbook: control baseline on a rented GPU (as run, September 27, 2026)
 
-One session, one GPU with ≥ 24 GB (the bf16 weights are ~8 GB; the rest is KV cache at a 32k
-window). Set an hour cap and stop the pod at the end; record the cost in the ledger.
+Verified end to end on RunPod; every step below is what worked, with the traps that cost a retry.
+Driven from the Mac with `runpodctl` (≥ 2.14; `runpodctl doctor` for the key, and an SSH key
+registered with `runpodctl ssh add-key` **before** the pod boots).
+
+**Pod.** vLLM 0.30.0 installs PyTorch 2.13 built for CUDA 13, so the host driver must support
+CUDA 13 (`--min-cuda-version 13.0`); otherwise the pod boots and vLLM fails on first GPU use.
+Any GPU with ≥ 24 GB works (bf16 weights ~8 GB plus KV cache at 32k); the run used an A40.
 
 ```sh
-# On the pod, at the commit that holds the frozen manifest
-git clone https://github.com/shakewingo/GetHandsDirty.git && cd GetHandsDirty
-git checkout <frozen commit>
-# vLLM 0.30.0 is the version VLLMClient's fields (/v1/models ModelCard id/root/max_model_len,
-# /tokenize prompt/add_special_tokens -> count, completion top_k/min_p/seed/stop) were checked against.
-pip install vllm==0.30.0 loguru -r agent_from_scratch/requirements-tools.txt
-
-# Serve the pinned control. --enable-lora keeps the server identical for later adapter runs;
-# no tool parser: the client sends raw prompts rendered from prompts/qwen_chat.jinja.
-vllm serve Qwen/Qwen3-4B-Instruct-2507 --revision cdbee75f17c01a7cc42f958dc650907174af0554 \
-  --dtype bfloat16 --max-model-len 32768 --enable-lora --max-lora-rank 64 --port 8000 &
+runpodctl pod create --name stage8-baseline \
+  --image runpod/pytorch:1.0.3-cu1281-torch291-ubuntu2404 \
+  --gpu-id "NVIDIA A40" --cloud-type SECURE --data-center-ids CA-MTL-1 \
+  --min-cuda-version 13.0 --container-disk-in-gb 60 --ports "22/tcp" --wait --wait-timeout 15m
 ```
 
-1. **Smoke and validate** on a few dev tasks. The client refuses to start if the template's
-   `<|im_start|>`/`<|im_end|>` are not single tokens or the server window is under 32k.
+**Cost guard.** `runpodctl` 2.14 has no `--terminate-after`, and the pod's own
+`RUNPOD_API_KEY` is `Unauthorized` for managing the pod (and the image ships `runpodctl` 1.x,
+verb-first syntax), so the pod cannot stop itself. Run the guard from the Mac:
+`sleep <secs> && runpodctl pod stop <pod-id>`, and remove the pod when done.
+
+**Code.** A shallow clone of the frozen commit keeps `git rev-parse HEAD` (which run metadata
+records) without the multi-GB history: `git clone --depth 1 --branch <branch> file://<repo>
+stage8-src`, then tar it with `COPYFILE_DISABLE=1` (macOS `tar` otherwise adds `._*` files, and a
+`._*.py` file is hashed as manifest drift) and `scp` it over. Check `git status` is clean on the pod.
+
+**Install.** Ubuntu 24.04 refuses `pip install` into the system Python (PEP 668); use a venv:
+
+```sh
+python3 -m venv /root/venv && /root/venv/bin/pip install -q uv && . /root/venv/bin/activate
+# VLLMClient's fields (/v1/models ModelCard id/root/max_model_len, /tokenize prompt/
+# add_special_tokens -> count, completion top_k/min_p/seed/stop) were checked against 0.30.0.
+uv pip install vllm==0.30.0 loguru -r stage8-src/agent_from_scratch/requirements-tools.txt
+```
+
+**Serve.** Two settings are required, not optional. The venv's `bin/` must be on `PATH` (FlashInfer
+calls `ninja` by name), and `VLLM_USE_FLASHINFER_SAMPLER=0`, because FlashInfer JIT-compiles its
+top-k/top-p sampler at startup and the image's `nvcc` is CUDA 12.8 against PyTorch's CUDA 13.
+With it off, vLLM samples with its PyTorch implementation: the same `BENCH_DECODING`
+parameters, a different kernel. **Every later adapter comparison must use this same server
+command.** Detach fully (`setsid nohup … < /dev/null &`) or the SSH call stays open.
+
+```sh
+PATH=/root/venv/bin:$PATH VLLM_USE_FLASHINFER_SAMPLER=0 setsid nohup \
+  vllm serve Qwen/Qwen3-4B-Instruct-2507 --revision cdbee75f17c01a7cc42f958dc650907174af0554 \
+  --dtype bfloat16 --max-model-len 32768 --enable-lora --max-lora-rank 64 --port 8000 \
+  > vllm.log 2>&1 < /dev/null &
+curl -s localhost:8000/v1/models   # ready when it lists the model with max_model_len 32768
+```
+
+1. **Smoke and validate** on four dev tasks, then check measured against served prompt tokens:
 
    ```sh
    python -m agent_from_scratch.evals bench --backend vllm --split dev --seed 0 \
@@ -277,13 +308,65 @@ vllm serve Qwen/Qwen3-4B-Instruct-2507 --revision cdbee75f17c01a7cc42f958dc65090
    PY
    ```
 
-   Expect 0 mismatches (the same check prints `0 of 64` on the 7B dev pilot). Also read a few
-   raw replies in the traces: tool calls must arrive as `<tool_call>` blocks that parse, not as
-   `parse_errors`.
-2. **Dev × 3.** `for s in 0 1 2; do python -m agent_from_scratch.evals bench --backend vllm
-   --split dev --seed $s --output outputs/ctl-dev-s$s; done`, then
-   `python -m agent_from_scratch.evals aggregate outputs/ctl-dev-s0 outputs/ctl-dev-s1
-   outputs/ctl-dev-s2 --output outputs/ctl-dev.json`. An evaluator or harness bug found here is
-   fixed, re-frozen and dev re-run; difficulty is not retuned.
-3. **Test × 3, once.** The same loop with `--split test --final` into `outputs/ctl-test-s$s`,
-   then `aggregate`. Record both splits' aggregates here as the Stage 8 control baseline.
+   Expect 0 mismatches and no `parse_errors`.
+2. **Dev × 3:** `for s in 0 1 2; do python -m agent_from_scratch.evals bench --backend vllm
+   --split dev --seed $s --output outputs/ctl-dev-s$s; done`, then `aggregate` the three runs.
+   Review for evaluator/harness bugs before test; fix, re-freeze and re-run dev if any.
+3. **Test × 3, once:** the same loop with `--split test --final` into `outputs/ctl-test-s$s`,
+   then `aggregate`. `--final` refuses on manifest drift or a protocol mismatch.
+4. Copy `outputs/` back, remove the pod, confirm `runpodctl pod list` is empty.
+
+## Stage 8 control baseline (September 27, 2026)
+
+Qwen/Qwen3-4B-Instruct-2507 @ `cdbee75f`, bf16, vLLM 0.30.0 (`VLLM_USE_FLASHINFER_SAMPLER=0`) on
+one RunPod A40, frozen sampling (T 0.7, top-p 0.8, top-k 20), seeds 0/1/2, adapter off. Harness
+and task set at commit `1e697ba`. All three test runs were `--final` with `manifest_drift` `{}`
+and `protocol_mismatch` `[]`. Measured prompt tokens equalled the server's on **718/718** dev and
+**778/778** test requests; 2 dev and 1 test parse errors; no backend errors. Wall time 7.6 min
+(dev × 3) and 9.3 min (test × 3); the whole GPU session cost **$0.35**. Per-task records,
+summaries, metadata and both aggregates are committed in `docs/baselines/stage8-control/`;
+the paired comparisons of Stages 9–11 run against those task IDs.
+
+| Split | Tasks | mean pass@1 | pass^k | pass@k | mixed (0 < c < 3) | false completion |
+|---|---:|---:|---:|---:|---:|---:|
+| **Test** | 60 | **0.667** | 0.583 | 0.717 | 8 | 1 / 72 claims |
+| Dev | 64 | 0.542 | 0.469 | 0.641 | 11 | 14 / 87 claims |
+
+| Family | Test pass@1 | Test pass^k | Dev pass@1 | Dev pass^k |
+|---|---:|---:|---:|---:|
+| inspection | 0.667 | 0.556 | 0.479 | 0.375 |
+| updates | 0.889 | 0.722 | 0.708 | 0.625 |
+| recovery | 1.000 | 1.000 | 0.771 | 0.688 |
+| stopping | **0.000** | 0.000 | 0.208 | 0.188 |
+
+| Test skeleton | pass@1 | Dev skeleton | pass@1 |
+|---|---:|---|---:|
+| `deep_chain_lookup` | 1.00 | `single_field_edit` | 1.00 |
+| `append_list_item` | 1.00 | `max_timeout_service` | 1.00 |
+| `transient_read_failure` | 1.00 | `check_fix_recheck` | 0.93 |
+| `flaky_write_retry` | 1.00 | `locked_config_stop` | 0.56 |
+| `rename_key_all_files` | 0.89 | `transient_list_failure` | 0.50 |
+| `pointer_nested_edit` | 0.78 | `delete_key` | 0.22 |
+| `grep_locate` | 0.56 | `pointer_lookup` | 0.17 |
+| `sum_across_files` | 0.44 | `no_op_correct_config` | 0.00 |
+| `ambiguous_choice_stop` | 0.00 | | |
+| `missing_file_report` | 0.00 | | |
+
+**Reading it.**
+
+- **Stopping is the gap post-training should close.** On test the model never replies with only
+  the required token: `missing_file_report` answers in prose and sometimes reports the backup's
+  stale value it was told not to use; `ambiguous_choice_stop` ends its prose with `NEED_INPUT`
+  (answer content passes, exact format fails, by design for reply-token deliverables). Dev shows
+  the same in `no_op_correct_config` (false `UPDATED`, 0/10).
+- **Test recovery is at the ceiling** (both recovery skeletons 1.00), so a gain cannot show there;
+  dev recovery (0.77) still can. **Mixed-outcome tasks** (8 test, 11 dev) are the ones Stage 10's
+  GRPO precondition needs.
+- The local Q8_0 check predicted the dev pattern closely (same perfect, zero and low skeletons).
+- **Known spec weakness, recorded, not changed:** `ambiguous_choice_stop`'s prompt already states
+  "nothing marks either one active", so 16/18 runs answered without any tool call and fail
+  `evidence`. It does not change the score (every run also fails the required exact reply), and
+  test skeletons are not edited after test results. Revisit only through a new test split.
+- **Known metric gap** (above): `false_completion` does not count a false claim over a correct
+  state (`no_op_correct_config`'s `UPDATED`). The 14 dev false completions are `locked_config_stop`
+  (8: `DONE` with no change) and `delete_key` (6: "removed" when the edit never landed).

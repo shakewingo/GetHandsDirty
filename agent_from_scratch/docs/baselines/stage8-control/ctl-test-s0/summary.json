@@ -1,0 +1,141 @@
+{
+  "passed": 40,
+  "total": 60,
+  "by_skeleton": {
+    "deep_chain_lookup": {
+      "passed": 6,
+      "total": 6,
+      "format_exact": 5
+    },
+    "grep_locate": {
+      "passed": 4,
+      "total": 6,
+      "format_exact": 4
+    },
+    "sum_across_files": {
+      "passed": 2,
+      "total": 6,
+      "format_exact": 1
+    },
+    "pointer_nested_edit": {
+      "passed": 4,
+      "total": 6,
+      "format_exact": 4
+    },
+    "rename_key_all_files": {
+      "passed": 6,
+      "total": 6,
+      "format_exact": 6
+    },
+    "append_list_item": {
+      "passed": 6,
+      "total": 6,
+      "format_exact": 6
+    },
+    "transient_read_failure": {
+      "passed": 6,
+      "total": 6,
+      "format_exact": 0
+    },
+    "flaky_write_retry": {
+      "passed": 6,
+      "total": 6,
+      "format_exact": 6
+    },
+    "ambiguous_choice_stop": {
+      "passed": 0,
+      "total": 6,
+      "format_exact": 0
+    },
+    "missing_file_report": {
+      "passed": 0,
+      "total": 6,
+      "format_exact": 0
+    }
+  },
+  "by_family": {
+    "inspection": {
+      "passed": 12,
+      "total": 18,
+      "format_exact": 10
+    },
+    "updates": {
+      "passed": 16,
+      "total": 18,
+      "format_exact": 16
+    },
+    "recovery": {
+      "passed": 12,
+      "total": 12,
+      "format_exact": 6
+    },
+    "stopping": {
+      "passed": 0,
+      "total": 12,
+      "format_exact": 0
+    }
+  },
+  "false_completion": {
+    "count": 0,
+    "claimed": 24,
+    "total": 60
+  },
+  "matched_recovery": [
+    {
+      "pair_id": "transient_read_failure-0",
+      "complete_pair": true,
+      "clean_passed": true,
+      "fault_passed": true,
+      "fault_encountered": true,
+      "recovered": true
+    },
+    {
+      "pair_id": "transient_read_failure-1",
+      "complete_pair": true,
+      "clean_passed": true,
+      "fault_passed": true,
+      "fault_encountered": true,
+      "recovered": true
+    },
+    {
+      "pair_id": "transient_read_failure-2",
+      "complete_pair": true,
+      "clean_passed": true,
+      "fault_passed": true,
+      "fault_encountered": true,
+      "recovered": true
+    },
+    {
+      "pair_id": "flaky_write_retry-0",
+      "complete_pair": true,
+      "clean_passed": true,
+      "fault_passed": true,
+      "fault_encountered": true,
+      "recovered": true
+    },
+    {
+      "pair_id": "flaky_write_retry-1",
+      "complete_pair": true,
+      "clean_passed": true,
+      "fault_passed": true,
+      "fault_encountered": true,
+      "recovered": true
+    },
+    {
+      "pair_id": "flaky_write_retry-2",
+      "complete_pair": true,
+      "clean_passed": true,
+      "fault_passed": true,
+      "fault_encountered": true,
+      "recovered": true
+    }
+  ],
+  "invalid_calls": 0,
+  "model_requests": 261,
+  "elapsed_seconds": 183.08,
+  "usage": {
+    "prompt_tokens": 487559,
+    "completion_tokens": 9485,
+    "total_tokens": 497044
+  }
+}

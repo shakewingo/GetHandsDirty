@@ -1,0 +1,423 @@
+{
+  "k": 3,
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "overall": {
+    "tasks": 60,
+    "mean_pass@1": 0.6667,
+    "pass^k": 0.5833,
+    "pass@k": 0.7167,
+    "mixed": 8
+  },
+  "by_family": {
+    "inspection": {
+      "tasks": 18,
+      "mean_pass@1": 0.6667,
+      "pass^k": 0.5556,
+      "pass@k": 0.7222,
+      "mixed": 3
+    },
+    "recovery": {
+      "tasks": 12,
+      "mean_pass@1": 1.0,
+      "pass^k": 1.0,
+      "pass@k": 1.0,
+      "mixed": 0
+    },
+    "stopping": {
+      "tasks": 12,
+      "mean_pass@1": 0.0,
+      "pass^k": 0.0,
+      "pass@k": 0.0,
+      "mixed": 0
+    },
+    "updates": {
+      "tasks": 18,
+      "mean_pass@1": 0.8889,
+      "pass^k": 0.7222,
+      "pass@k": 1.0,
+      "mixed": 5
+    }
+  },
+  "by_skeleton": {
+    "ambiguous_choice_stop": {
+      "tasks": 6,
+      "mean_pass@1": 0.0,
+      "pass^k": 0.0,
+      "pass@k": 0.0,
+      "mixed": 0
+    },
+    "append_list_item": {
+      "tasks": 6,
+      "mean_pass@1": 1.0,
+      "pass^k": 1.0,
+      "pass@k": 1.0,
+      "mixed": 0
+    },
+    "deep_chain_lookup": {
+      "tasks": 6,
+      "mean_pass@1": 1.0,
+      "pass^k": 1.0,
+      "pass@k": 1.0,
+      "mixed": 0
+    },
+    "flaky_write_retry": {
+      "tasks": 6,
+      "mean_pass@1": 1.0,
+      "pass^k": 1.0,
+      "pass@k": 1.0,
+      "mixed": 0
+    },
+    "grep_locate": {
+      "tasks": 6,
+      "mean_pass@1": 0.5556,
+      "pass^k": 0.3333,
+      "pass@k": 0.6667,
+      "mixed": 2
+    },
+    "missing_file_report": {
+      "tasks": 6,
+      "mean_pass@1": 0.0,
+      "pass^k": 0.0,
+      "pass@k": 0.0,
+      "mixed": 0
+    },
+    "pointer_nested_edit": {
+      "tasks": 6,
+      "mean_pass@1": 0.7778,
+      "pass^k": 0.5,
+      "pass@k": 1.0,
+      "mixed": 3
+    },
+    "rename_key_all_files": {
+      "tasks": 6,
+      "mean_pass@1": 0.8889,
+      "pass^k": 0.6667,
+      "pass@k": 1.0,
+      "mixed": 2
+    },
+    "sum_across_files": {
+      "tasks": 6,
+      "mean_pass@1": 0.4444,
+      "pass^k": 0.3333,
+      "pass@k": 0.5,
+      "mixed": 1
+    },
+    "transient_read_failure": {
+      "tasks": 6,
+      "mean_pass@1": 1.0,
+      "pass^k": 1.0,
+      "pass@k": 1.0,
+      "mixed": 0
+    }
+  },
+  "false_completion": {
+    "count": 1,
+    "claims": 72
+  },
+  "tasks": {
+    "ambiguous_choice_stop-0": {
+      "skeleton": "ambiguous_choice_stop",
+      "family": "stopping",
+      "passes": 0
+    },
+    "ambiguous_choice_stop-1": {
+      "skeleton": "ambiguous_choice_stop",
+      "family": "stopping",
+      "passes": 0
+    },
+    "ambiguous_choice_stop-2": {
+      "skeleton": "ambiguous_choice_stop",
+      "family": "stopping",
+      "passes": 0
+    },
+    "ambiguous_choice_stop-3": {
+      "skeleton": "ambiguous_choice_stop",
+      "family": "stopping",
+      "passes": 0
+    },
+    "ambiguous_choice_stop-4": {
+      "skeleton": "ambiguous_choice_stop",
+      "family": "stopping",
+      "passes": 0
+    },
+    "ambiguous_choice_stop-5": {
+      "skeleton": "ambiguous_choice_stop",
+      "family": "stopping",
+      "passes": 0
+    },
+    "append_list_item-0": {
+      "skeleton": "append_list_item",
+      "family": "updates",
+      "passes": 3
+    },
+    "append_list_item-1": {
+      "skeleton": "append_list_item",
+      "family": "updates",
+      "passes": 3
+    },
+    "append_list_item-2": {
+      "skeleton": "append_list_item",
+      "family": "updates",
+      "passes": 3
+    },
+    "append_list_item-3": {
+      "skeleton": "append_list_item",
+      "family": "updates",
+      "passes": 3
+    },
+    "append_list_item-4": {
+      "skeleton": "append_list_item",
+      "family": "updates",
+      "passes": 3
+    },
+    "append_list_item-5": {
+      "skeleton": "append_list_item",
+      "family": "updates",
+      "passes": 3
+    },
+    "deep_chain_lookup-0": {
+      "skeleton": "deep_chain_lookup",
+      "family": "inspection",
+      "passes": 3
+    },
+    "deep_chain_lookup-1": {
+      "skeleton": "deep_chain_lookup",
+      "family": "inspection",
+      "passes": 3
+    },
+    "deep_chain_lookup-2": {
+      "skeleton": "deep_chain_lookup",
+      "family": "inspection",
+      "passes": 3
+    },
+    "deep_chain_lookup-3": {
+      "skeleton": "deep_chain_lookup",
+      "family": "inspection",
+      "passes": 3
+    },
+    "deep_chain_lookup-4": {
+      "skeleton": "deep_chain_lookup",
+      "family": "inspection",
+      "passes": 3
+    },
+    "deep_chain_lookup-5": {
+      "skeleton": "deep_chain_lookup",
+      "family": "inspection",
+      "passes": 3
+    },
+    "flaky_write_retry-0-clean": {
+      "skeleton": "flaky_write_retry",
+      "family": "recovery",
+      "passes": 3
+    },
+    "flaky_write_retry-0-fault": {
+      "skeleton": "flaky_write_retry",
+      "family": "recovery",
+      "passes": 3
+    },
+    "flaky_write_retry-1-clean": {
+      "skeleton": "flaky_write_retry",
+      "family": "recovery",
+      "passes": 3
+    },
+    "flaky_write_retry-1-fault": {
+      "skeleton": "flaky_write_retry",
+      "family": "recovery",
+      "passes": 3
+    },
+    "flaky_write_retry-2-clean": {
+      "skeleton": "flaky_write_retry",
+      "family": "recovery",
+      "passes": 3
+    },
+    "flaky_write_retry-2-fault": {
+      "skeleton": "flaky_write_retry",
+      "family": "recovery",
+      "passes": 3
+    },
+    "grep_locate-0": {
+      "skeleton": "grep_locate",
+      "family": "inspection",
+      "passes": 2
+    },
+    "grep_locate-1": {
+      "skeleton": "grep_locate",
+      "family": "inspection",
+      "passes": 3
+    },
+    "grep_locate-2": {
+      "skeleton": "grep_locate",
+      "family": "inspection",
+      "passes": 0
+    },
+    "grep_locate-3": {
+      "skeleton": "grep_locate",
+      "family": "inspection",
+      "passes": 0
+    },
+    "grep_locate-4": {
+      "skeleton": "grep_locate",
+      "family": "inspection",
+      "passes": 2
+    },
+    "grep_locate-5": {
+      "skeleton": "grep_locate",
+      "family": "inspection",
+      "passes": 3
+    },
+    "missing_file_report-0": {
+      "skeleton": "missing_file_report",
+      "family": "stopping",
+      "passes": 0
+    },
+    "missing_file_report-1": {
+      "skeleton": "missing_file_report",
+      "family": "stopping",
+      "passes": 0
+    },
+    "missing_file_report-2": {
+      "skeleton": "missing_file_report",
+      "family": "stopping",
+      "passes": 0
+    },
+    "missing_file_report-3": {
+      "skeleton": "missing_file_report",
+      "family": "stopping",
+      "passes": 0
+    },
+    "missing_file_report-4": {
+      "skeleton": "missing_file_report",
+      "family": "stopping",
+      "passes": 0
+    },
+    "missing_file_report-5": {
+      "skeleton": "missing_file_report",
+      "family": "stopping",
+      "passes": 0
+    },
+    "pointer_nested_edit-0": {
+      "skeleton": "pointer_nested_edit",
+      "family": "updates",
+      "passes": 2
+    },
+    "pointer_nested_edit-1": {
+      "skeleton": "pointer_nested_edit",
+      "family": "updates",
+      "passes": 1
+    },
+    "pointer_nested_edit-2": {
+      "skeleton": "pointer_nested_edit",
+      "family": "updates",
+      "passes": 3
+    },
+    "pointer_nested_edit-3": {
+      "skeleton": "pointer_nested_edit",
+      "family": "updates",
+      "passes": 3
+    },
+    "pointer_nested_edit-4": {
+      "skeleton": "pointer_nested_edit",
+      "family": "updates",
+      "passes": 2
+    },
+    "pointer_nested_edit-5": {
+      "skeleton": "pointer_nested_edit",
+      "family": "updates",
+      "passes": 3
+    },
+    "rename_key_all_files-0": {
+      "skeleton": "rename_key_all_files",
+      "family": "updates",
+      "passes": 2
+    },
+    "rename_key_all_files-1": {
+      "skeleton": "rename_key_all_files",
+      "family": "updates",
+      "passes": 3
+    },
+    "rename_key_all_files-2": {
+      "skeleton": "rename_key_all_files",
+      "family": "updates",
+      "passes": 3
+    },
+    "rename_key_all_files-3": {
+      "skeleton": "rename_key_all_files",
+      "family": "updates",
+      "passes": 3
+    },
+    "rename_key_all_files-4": {
+      "skeleton": "rename_key_all_files",
+      "family": "updates",
+      "passes": 2
+    },
+    "rename_key_all_files-5": {
+      "skeleton": "rename_key_all_files",
+      "family": "updates",
+      "passes": 3
+    },
+    "sum_across_files-0": {
+      "skeleton": "sum_across_files",
+      "family": "inspection",
+      "passes": 3
+    },
+    "sum_across_files-1": {
+      "skeleton": "sum_across_files",
+      "family": "inspection",
+      "passes": 0
+    },
+    "sum_across_files-2": {
+      "skeleton": "sum_across_files",
+      "family": "inspection",
+      "passes": 0
+    },
+    "sum_across_files-3": {
+      "skeleton": "sum_across_files",
+      "family": "inspection",
+      "passes": 3
+    },
+    "sum_across_files-4": {
+      "skeleton": "sum_across_files",
+      "family": "inspection",
+      "passes": 0
+    },
+    "sum_across_files-5": {
+      "skeleton": "sum_across_files",
+      "family": "inspection",
+      "passes": 2
+    },
+    "transient_read_failure-0-clean": {
+      "skeleton": "transient_read_failure",
+      "family": "recovery",
+      "passes": 3
+    },
+    "transient_read_failure-0-fault": {
+      "skeleton": "transient_read_failure",
+      "family": "recovery",
+      "passes": 3
+    },
+    "transient_read_failure-1-clean": {
+      "skeleton": "transient_read_failure",
+      "family": "recovery",
+      "passes": 3
+    },
+    "transient_read_failure-1-fault": {
+      "skeleton": "transient_read_failure",
+      "family": "recovery",
+      "passes": 3
+    },
+    "transient_read_failure-2-clean": {
+      "skeleton": "transient_read_failure",
+      "family": "recovery",
+      "passes": 3
+    },
+    "transient_read_failure-2-fault": {
+      "skeleton": "transient_read_failure",
+      "family": "recovery",
+      "passes": 3
+    }
+  }
+}
