@@ -113,7 +113,8 @@ Variation comes only from the seed: layout (file and directory names, depth), di
 values, dependency length and fault position. The model always gets the confined general tools
 (`list_files`, `glob_files`, `grep_text`, `read_file`, `write_file`, `edit_file`, `calculator`),
 narrowed per task by `tools`, plus a shell with only the fixed `check_fixture` command where a
-task lists `shell` (reusing `evals/check.py`).
+task lists `shell` (`evals/bench/check.py`, moved there from `evals/check.py` when the Stage 2B
+`dev` suite was retired).
 
 **Dev (4)**
 
@@ -148,8 +149,9 @@ said 12 dev tasks; three matched pairs for recovery make it 15.)
 ## Splits and reservation
 
 `bench/splits.json` lists the 10 test skeleton IDs before any variant is generated. The old
-placeholder names in `evals/splits.json` (`merge_records_reserved`, `joined_totals_reserved`,
-`single_record_seed`, `division_seed`) stay with the legacy suite and are not used here. `train`
+placeholder names in the Stage 2B suite's `evals/splits.json` (`merge_records_reserved`,
+`joined_totals_reserved`, `single_record_seed`, `division_seed`) were never used here, and that
+file was removed with the suite after Stage 8. `train`
 is empty and reserved for the Stage 9 generator, which is written after the test set is frozen.
 Tests require: every skeleton ID appears in exactly one split, and no dev skeleton shares a
 builder with a test skeleton.

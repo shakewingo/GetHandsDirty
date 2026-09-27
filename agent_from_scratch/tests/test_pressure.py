@@ -7,8 +7,8 @@ import unittest
 from unittest.mock import Mock
 
 from agent_from_scratch.evals import pressure
+from agent_from_scratch.evals.bench.skeletons import answer, call
 from agent_from_scratch.llm import LLM
-from agent_from_scratch.tests.test_behavior_eval import answer, call
 from agent_from_scratch.tools.files import ReadFileTool
 
 

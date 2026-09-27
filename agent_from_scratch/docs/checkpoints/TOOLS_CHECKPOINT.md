@@ -79,8 +79,10 @@ the system prompt and agent loop are unchanged by this parser fix.
 
 The default registry now includes `edit_file` alongside general read/write/list tools.
 `tools/files.py` follows Nanobot's filesystem interfaces; document extraction lives in
-`tools/file_documents.py`. The old confined, byte-based tools are frozen in
-`evals/legacy_files.py` for the original demo and evaluators.
+`tools/file_documents.py`. The old confined, byte-based tools were frozen in
+`evals/legacy_files.py` for the original demo and evaluators; they were removed after Stage 8
+(see `git show ce2111a:agent_from_scratch/evals/legacy_files.py`), and the demo now uses the
+current tools confined to its workspace.
 
 - Read uses 1-based line offsets, numbered content, optional encoding, versions and
   line/character continuation that preserves extracted line content, not original newline bytes.

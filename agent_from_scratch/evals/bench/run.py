@@ -27,7 +27,7 @@ from ...tools.search import GlobFilesTool, GrepTextTool
 from ...tools.shell import Command, ShellTool
 
 HERE = Path(__file__).resolve().parent
-CHECK_SCRIPT = HERE.parent / "check.py"
+CHECK_SCRIPT = HERE / "check.py"
 
 
 def specs(split: str | None = None) -> list[tuple[Skeleton, BuildContext]]:

@@ -41,7 +41,8 @@ class ToolWorkflowTests(unittest.TestCase):
                     self.assertIn("Expected output", observation["output"]["stderr"])
                     return call("read_file", path="config.json")
                 if state == 3:
-                    data = json.loads(observation["output"]["content"])
+                    lines = observation["output"]["content"].splitlines()
+                    data = json.loads("\n".join(line.split("| ", 1)[1] for line in lines))
                     data["output"] = "report.txt"
                     return call("write_file", path="config.json", content=json.dumps(data))
                 if state == 4:

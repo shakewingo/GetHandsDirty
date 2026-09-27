@@ -220,8 +220,9 @@ Prompt rules describe expected behavior; runtime enforces paths, allowed operati
   recursive/paginated `list_files`, line-numbered `read_file`, full/append `write_file`, and
   targeted `edit_file`. Support general local paths, optional confinement, continuation,
   atomic replacement, mode preservation and optional version checks. Read PDF/Office text
-  through `file_documents.py`; images expose metadata only. Frozen evaluations retain the
-  original confined byte-based tools in `evals/legacy_files.py`.
+  through `file_documents.py`; images expose metadata only. The original confined byte-based
+  tools (`evals/legacy_files.py`) served the Stage 2B `dev` suite until both were retired after
+  Stage 8; they remain in git history at `ce2111a`.
 - [x] **`tools/web.py`:** synchronous general HTTP/HTTPS `web_fetch(url, extract_mode?)`
   with compressed responses and main-content or navigation-inclusive HTML text extraction,
   plus `web_search(query, count?)` via `ddgs`. Both return source URLs and retrieval time;

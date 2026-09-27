@@ -1,5 +1,0 @@
-{
-  "output": "legacy.csv",
-  "retries": 3,
-  "format": "json"
-}

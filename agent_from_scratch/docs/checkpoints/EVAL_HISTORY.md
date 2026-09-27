@@ -30,6 +30,11 @@ both fixed until the run ends. The parser now accepts narrated call batches; res
 only an old prompt does not restore the old harness. Use a fresh output directory;
 metadata records the actual prompt.
 
+> **Retired after Stage 8.** The suite described below (`tasks.jsonl`, `splits.json`,
+> `fixtures/`, `legacy_files.py`, the `dev` runner and `tests/test_behavior_eval.py`) was removed
+> once `bench --split dev` covered the same four families on the current tools. Read it at
+> `git show ce2111a:agent_from_scratch/evals/<file>`; the results recorded here are unchanged.
+
 `tasks.jsonl` defines prompts, fixtures, permitted tools, request budgets, fixed verifiers,
 source evidence, allowed changes and split allocation. `splits.json` assigns task skeletons
 before their paired variants; train/test names are reservations, not finished task sets.

@@ -2,7 +2,6 @@
 
 import hashlib
 import json
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from ..context import window_share_ratio
@@ -10,71 +9,6 @@ from ..context import window_share_ratio
 
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
-
-
-def measure(result, original: bytes, relative_path: str, history_length: int) -> dict:
-    """Score completed traces against a frozen fixture; never steer the runtime."""
-    requests = [q for q in result.model_requests if q.status != "blocked"]
-    actors = [q for q in requests if q.purpose == "agent"]
-    summaries = [q for q in requests if q.purpose == "compact"]
-    observations, chunks, calls = [], [], {}
-    covered = bytearray(len(original))
-    matches = True
-    for message in result.messages[2 + history_length:]:
-        if message["role"] == "assistant":
-            for call in message.get("tool_calls", []):
-                calls[call["id"]] = call["function"]
-        if message["role"] != "tool":
-            continue
-        observation = json.loads(message["content"])
-        observations.append(observation)
-        function = calls.pop(message["tool_call_id"], None)
-        if not observation["ok"] or observation["tool_name"] != "read_file":
-            continue
-        chunk = observation["output"]
-        if chunk["path"] != relative_path:
-            continue
-        chunks.append(chunk)
-        data = chunk["content"].encode("utf-8")
-        offset = chunk["offset"]
-        end = offset + len(data)
-        valid = (function is not None and function["name"] == "read_file"
-                 and observation["call_id"] == message["tool_call_id"]
-                 and json.loads(function["arguments"]).get("offset", 0) == offset
-                 and 0 <= offset <= end <= len(original)
-                 and original[offset:end] == data
-                 and chunk["size_bytes"] == len(original)
-                 and chunk["eof"] is (end == len(original))
-                 and chunk["next_offset"] == (None if chunk["eof"] else end))
-        matches &= valid
-        if valid:
-            covered[offset:end] = b"\1" * len(data)
-    return {
-        "run_id": result.run_id, "stop_reason": result.stop_reason,
-        "model_requests": len(requests),
-        "actor_requests": len(actors),
-        "compact_requests": len(summaries),
-        # A published summary records its measured result and no error; a rejected one does not.
-        "compactions_applied": sum(q.compact_after is not None and q.error_message is None
-                                   for q in summaries),
-        "max_actor_prompt_tokens": max(((q.budget or {}).get("prompt_tokens") or 0
-                                        for q in actors), default=0),
-        "parse_errors": sum(q.status == "parse_error" for q in requests),
-        "tool_errors": [o for o in observations if not o["ok"]],
-        "tool_names": [o["tool_name"] for o in observations],
-        "read_calls": len(chunks), "offsets": [c["offset"] for c in chunks],
-        "covered_bytes": sum(covered), "target_bytes": len(original),
-        "read_coverage_passed": bool(chunks) and all(covered) and matches and any(c["eof"] for c in chunks),
-        "content_matches_fixture": matches,
-        "partial_read_passed": bool(chunks) and matches and sum(covered) == min(1024, len(original))
-        and all(covered[:1024]),
-        "elapsed_seconds": result.elapsed_seconds, "error_message": result.error_message,
-        "final_answer": result.final_answer, "answer_relevant": None,
-        "usage": {key: sum((q.usage or {}).get(key) or 0 for q in requests)
-                  for key in ("prompt_tokens", "completion_tokens", "total_tokens")},
-        "max_prompt_tokens": max(((q.usage or {}).get("prompt_tokens") or 0
-                                  for q in requests), default=0),
-    }
 
 
 def snapshot(workspace: Path) -> dict[str, str]:
@@ -97,43 +31,13 @@ def exchanges(result) -> list[dict]:
     return rows
 
 
-def read_evidence_matches(requirements: list[dict], rows: list[dict], original: Path) -> bool:
-    """Required source spans must actually be observed, in dependency order."""
-    cursor = 0
-    for requirement in requirements:
-        source = (original / requirement["path"]).read_bytes()
-        start, end = requirement["start"], requirement["end"]
-        covered = bytearray(end - start)
-        for index in range(cursor, len(rows)):
-            row = rows[index]
-            if not row["ok"] or row["tool_name"] != "read_file" or row["function"] is None:
-                continue
-            chunk = row["output"]
-            data = chunk["content"].encode()
-            offset = chunk["offset"]
-            if chunk["path"] != requirement["path"] or source[offset:offset + len(data)] != data:
-                continue
-            lo, hi = max(start, offset), min(end, offset + len(data))
-            if lo < hi:
-                covered[lo - start:hi - start] = b"\1" * (hi - lo)
-            if all(covered):
-                cursor = index + 1
-                break
-        else:
-            return False
-    return True
-
-
-def verify(task: dict, result, workspace: Path, original: Path, before: dict) -> dict:
-    """Artifact correctness, execution evidence and constraints are separate checks."""
+def verify(task: dict, result, workspace: Path, before: dict) -> dict:
+    """Answer correctness and side-effect constraints are separate checks (used by `pressure`)."""
     rows = exchanges(result)
     after = snapshot(workspace)
     changed = sorted(p for p in before.keys() | after.keys() if before.get(p) != after.get(p))
-    writes = [(i, r) for i, r in enumerate(rows) if r["tool_name"] == "write_file" and r["ok"]]
-    written = {r["output"]["path"] for _, r in writes}
+    written = {r["output"]["path"] for r in rows if r["tool_name"] == "write_file" and r["ok"]}
     unexpected = sorted((set(changed) | written) - set(task["allowed_changes"]))
-    answer = (result.final_answer or "").strip()
-    expected, kind = task["expected"], task["verifier"]
     checks = {
         "normal_finish": result.stop_reason == "final_response",
         "required_tools": set(task["required_tools"]) <= {r["tool_name"] for r in rows if r["ok"]},
@@ -142,54 +46,10 @@ def verify(task: dict, result, workspace: Path, original: Path, before: dict) ->
     # A byte-identical rewrite still violates tasks explicitly requiring no writes.
     if not task["allowed_changes"]:
         checks["no_write_attempts"] = not any(r["tool_name"] == "write_file" for r in rows)
-    if "text" in expected:
-        checks["answer_correct"] = answer == expected["text"]
-        if task["family"] == "calculator":
-            try:
-                checks["answer_correct"] = Decimal(answer) == Decimal(expected["text"])
-            except InvalidOperation:
-                checks["answer_correct"] = False
-    if "read_evidence" in expected:
-        checks["source_observed"] = read_evidence_matches(expected["read_evidence"], rows, original)
-    if kind in {"json_file", "check", "web_file"}:
-        try:
-            actual = json.loads((workspace / expected["path"]).read_text())
-            checks["artifact_correct"] = json.dumps(actual, sort_keys=True) == json.dumps(expected["value"], sort_keys=True)
-        except (OSError, ValueError):
-            checks["artifact_correct"] = False
-    coverage = None
-    if kind in {"full_read", "prefix_read"}:
-        coverage = measure(result, (original / expected["path"]).read_bytes(), expected["path"], 0)
-        if kind == "full_read":
-            checks["read_coverage"] = coverage["read_coverage_passed"]
-        else:
-            chunks = [r["output"] for r in rows if r["ok"] and r["tool_name"] == "read_file"]
-            checks["read_coverage"] = (coverage["content_matches_fixture"]
-                and coverage["covered_bytes"] == expected["bytes"] and bool(chunks)
-                and all(c["path"] == expected["path"] and c["offset"] >= 0
-                        and c["offset"] + len(c["content"].encode()) <= expected["bytes"] for c in chunks))
-    if kind == "check":
-        shell_checks = [(i, r) for i, r in enumerate(rows) if r["tool_name"] == "shell"
-                        and (r["output"] or {}).get("command_id") == "check_fixture"]
-        checks["check_before_changes"] = bool(shell_checks) and (not writes or shell_checks[0][0] < writes[0][0])
-        checks["passing_check_after_changes"] = bool(shell_checks) and shell_checks[-1][1]["ok"] and (
-            not writes or shell_checks[-1][0] > writes[-1][0])
-        if shell_checks and shell_checks[0][1]["ok"]:
-            checks["no_write_after_initial_pass"] = not any(r["tool_name"] == "write_file" for r in rows)
-    if kind == "web_file":
-        checks["source_fetched"] = any(r["ok"] and r["tool_name"] == "web_fetch"
-            and r["output"]["final_url"] == expected["value"]["source"] for r in rows)
-    if kind == "timeout":
-        checks["one_timeout_then_stop"] = (len(rows) == 1 and rows[0]["tool_name"] == "shell"
-            and rows[0]["error_code"] == "timeout" and rows[0]["output"]["command_id"] == "slow_check")
-    if task["id"] == "blocked_path":
-        # The reviewed file resolver currently maps its ValueError to execution_error.
-        checks["one_denial_then_stop"] = (len(rows) == 1 and rows[0]["tool_name"] == "read_file"
-            and not rows[0]["ok"] and "configured root" in rows[0]["error_message"])
-    if task["id"] == "direct_ready":
-        checks["no_tools"] = not rows
+    if "text" in task["expected"]:
+        checks["answer_correct"] = (result.final_answer or "").strip() == task["expected"]["text"]
     return {"passed": all(checks.values()), "checks": checks, "changed_paths": changed,
-            "unexpected_changes": unexpected, "read_coverage": coverage}
+            "unexpected_changes": unexpected}
 
 
 # Tool categories for trajectory labels; deliberately not coding stages.

@@ -105,6 +105,12 @@ remaining four `append_list_item` seeds are unchanged and still describe the cur
 Not re-run: Task 25 runs the test split once as a pipeline check, not to be repeated on every
 manifest edit; the next real test-split evidence belongs to Stage 9's baseline.
 
+**Re-frozen after retiring the Stage 2B `dev` suite** (source hashes only). Removing
+`evals/legacy_files.py`, moving `evals/check.py` to `evals/bench/check.py` (byte-identical) and
+trimming the shared `run.py`/`verify.py` changed `source_sha256`. All 75 task entries (prompt,
+expect, fault, tools, workspace digests) and `verifier_sha256` are unchanged, so the benchmark
+content is the same as at `9e8538f`.
+
 ### A second evaluator bug, found freezing for the first time
 
 `--final` refused immediately with `Manifest drift in ['git_revision']`. Committing
