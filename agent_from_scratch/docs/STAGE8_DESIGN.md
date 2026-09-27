@@ -1,7 +1,7 @@
 # Stage 8 design: generated benchmark, one verifier, frozen harness
 
-Status: design approved in conversation on September 21, 2026; this file is for review before an
-implementation plan (`STAGE8_PLAN.md`) is written. Branch: `claude/stage-8-benchmark`.
+Status: design approved on September 21, 2026, implemented, revised after the 7B pilot (below)
+and run on the control checkpoint; results are in [benchmark.md](benchmark.md).
 
 ## Goal
 

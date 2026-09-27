@@ -60,9 +60,8 @@ Run them one after another: each process holds about 6 GB, and two together slow
 
 The Stage 2B `dev` suite (17 hand-written tasks on frozen byte-offset file tools, 1 KiB reads and
 recorded web replay) was retired after Stage 8: `bench --split dev` covers the same four families
-on the current tools. Its tasks, fixtures and runner are in git history at `ce2111a`; its results
-are in [docs/checkpoints/EVAL_HISTORY.md](../docs/checkpoints/EVAL_HISTORY.md). The Stage 1, 2A
-and 2B checkpoints and the old per-stage README are in [docs/checkpoints/](../docs/checkpoints/).
+on the current tools. Its tasks, fixtures and runner are in git history at `ce2111a`, and its
+results are summarized in [docs/STAGE.md](../docs/STAGE.md) (Stage 2B).
 The live-network tool demos are in `examples/tools_smoke.py` and `examples/tools_demo.py`.
 
 `freeze` writes `evals/bench/manifest.json`, hashing everything the test split must not drift

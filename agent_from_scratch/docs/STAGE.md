@@ -204,7 +204,7 @@ Our `SessionStore` keeps that distinction without Nanobot's channels, hooks, or 
 
 **Completion boundary:** Stage 1 is complete for this rescope; context management remains
 Stage 3. Persistence is single-writer and saved at turn end, without exact mid-turn crash resume.
-The [foundation checkpoint](checkpoints/FOUNDATION_CHECKPOINT.md) records 82 deterministic tests
+The foundation checkpoint (a working record, not in the published docs) recorded 82 deterministic tests
 and real-model smoke results; those are historical evidence, not tests rerun by this document edit.
 A terminal answer still does not prove task success; premature stopping is an observed model gap.
 
@@ -238,7 +238,7 @@ Prompt rules describe expected behavior; runtime enforces paths, allowed operati
   On interruption, record a pending call as interrupted/unknown if no result exists;
   never imply it succeeded or automatically replay its side effects. Keep the REPL usable.
 
-Evidence: [tools checkpoint](checkpoints/TOOLS_CHECKPOINT.md). The initial restricted 2A
+Evidence: the tools checkpoint (a working record, not in the published docs). The initial restricted 2A
 implementation had 102 tests; the general-tool follow-up has separate mechanism/live checks.
 The fixed 2B suite below remains the historical behavioral baseline.
 
@@ -261,7 +261,7 @@ No async runtime, provider catalogue or interactive approval engine is added.
   unintended writes, requests/usage/latency, settings and code/fixture hashes. Missing usage
   stays unknown. Train/test skeletons are reserved; their task sets are not yet generated.
 
-**Evidence:** [2B checkpoint](checkpoints/BEHAVIOR_CHECKPOINT.md), **118 tests**, 17/17 scripted
+**Evidence:** the 2B checkpoint (a working record, not in the published docs), **118 tests**, 17/17 scripted
 solutions; prompt ablations improve **8/17 → 12/17 strict passes**, retaining all original passes.
 The full prompt fixes no-op behavior; nested edits, web JSON/recovery and two answer formats
 still fail. Two false claims and one unintended-write task remain. The selected prompt trades
@@ -313,7 +313,6 @@ complete; **no local-model diagnostic was run for 3B items 2-4 or 3C** because t
   or imports; the prompt prohibits autonomous rule edits. Defaults are 8 KiB/source and
   16 KiB assembled, with visible setup errors instead of silent omission/truncation.
   **178 deterministic tests pass**; source metadata lives in the existing run settings.
-  Implementation guide: [Stage 3A item 2 plan](STAGE3A_ITEM2_PLAN.md).
 - [x] Count the actual formatted prompt, including schemas/role markers, with the generation
   formatter and tokenizer. Record total prompt tokens, effective backend window, configured
   response reserve and remaining room in request traces; no new CLI command. Custom or
@@ -514,8 +513,7 @@ concurrent writes. Nanobot reference: [restricted subagent][nb-child]; this desi
 
 Build on Stage 2 after Stage 3. 4A–4B is deferred past Stage 11 (above), so this stage proceeds
 without it, freezing `memory: off`. The local workspace is a learning benchmark, not a domain product.
-Implementation: [docs/STAGE8_DESIGN.md](STAGE8_DESIGN.md) and its
-[implementation plan](STAGE8_PLAN.md); results in `docs/benchmark.md`.
+Design: [docs/STAGE8_DESIGN.md](STAGE8_DESIGN.md); results in `docs/benchmark.md`.
 
 - [x] Cover inspection/reporting, constrained updates, recovery/verification, and appropriate
   stopping with roughly 2–6 dependent tool interactions. Vary layout, distractors, values,
@@ -557,8 +555,8 @@ Implementation: [docs/STAGE8_DESIGN.md](STAGE8_DESIGN.md) and its
   accumulation or evaluator coaching. For long-context comparisons, hold the summarizer
   checkpoint/config fixed. Done September 27 on a RunPod A40 ($0.35): measurement exact on all
   1,496 requests, no dev harness bug, test **mean pass@1 0.667** (pass^k 0.583), dev 0.542;
-  stopping is 0.00 on test. Results, runbook as run, and the per-task records in
-  `docs/baselines/stage8-control/` are in `docs/benchmark.md`.
+  stopping is 0.00 on test. Results and the runbook as run are in `docs/benchmark.md`; per-task
+  pass counts are in `docs/baselines/stage8-control/`.
 
 **Gate/output:** scripted valid solutions pass and fake “done” outputs fail; real-model baseline
 includes interpretable failures. Save task-level results and a frozen manifest in `docs/benchmark.md`.

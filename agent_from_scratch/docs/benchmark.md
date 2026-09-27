@@ -1,6 +1,6 @@
 # Stage 8 benchmark: real-model evidence
 
-Design: [STAGE8_DESIGN.md](STAGE8_DESIGN.md). Plan: [STAGE8_PLAN.md](STAGE8_PLAN.md). This file
+Design: [STAGE8_DESIGN.md](STAGE8_DESIGN.md). This file
 records the dev pilot (Task 24) and, once frozen, the test-split pipeline check (Task 25).
 
 ## Dev pilot (15 tasks)
@@ -323,9 +323,10 @@ one RunPod A40, frozen sampling (T 0.7, top-p 0.8, top-k 20), seeds 0/1/2, adapt
 and task set at commit `1e697ba`. All three test runs were `--final` with `manifest_drift` `{}`
 and `protocol_mismatch` `[]`. Measured prompt tokens equalled the server's on **718/718** dev and
 **778/778** test requests; 2 dev and 1 test parse errors; no backend errors. Wall time 7.6 min
-(dev × 3) and 9.3 min (test × 3); the whole GPU session cost **$0.35**. Per-task records,
-summaries, metadata and both aggregates are committed in `docs/baselines/stage8-control/`;
-the paired comparisons of Stages 9–11 run against those task IDs.
+(dev × 3) and 9.3 min (test × 3); the whole GPU session cost **$0.35**. Both aggregates
+(`ctl-dev.json`, `ctl-test.json`: pass counts per task over the three seeds) are committed in
+`docs/baselines/stage8-control/`; the paired comparisons of Stages 9–11 run against those task
+IDs. The raw per-run records and traces are kept outside the repository.
 
 | Split | Tasks | mean pass@1 | pass^k | pass@k | mixed (0 < c < 3) | false completion |
 |---|---:|---:|---:|---:|---:|---:|
