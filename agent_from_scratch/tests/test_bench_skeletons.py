@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import Mock
 
 from agent_from_scratch.evals.bench.run import run_case, specs
-from agent_from_scratch.evals.bench.skeletons import SKELETONS, answer
+from agent_from_scratch.evals.bench.skeletons import SKELETONS, answer, call
 from agent_from_scratch.evals.verify import snapshot
 from agent_from_scratch.llm import LLM
 
@@ -76,6 +76,35 @@ class SkeletonGateTests(unittest.TestCase):
                 record = run_case(_model(wrapped), skeleton, ctx, output)
                 self.assertTrue(record["passed"], record["checks"])
 
+    def test_a_targeted_edit_file_path_also_passes(self):
+        # Update skeletons offer edit_file so a correct run need not regenerate a whole file;
+        # any valid tool path passes, so replacing just the changed field must score as passing.
+        cases = {"single_field_edit": ("config.json", "output"),
+                 "pointer_nested_edit": (None, "filename")}
+        for index, (skeleton, ctx) in enumerate(specs()):
+            if skeleton.name not in cases:
+                continue
+            with self.subTest(id=ctx.id):
+                directory = Path(self.enterContext(TemporaryDirectory()))
+                task = skeleton.build(random.Random(f"bench:{ctx.name}:{ctx.seed}:{ctx.condition}"),
+                                      directory, ctx)
+                path, field = cases[skeleton.name]
+                path = path or f"{task.debug['active']}.json"
+                old, new = [json.dumps(value) for value in (
+                    self._field(json.loads((directory / path).read_text()), field),
+                    self._field(json.loads(task.expect.files[path]), field))]
+                script = ([call("read_file", path="manifest.json")] if path != "config.json" else []) + [
+                    call("read_file", path=path),
+                    call("edit_file", path=path, old_text=f'"{field}": {old}', new_text=f'"{field}": {new}'),
+                    answer("DONE")]
+                output = Path(self.enterContext(TemporaryDirectory())) / f"edit-{index}"
+                record = run_case(_model(script), skeleton, ctx, output)
+                self.assertTrue(record["passed"], record["checks"])
+
+    @staticmethod
+    def _field(value: dict, name: str):
+        return value[name] if name in value else value["output"][name]
+
     def test_registered_skeletons_match_splits_json_exactly(self):
         names = [skeleton.name for skeleton in SKELETONS]
         self.assertEqual(len(names), len(set(names)), "duplicate skeleton name")
@@ -84,11 +113,11 @@ class SkeletonGateTests(unittest.TestCase):
         self.assertEqual(set(names), listed)
         for skeleton in SKELETONS:
             self.assertIn(skeleton.name, splits[skeleton.split])
-        self.assertEqual(len([s for s in SKELETONS if s.split == "dev"]), 4)
+        self.assertEqual(len([s for s in SKELETONS if s.split == "dev"]), 8)
         self.assertEqual(len([s for s in SKELETONS if s.split == "test"]), 10)
         dev_total = sum(len(s.seeds) * (2 if s.recovery else 1) for s in SKELETONS if s.split == "dev")
         test_total = sum(len(s.seeds) * (2 if s.recovery else 1) for s in SKELETONS if s.split == "test")
-        self.assertEqual((dev_total, test_total), (15, 60))
+        self.assertEqual((dev_total, test_total), (64, 60))
 
 
 if __name__ == "__main__":

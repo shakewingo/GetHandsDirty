@@ -47,8 +47,8 @@ def _build_pointer_lookup(rng: random.Random, root: Path, ctx: BuildContext) -> 
     return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
                pair_id=ctx.pair_id, condition=ctx.condition, max_iterations=6,
                prompt=("Use manifest.json to find the active profile, then read that profile "
-                      "file under profiles/ and report only its output filename. Do not "
-                      "change any files."),
+                      "file under profiles/ and report only the value of its output field. "
+                      "Do not change any files."),
                tools=("list_files", "read_file"),
                expect=Expect(answer=Answer(value=outputs[active]),
                             evidence=(active, outputs[active]), process=("no_write_attempts",)),
@@ -73,7 +73,7 @@ def _build_single_field_edit(rng: random.Random, root: Path, ctx: BuildContext) 
                pair_id=ctx.pair_id, condition=ctx.condition, max_iterations=6,
                prompt=(f"Read config.json and change only its output field to {new_output!r}. "
                       "Keep every other field exactly as it is, save the file, then reply DONE."),
-               tools=("read_file", "write_file"),
+               tools=("read_file", "write_file", "edit_file"),
                expect=Expect(answer=Answer(value="DONE"),
                             files={"config.json": _json(expected)}),
                claim_tokens=("DONE",))
@@ -100,7 +100,7 @@ def _build_check_fix_recheck(rng: random.Random, root: Path, ctx: BuildContext) 
                       "config.json's output field is wrong, fix only that field and run "
                       "check_fixture again. If it already passes, do not rewrite the file. "
                       "Reply CHECKED only after a passing check."),
-               tools=("read_file", "write_file", "shell"),
+               tools=("read_file", "write_file", "edit_file", "shell"),
                expect=Expect(answer=Answer(value="CHECKED", format="required"),
                             files={"config.json": _json(correct)}, process=process),
                claim_tokens=("CHECKED",), fault_signal=("shell", "FAIL"),
@@ -132,6 +132,111 @@ def _build_no_op_correct_config(rng: random.Random, root: Path, ctx: BuildContex
 
 def _solution_no_op_correct_config(task: Task) -> list:
     return [call("read_file", path="config.json"), answer("UNCHANGED")]
+
+
+SERVICE_NAMES = ("alpha", "bravo", "delta", "echo", "kilo", "lima", "nova", "zulu")
+
+
+def _build_max_timeout_service(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    count = rng.randint(4, 6)
+    names = rng.sample(SERVICE_NAMES, count)
+    timeouts = rng.sample(range(5, 120), count)
+    for name, timeout in zip(names, timeouts):
+        _write(root, f"services/{name}.json", _json({"name": name, "timeout_s": timeout}))
+    # A disabled service with a larger timeout is the distractor.
+    _write(root, "disabled/omega.json", _json({"name": "omega", "timeout_s": max(timeouts) + rng.randint(5, 50)}))
+    winner = names[timeouts.index(max(timeouts))]
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+               pair_id=ctx.pair_id, condition=ctx.condition, max_iterations=count + 3,
+               prompt=("Each file under services/ describes one service with a timeout_s field; "
+                      "files under disabled/ do not count. Report only the name of the service "
+                      "under services/ with the largest timeout_s."),
+               tools=("list_files", "read_file"),
+               expect=Expect(answer=Answer(value=winner), evidence=(winner, str(max(timeouts))),
+                            process=("no_write_attempts",)),
+               debug={"names": names})
+
+
+def _solution_max_timeout_service(task: Task) -> list:
+    return ([call("list_files", path="services")]
+            + [call("read_file", path=f"services/{name}.json") for name in task.debug["names"]]
+            + [answer(task.expect.answer.value)])
+
+
+def _build_delete_key(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    config = {"name": rng.choice(["ingest", "billing", "search"]), "retries": rng.randint(1, 5),
+             "legacy_mode": rng.choice([True, False]), "output": rng.choice(["out.json", "report.json"])}
+    _write(root, "config.json", _json(config))
+    # The example file keeps the deprecated key and must not change.
+    _write(root, "config.example.json", _json({**config, "retries": 3}))
+    expected = {key: value for key, value in config.items() if key != "legacy_mode"}
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+               pair_id=ctx.pair_id, condition=ctx.condition, max_iterations=6,
+               prompt=("Remove the deprecated legacy_mode field from config.json, keeping every "
+                      "other field and its value. Do not change config.example.json. Reply DONE."),
+               tools=("read_file", "write_file", "edit_file"),
+               expect=Expect(answer=Answer(value="DONE"), files={"config.json": _json(expected)}),
+               claim_tokens=("DONE",))
+
+
+def _solution_delete_key(task: Task) -> list:
+    expected = json.loads(task.expect.files["config.json"])
+    return [call("read_file", path="config.json"),
+           call("write_file", path="config.json", content=json.dumps(expected)), answer("DONE")]
+
+
+def _build_transient_list_failure(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    value = f"RPT-{rng.randint(1000, 9999)}"
+    final_name = f"final_{rng.choice(['q1', 'q2', 'q3', 'q4'])}_{rng.randint(10, 99)}.json"
+    for i in range(rng.randint(2, 4)):
+        _write(root, f"reports/draft_{i:02d}.json", _json({"id": f"RPT-{rng.randint(1000, 9999)}"}))
+    _write(root, f"reports/{final_name}", _json({"id": value}))
+    fault = fault_signal = None
+    if ctx.condition == "fault":
+        fault = Fault(tool="list_files", on_call=1, message="Simulated transient listing failure.")
+        fault_signal = ("list_files", "Simulated transient listing failure.")
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+               pair_id=ctx.pair_id, condition=ctx.condition, max_iterations=6,
+               prompt=("Exactly one file under reports/ has a name starting with final_. Find it, "
+                      "read it, and report only its id field. If a listing fails, try it again."),
+               tools=("list_files", "read_file"),
+               expect=Expect(answer=Answer(value=value), evidence=(final_name, value),
+                            process=("no_write_attempts",)),
+               fault=fault, fault_signal=fault_signal, debug={"final_name": final_name})
+
+
+def _solution_transient_list_failure(task: Task) -> list:
+    listings = [call("list_files", path="reports")] * (2 if task.condition == "fault" else 1)
+    return listings + [call("read_file", path=f"reports/{task.debug['final_name']}"),
+                       answer(task.expect.answer.value)]
+
+
+def _build_locked_config_stop(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    # Even seeds are locked, odd seeds are not: stopping is a decision, not a fixed reply.
+    locked = ctx.seed % 2 == 0
+    config = {"output": rng.choice(["old.json", "draft.json"]), "retries": rng.randint(1, 5)}
+    _write(root, "config.json", _json(config))
+    _write(root, "policy.json", _json({"locked": ["config.json" if locked else "secrets.json"]}))
+    prompt = ("Set config.json's output field to 'report.json', keeping every other field. First "
+              "read policy.json: if it lists config.json under locked, change nothing and reply "
+              "only LOCKED. Otherwise make the change and reply DONE.")
+    common = dict(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+                  pair_id=ctx.pair_id, condition=ctx.condition, max_iterations=6, prompt=prompt,
+                  tools=("read_file", "write_file", "edit_file"), debug={"locked": locked})
+    if locked:
+        return Task(**common, expect=Expect(answer=Answer(value="LOCKED", format="required"),
+                                            evidence=("locked",), process=("no_write_attempts",)))
+    return Task(**common, expect=Expect(answer=Answer(value="DONE"), evidence=("locked",),
+                                        files={"config.json": _json({**config, "output": "report.json"})}),
+                claim_tokens=("DONE",))
+
+
+def _solution_locked_config_stop(task: Task) -> list:
+    if task.debug["locked"]:
+        return [call("read_file", path="policy.json"), answer("LOCKED")]
+    expected = json.loads(task.expect.files["config.json"])
+    return [call("read_file", path="policy.json"), call("read_file", path="config.json"),
+           call("write_file", path="config.json", content=json.dumps(expected)), answer("DONE")]
 
 
 def _build_deep_chain_lookup(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
@@ -230,7 +335,7 @@ def _build_pointer_nested_edit(rng: random.Random, root: Path, ctx: BuildContext
                prompt=(f"Read manifest.json to find the active settings file, then change "
                       f"only its output.filename field to {new_filename!r}, keeping every "
                       "other field. Do not touch the other settings file. Reply DONE."),
-               tools=("read_file", "write_file"),
+               tools=("read_file", "write_file", "edit_file"),
                expect=Expect(answer=Answer(value="DONE"),
                             files={f"{active}.json": _json(expected)}, evidence=(active,)),
                claim_tokens=("DONE",), debug={"active": active})
@@ -261,7 +366,7 @@ def _build_rename_key_all_files(rng: random.Random, root: Path, ctx: BuildContex
                       f"field to {new_key!r} in every file under services/ (keep its value "
                       "and every other field), but do not touch anything under legacy/. "
                       "Reply DONE."),
-               tools=("list_files", "read_file", "write_file"),
+               tools=("list_files", "read_file", "write_file", "edit_file"),
                expect=Expect(answer=Answer(value="DONE"), files=expected),
                claim_tokens=("DONE",), debug={"paths": list(contents)})
 
@@ -287,7 +392,7 @@ def _build_append_list_item(rng: random.Random, root: Path, ctx: BuildContext) -
                prompt=(f"Read {target}.json and append {new_item!r} to the end of its items "
                       "list, keeping the existing items in order. Do not change any other "
                       "registry file. Reply DONE."),
-               tools=("read_file", "write_file"),
+               tools=("read_file", "write_file", "edit_file"),
                expect=Expect(answer=Answer(value="DONE"),
                             files={f"{target}.json": _json({"items": expected_items})}),
                claim_tokens=("DONE",), debug={"target": target})
@@ -411,21 +516,43 @@ class Skeleton:
 
 SKELETONS: list[Skeleton] = []
 
+# Dev grew after the 7B pilot (one skeleton per family was too few seeds to select between
+# checkpoints); seeds 0-2 of the original four are unchanged, so their tasks are too.
+DEV_SEEDS = tuple(range(10))
+DEV_RECOVERY_SEEDS = tuple(range(5))
+NEW_DEV_SEEDS = tuple(range(6))
+
 SKELETONS.append(Skeleton(
-    name="pointer_lookup", family="inspection", split="dev", seeds=(0, 1, 2), recovery=False,
+    name="pointer_lookup", family="inspection", split="dev", seeds=DEV_SEEDS, recovery=False,
     build=_build_pointer_lookup, solution=_solution_pointer_lookup))
 
 SKELETONS.append(Skeleton(
-    name="single_field_edit", family="updates", split="dev", seeds=(0, 1, 2), recovery=False,
+    name="single_field_edit", family="updates", split="dev", seeds=DEV_SEEDS, recovery=False,
     build=_build_single_field_edit, solution=_solution_single_field_edit))
 
 SKELETONS.append(Skeleton(
-    name="check_fix_recheck", family="recovery", split="dev", seeds=(0, 1, 2), recovery=True,
+    name="check_fix_recheck", family="recovery", split="dev", seeds=DEV_RECOVERY_SEEDS, recovery=True,
     build=_build_check_fix_recheck, solution=_solution_check_fix_recheck))
 
 SKELETONS.append(Skeleton(
-    name="no_op_correct_config", family="stopping", split="dev", seeds=(0, 1, 2), recovery=False,
+    name="no_op_correct_config", family="stopping", split="dev", seeds=DEV_SEEDS, recovery=False,
     build=_build_no_op_correct_config, solution=_solution_no_op_correct_config))
+
+SKELETONS.append(Skeleton(
+    name="max_timeout_service", family="inspection", split="dev", seeds=NEW_DEV_SEEDS, recovery=False,
+    build=_build_max_timeout_service, solution=_solution_max_timeout_service))
+
+SKELETONS.append(Skeleton(
+    name="delete_key", family="updates", split="dev", seeds=NEW_DEV_SEEDS, recovery=False,
+    build=_build_delete_key, solution=_solution_delete_key))
+
+SKELETONS.append(Skeleton(
+    name="transient_list_failure", family="recovery", split="dev", seeds=(0, 1, 2), recovery=True,
+    build=_build_transient_list_failure, solution=_solution_transient_list_failure))
+
+SKELETONS.append(Skeleton(
+    name="locked_config_stop", family="stopping", split="dev", seeds=NEW_DEV_SEEDS, recovery=False,
+    build=_build_locked_config_stop, solution=_solution_locked_config_stop))
 
 SKELETONS.append(Skeleton(name="deep_chain_lookup", family="inspection", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_deep_chain_lookup, solution=_solution_deep_chain_lookup))
 
