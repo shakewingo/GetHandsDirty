@@ -117,7 +117,7 @@ def run_case(model, spec: dict, output: Path, *, seed: int, overrides: dict | No
         result = agent.run_turn(prompt, session_id=spec["id"])
         # `passed` needs the exact format; `answer_found` separates a format slip from lost evidence.
         record = {"id": spec["id"], "family": spec["family"], **metrics(result),
-                  **verify(task, result, workspace, workspace, before),
+                  **verify(task, result, workspace, before),
                   "answer_found": all(part in (result.final_answer or "") for part in expected.split(","))}
         save(output / "result.json", record)
         return record

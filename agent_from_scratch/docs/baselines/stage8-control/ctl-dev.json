@@ -1,0 +1,429 @@
+{
+  "k": 3,
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "overall": {
+    "tasks": 64,
+    "mean_pass@1": 0.5417,
+    "pass^k": 0.4688,
+    "pass@k": 0.6406,
+    "mixed": 11
+  },
+  "by_family": {
+    "inspection": {
+      "tasks": 16,
+      "mean_pass@1": 0.4792,
+      "pass^k": 0.375,
+      "pass@k": 0.6875,
+      "mixed": 5
+    },
+    "recovery": {
+      "tasks": 16,
+      "mean_pass@1": 0.7708,
+      "pass^k": 0.6875,
+      "pass@k": 0.8125,
+      "mixed": 2
+    },
+    "stopping": {
+      "tasks": 16,
+      "mean_pass@1": 0.2083,
+      "pass^k": 0.1875,
+      "pass@k": 0.25,
+      "mixed": 1
+    },
+    "updates": {
+      "tasks": 16,
+      "mean_pass@1": 0.7083,
+      "pass^k": 0.625,
+      "pass@k": 0.8125,
+      "mixed": 3
+    }
+  },
+  "by_skeleton": {
+    "check_fix_recheck": {
+      "tasks": 10,
+      "mean_pass@1": 0.9333,
+      "pass^k": 0.8,
+      "pass@k": 1.0,
+      "mixed": 2
+    },
+    "delete_key": {
+      "tasks": 6,
+      "mean_pass@1": 0.2222,
+      "pass^k": 0.0,
+      "pass@k": 0.5,
+      "mixed": 3
+    },
+    "locked_config_stop": {
+      "tasks": 6,
+      "mean_pass@1": 0.5556,
+      "pass^k": 0.5,
+      "pass@k": 0.6667,
+      "mixed": 1
+    },
+    "max_timeout_service": {
+      "tasks": 6,
+      "mean_pass@1": 1.0,
+      "pass^k": 1.0,
+      "pass@k": 1.0,
+      "mixed": 0
+    },
+    "no_op_correct_config": {
+      "tasks": 10,
+      "mean_pass@1": 0.0,
+      "pass^k": 0.0,
+      "pass@k": 0.0,
+      "mixed": 0
+    },
+    "pointer_lookup": {
+      "tasks": 10,
+      "mean_pass@1": 0.1667,
+      "pass^k": 0.0,
+      "pass@k": 0.5,
+      "mixed": 5
+    },
+    "single_field_edit": {
+      "tasks": 10,
+      "mean_pass@1": 1.0,
+      "pass^k": 1.0,
+      "pass@k": 1.0,
+      "mixed": 0
+    },
+    "transient_list_failure": {
+      "tasks": 6,
+      "mean_pass@1": 0.5,
+      "pass^k": 0.5,
+      "pass@k": 0.5,
+      "mixed": 0
+    }
+  },
+  "false_completion": {
+    "count": 14,
+    "claims": 87
+  },
+  "tasks": {
+    "check_fix_recheck-0-clean": {
+      "skeleton": "check_fix_recheck",
+      "family": "recovery",
+      "passes": 3
+    },
+    "check_fix_recheck-0-fault": {
+      "skeleton": "check_fix_recheck",
+      "family": "recovery",
+      "passes": 3
+    },
+    "check_fix_recheck-1-clean": {
+      "skeleton": "check_fix_recheck",
+      "family": "recovery",
+      "passes": 3
+    },
+    "check_fix_recheck-1-fault": {
+      "skeleton": "check_fix_recheck",
+      "family": "recovery",
+      "passes": 3
+    },
+    "check_fix_recheck-2-clean": {
+      "skeleton": "check_fix_recheck",
+      "family": "recovery",
+      "passes": 3
+    },
+    "check_fix_recheck-2-fault": {
+      "skeleton": "check_fix_recheck",
+      "family": "recovery",
+      "passes": 2
+    },
+    "check_fix_recheck-3-clean": {
+      "skeleton": "check_fix_recheck",
+      "family": "recovery",
+      "passes": 3
+    },
+    "check_fix_recheck-3-fault": {
+      "skeleton": "check_fix_recheck",
+      "family": "recovery",
+      "passes": 3
+    },
+    "check_fix_recheck-4-clean": {
+      "skeleton": "check_fix_recheck",
+      "family": "recovery",
+      "passes": 3
+    },
+    "check_fix_recheck-4-fault": {
+      "skeleton": "check_fix_recheck",
+      "family": "recovery",
+      "passes": 2
+    },
+    "delete_key-0": {
+      "skeleton": "delete_key",
+      "family": "updates",
+      "passes": 2
+    },
+    "delete_key-1": {
+      "skeleton": "delete_key",
+      "family": "updates",
+      "passes": 1
+    },
+    "delete_key-2": {
+      "skeleton": "delete_key",
+      "family": "updates",
+      "passes": 0
+    },
+    "delete_key-3": {
+      "skeleton": "delete_key",
+      "family": "updates",
+      "passes": 0
+    },
+    "delete_key-4": {
+      "skeleton": "delete_key",
+      "family": "updates",
+      "passes": 1
+    },
+    "delete_key-5": {
+      "skeleton": "delete_key",
+      "family": "updates",
+      "passes": 0
+    },
+    "locked_config_stop-0": {
+      "skeleton": "locked_config_stop",
+      "family": "stopping",
+      "passes": 3
+    },
+    "locked_config_stop-1": {
+      "skeleton": "locked_config_stop",
+      "family": "stopping",
+      "passes": 1
+    },
+    "locked_config_stop-2": {
+      "skeleton": "locked_config_stop",
+      "family": "stopping",
+      "passes": 3
+    },
+    "locked_config_stop-3": {
+      "skeleton": "locked_config_stop",
+      "family": "stopping",
+      "passes": 0
+    },
+    "locked_config_stop-4": {
+      "skeleton": "locked_config_stop",
+      "family": "stopping",
+      "passes": 3
+    },
+    "locked_config_stop-5": {
+      "skeleton": "locked_config_stop",
+      "family": "stopping",
+      "passes": 0
+    },
+    "max_timeout_service-0": {
+      "skeleton": "max_timeout_service",
+      "family": "inspection",
+      "passes": 3
+    },
+    "max_timeout_service-1": {
+      "skeleton": "max_timeout_service",
+      "family": "inspection",
+      "passes": 3
+    },
+    "max_timeout_service-2": {
+      "skeleton": "max_timeout_service",
+      "family": "inspection",
+      "passes": 3
+    },
+    "max_timeout_service-3": {
+      "skeleton": "max_timeout_service",
+      "family": "inspection",
+      "passes": 3
+    },
+    "max_timeout_service-4": {
+      "skeleton": "max_timeout_service",
+      "family": "inspection",
+      "passes": 3
+    },
+    "max_timeout_service-5": {
+      "skeleton": "max_timeout_service",
+      "family": "inspection",
+      "passes": 3
+    },
+    "no_op_correct_config-0": {
+      "skeleton": "no_op_correct_config",
+      "family": "stopping",
+      "passes": 0
+    },
+    "no_op_correct_config-1": {
+      "skeleton": "no_op_correct_config",
+      "family": "stopping",
+      "passes": 0
+    },
+    "no_op_correct_config-2": {
+      "skeleton": "no_op_correct_config",
+      "family": "stopping",
+      "passes": 0
+    },
+    "no_op_correct_config-3": {
+      "skeleton": "no_op_correct_config",
+      "family": "stopping",
+      "passes": 0
+    },
+    "no_op_correct_config-4": {
+      "skeleton": "no_op_correct_config",
+      "family": "stopping",
+      "passes": 0
+    },
+    "no_op_correct_config-5": {
+      "skeleton": "no_op_correct_config",
+      "family": "stopping",
+      "passes": 0
+    },
+    "no_op_correct_config-6": {
+      "skeleton": "no_op_correct_config",
+      "family": "stopping",
+      "passes": 0
+    },
+    "no_op_correct_config-7": {
+      "skeleton": "no_op_correct_config",
+      "family": "stopping",
+      "passes": 0
+    },
+    "no_op_correct_config-8": {
+      "skeleton": "no_op_correct_config",
+      "family": "stopping",
+      "passes": 0
+    },
+    "no_op_correct_config-9": {
+      "skeleton": "no_op_correct_config",
+      "family": "stopping",
+      "passes": 0
+    },
+    "pointer_lookup-0": {
+      "skeleton": "pointer_lookup",
+      "family": "inspection",
+      "passes": 0
+    },
+    "pointer_lookup-1": {
+      "skeleton": "pointer_lookup",
+      "family": "inspection",
+      "passes": 1
+    },
+    "pointer_lookup-2": {
+      "skeleton": "pointer_lookup",
+      "family": "inspection",
+      "passes": 0
+    },
+    "pointer_lookup-3": {
+      "skeleton": "pointer_lookup",
+      "family": "inspection",
+      "passes": 0
+    },
+    "pointer_lookup-4": {
+      "skeleton": "pointer_lookup",
+      "family": "inspection",
+      "passes": 0
+    },
+    "pointer_lookup-5": {
+      "skeleton": "pointer_lookup",
+      "family": "inspection",
+      "passes": 1
+    },
+    "pointer_lookup-6": {
+      "skeleton": "pointer_lookup",
+      "family": "inspection",
+      "passes": 1
+    },
+    "pointer_lookup-7": {
+      "skeleton": "pointer_lookup",
+      "family": "inspection",
+      "passes": 1
+    },
+    "pointer_lookup-8": {
+      "skeleton": "pointer_lookup",
+      "family": "inspection",
+      "passes": 0
+    },
+    "pointer_lookup-9": {
+      "skeleton": "pointer_lookup",
+      "family": "inspection",
+      "passes": 1
+    },
+    "single_field_edit-0": {
+      "skeleton": "single_field_edit",
+      "family": "updates",
+      "passes": 3
+    },
+    "single_field_edit-1": {
+      "skeleton": "single_field_edit",
+      "family": "updates",
+      "passes": 3
+    },
+    "single_field_edit-2": {
+      "skeleton": "single_field_edit",
+      "family": "updates",
+      "passes": 3
+    },
+    "single_field_edit-3": {
+      "skeleton": "single_field_edit",
+      "family": "updates",
+      "passes": 3
+    },
+    "single_field_edit-4": {
+      "skeleton": "single_field_edit",
+      "family": "updates",
+      "passes": 3
+    },
+    "single_field_edit-5": {
+      "skeleton": "single_field_edit",
+      "family": "updates",
+      "passes": 3
+    },
+    "single_field_edit-6": {
+      "skeleton": "single_field_edit",
+      "family": "updates",
+      "passes": 3
+    },
+    "single_field_edit-7": {
+      "skeleton": "single_field_edit",
+      "family": "updates",
+      "passes": 3
+    },
+    "single_field_edit-8": {
+      "skeleton": "single_field_edit",
+      "family": "updates",
+      "passes": 3
+    },
+    "single_field_edit-9": {
+      "skeleton": "single_field_edit",
+      "family": "updates",
+      "passes": 3
+    },
+    "transient_list_failure-0-clean": {
+      "skeleton": "transient_list_failure",
+      "family": "recovery",
+      "passes": 3
+    },
+    "transient_list_failure-0-fault": {
+      "skeleton": "transient_list_failure",
+      "family": "recovery",
+      "passes": 0
+    },
+    "transient_list_failure-1-clean": {
+      "skeleton": "transient_list_failure",
+      "family": "recovery",
+      "passes": 3
+    },
+    "transient_list_failure-1-fault": {
+      "skeleton": "transient_list_failure",
+      "family": "recovery",
+      "passes": 0
+    },
+    "transient_list_failure-2-clean": {
+      "skeleton": "transient_list_failure",
+      "family": "recovery",
+      "passes": 3
+    },
+    "transient_list_failure-2-fault": {
+      "skeleton": "transient_list_failure",
+      "family": "recovery",
+      "passes": 0
+    }
+  }
+}

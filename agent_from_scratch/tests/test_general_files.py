@@ -25,13 +25,25 @@ class GeneralFileTests(unittest.TestCase):
         self.edit = EditFileTool(self.workspace)
         self.list = ListFilesTool(self.workspace)
 
-    def test_writes_report_parse_diagnostics_without_failing(self):
+    def test_invalid_json_is_refused_and_python_parse_errors_are_reported(self):
         bad = self.write.invoke({"path": "c.json", "content": '{"a": 1,}'})
-        self.assertTrue(bad.ok)
-        self.assertIn("JSONDecodeError", bad.output["diagnostics"])
-        self.assertEqual((self.workspace / "c.json").read_text(), '{"a": 1,}')  # still written
+        self.assertFalse(bad.ok)
+        self.assertIn("not valid JSON", bad.error_message)
+        self.assertFalse((self.workspace / "c.json").exists())  # nothing written
         good = self.write.invoke({"path": "d.json", "content": '{"a": 1}'})
         self.assertNotIn("diagnostics", good.output)
+        # Line-numbered text copied back from read_file is refused with a pointed hint.
+        numbered = self.read.invoke({"path": "d.json"}).output["content"]
+        pasted = self.write.invoke({"path": "d.json", "content": numbered})
+        self.assertFalse(pasted.ok)
+        self.assertIn("'N| ' prefix", pasted.error_message)
+        self.assertEqual((self.workspace / "d.json").read_text(), '{"a": 1}')
+        numbered_edit = self.edit.invoke({"path": "d.json", "old_text": numbered, "new_text": '{"a": 2}'})
+        self.assertFalse(numbered_edit.ok)
+        self.assertIn("'N| ' prefix", numbered_edit.error_message)
+        broken_edit = self.edit.invoke({"path": "d.json", "old_text": "1}", "new_text": "1,}"})
+        self.assertFalse(broken_edit.ok)
+        self.assertEqual((self.workspace / "d.json").read_text(), '{"a": 1}')
         self.write.invoke({"path": "m.py", "content": "x = 1\n"})
         broken = self.edit.invoke({"path": "m.py", "old_text": "x = 1", "new_text": "x = ("})
         self.assertIn("SyntaxError", broken.output["diagnostics"])

@@ -76,8 +76,8 @@ def install_qwen_template(model, path: Path) -> tuple[Jinja2ChatFormatter, str]:
     """Install the project's checked Qwen2.5 format on this instance only."""
     from llama_cpp.llama_chat_format import Jinja2ChatFormatter
 
-    if model.metadata.get("general.architecture") != "qwen2":
-        raise ValueError("The project chat template requires Qwen2.")
+    if model.metadata.get("general.architecture") not in ("qwen2", "qwen3"):
+        raise ValueError("The project chat template requires a Qwen2 or Qwen3 model.")
     eos_id, bos_id = model.token_eos(), model.token_bos()
     if min(eos_id, bos_id) < 0:
         raise ValueError("Missing Qwen special token IDs.")
@@ -106,6 +106,7 @@ class LLM:
         n_ctx: int = N_CTX,
         verbose=False,  # turn off tensor / metadata loading, prefix-match, timing info from llama-cpp-python
         chat_template_path: str | Path | None = CHAT_TEMPLATE_PATH,
+        sampling: Mapping[str, float] | None = None,
     ):
         from llama_cpp import Llama
 
@@ -117,6 +118,8 @@ class LLM:
         )
         self.temperature = temperature
         self.max_tokens = max_tokens
+        # top_p/top_k/min_p; None keeps llama-cpp-python's own defaults.
+        self.sampling = dict(sampling or {})
         self.model_path = str(model_path)
         self.n_ctx = self.llm.n_ctx()  # Record the backend's effective window.
         self.n_gpu_layers = n_gpu_layers
@@ -162,7 +165,8 @@ class LLM:
 
     def settings(self) -> dict[str, Any]:
         """Snapshot the actual configuration used by this model instance."""
-        return {"model_path": self.model_path, "temperature": self.temperature,
+        return {"backend": "llama_cpp", "model_path": self.model_path,
+                "temperature": self.temperature, **getattr(self, "sampling", {}),
                 "max_tokens": self.max_tokens, "n_ctx": self.n_ctx,
                 "n_gpu_layers": self.n_gpu_layers,
                 "chat_template_sha256": getattr(self, "chat_template_sha256", None),
@@ -284,6 +288,7 @@ class LLM:
             temperature=self.temperature,
             max_tokens=self.max_tokens if max_tokens is None else max_tokens,
             stream=False,
+            **getattr(self, "sampling", {}),
         )
         try:
             if not isinstance(response, dict):
@@ -300,6 +305,136 @@ class LLM:
     def close(self) -> None:
         """Release native model resources before interpreter shutdown."""
         self.llm.close()
+
+
+QWEN_END = "<|im_end|>"
+
+
+def compile_chat_template(template: str):
+    """Compile a chat template exactly as llama-cpp-python's Jinja2ChatFormatter does, without
+    importing llama_cpp, so every backend renders byte-identical prompts from one template file."""
+    import jinja2
+    from jinja2.sandbox import ImmutableSandboxedEnvironment
+
+    environment = ImmutableSandboxedEnvironment(loader=jinja2.BaseLoader(), trim_blocks=True,
+                                                lstrip_blocks=True)
+    environment.filters["tojson"] = lambda x, ensure_ascii=False, indent=None, separators=None, \
+        sort_keys=False: json.dumps(x, ensure_ascii=ensure_ascii, indent=indent,
+                                    separators=separators, sort_keys=sort_keys)
+    return environment.from_string(template)
+
+
+def render_chat(compiled, messages: list, tools: Dict[str, Any]) -> str:
+    def raise_exception(message: str):
+        raise ValueError(message)
+    return compiled.render(messages=messages, tools=list(tools.values()), tool_choice="auto",
+                           add_generation_prompt=True, eos_token=QWEN_END, bos_token="",
+                           raise_exception=raise_exception)
+
+
+
+class VLLMClient:
+    """A vLLM OpenAI-compatible server as the model backend, with the same interface as `LLM`.
+
+    The project template is rendered here and sent to `/v1/completions` as raw text, and the raw
+    reply goes through `LLM.parse_response`, so the tokens the model sees (and that a training
+    example will later be exported with) come from one template file, not from the server's
+    own chat template or tool parser. Token counts come from the server's `/tokenize`.
+
+    `adapter` names a LoRA module the server was started with; None is the base-model control.
+    """
+
+    def __init__(self, base_url: str, model: str, *, adapter: str | None = None,
+                 seed: int | None = None, temperature: float = TEMPERATURE,
+                 max_tokens: int = MAX_TOKENS, sampling: Mapping[str, float] | None = None,
+                 n_ctx: int = N_CTX, chat_template_path: str | Path = CHAT_TEMPLATE_PATH,
+                 timeout: float = 600.0, retries: int = 3, client=None):
+        import httpx
+
+        self.http = client or httpx.Client(base_url=base_url.rstrip("/"), timeout=timeout)
+        self.base_url, self.model, self.adapter, self.seed = base_url, model, adapter, seed
+        self.temperature, self.max_tokens = temperature, max_tokens
+        self.sampling = dict(sampling or {})
+        self.retries = retries
+        template = Path(chat_template_path).read_text(encoding="utf-8")
+        self.chat_template_sha256 = sha256(template.encode("utf-8")).hexdigest()
+        self._template = compile_chat_template(template)
+        served = {entry["id"]: entry for entry in self._request("GET", "/v1/models")["data"]}
+        if model not in served or (adapter is not None and adapter not in served):
+            raise ValueError(f"Server does not serve {model!r}"
+                             + (f" with adapter {adapter!r}" if adapter else "") + f"; it serves {sorted(served)}.")
+        self.root = served[model].get("root")
+        limit = served[model].get("max_model_len")
+        if isinstance(limit, int) and limit < n_ctx:
+            raise ValueError(f"Server max_model_len {limit} is below the requested window {n_ctx}.")
+        self.n_ctx = n_ctx
+        # The template's control markers must each be one special token on this tokenizer.
+        if self._count("<|im_start|>" + QWEN_END) != 2:
+            raise ValueError("The chat template's <|im_start|>/<|im_end|> are not single tokens here.")
+
+    def _request(self, method: str, path: str, body: dict | None = None) -> dict:
+        import httpx
+
+        for attempt in range(self.retries):
+            try:
+                response = self.http.request(method, path, json=body)
+                if response.status_code < 500:
+                    response.raise_for_status()
+                    return response.json()
+                error: Exception = RuntimeError(f"HTTP {response.status_code}: {response.text[:300]}")
+            except (httpx.TransportError, httpx.TimeoutException) as transport:
+                error = transport
+            if attempt == self.retries - 1:
+                raise error
+        raise AssertionError("unreachable")
+
+    def _count(self, prompt: str) -> int:
+        body = {"model": self.model, "prompt": prompt, "add_special_tokens": False}
+        return self._request("POST", "/tokenize", body)["count"]
+
+    def measure_context(self, messages, tools, *, max_tokens: int | None = None) -> dict[str, Any]:
+        """Same contract as `LLM.measure_context`, counted by the server's tokenizer."""
+        configured = self.max_tokens if max_tokens is None else max_tokens
+        reserve = configured if configured is not None and configured > 0 else None
+        count = self._count(render_chat(self._template, messages, tools))
+        return {"count_method": "exact", "prompt_tokens": count, "window_tokens": self.n_ctx,
+                "response_reserve": reserve,
+                "remaining_tokens": self.n_ctx - count - reserve if reserve is not None else None}
+
+    def generate(self, messages, tools, *, max_tokens: int | None = None,
+                 max_tool_calls: int | None = None) -> LLMResponse:
+        body = {"model": self.adapter or self.model, "prompt": render_chat(self._template, messages, tools),
+                "max_tokens": self.max_tokens if max_tokens is None else max_tokens,
+                "temperature": self.temperature, **self.sampling, "stop": [QWEN_END]}
+        if self.seed is not None:
+            body["seed"] = self.seed
+        raw = self._request("POST", "/v1/completions", body)
+        try:
+            choice = raw["choices"][0]
+            # Reshape the completion into a chat response so both backends share one parser.
+            response = {"choices": [{"message": {"role": "assistant", "content": choice["text"]},
+                                     "finish_reason": choice.get("finish_reason")}],
+                        "usage": raw.get("usage")}
+        except (KeyError, IndexError, TypeError) as error:
+            raise ResponseError(ResponseErrorCode.INVALID_RESPONSE, raw_response=raw) from error
+        try:
+            parsed = LLM.parse_response(
+                response, MAX_TOOL_CALLS_PER_RESPONSE if max_tool_calls is None else max_tool_calls)
+        except ResponseError as error:
+            error.raw_response = response
+            raise
+        parsed.raw_response = raw
+        return parsed
+
+    def settings(self) -> dict[str, Any]:
+        return {"backend": "vllm", "base_url": self.base_url, "model": self.model,
+                "model_root": self.root, "adapter": self.adapter, "seed": self.seed,
+                "temperature": self.temperature, **self.sampling, "max_tokens": self.max_tokens,
+                "n_ctx": self.n_ctx, "chat_template_sha256": self.chat_template_sha256,
+                "chat_handler": "project_qwen_jinja"}
+
+    def close(self) -> None:
+        self.http.close()
 
 
 if __name__ == "__main__":

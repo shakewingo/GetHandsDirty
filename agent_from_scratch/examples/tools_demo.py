@@ -9,7 +9,6 @@ from ..context import InstructionConfig
 from ..llm import LLM
 from ..tools.calculator import CalculatorTool
 from ..tools.files import EditFileTool, ListFilesTool, ReadFileTool, WriteFileTool
-from ..evals import legacy_files
 from ..tools.base import ToolRegistry
 from ..tools.shell import Command, ShellTool
 from ..tools.web import WebFetchTool, WebSearchTool
@@ -25,8 +24,10 @@ def demo_registry(workspace: Path, hosts: set[str]) -> ToolRegistry:
         "check_fixture": Command((sys.executable, "-I", str(script), "check"),
                                  'Check output="report.txt" and retries=3 in config.json'),
     }
-    return ToolRegistry([CalculatorTool(), legacy_files.ListFilesTool(workspace), legacy_files.ReadFileTool(workspace),
-                         legacy_files.WriteFileTool(workspace), WebFetchTool(hosts), ShellTool(workspace, commands)])
+    return ToolRegistry([CalculatorTool(), ListFilesTool(workspace, restrict_to_workspace=True),
+                         ReadFileTool(workspace, restrict_to_workspace=True),
+                         WriteFileTool(workspace, restrict_to_workspace=True), WebFetchTool(hosts),
+                         ShellTool(workspace, commands)])
 
 
 def main():

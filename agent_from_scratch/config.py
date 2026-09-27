@@ -11,6 +11,7 @@ _PACKAGE_DIR = Path(__file__).resolve().parent
 
 PROMPTS_DIR = _PACKAGE_DIR / "prompts"
 CHAT_TEMPLATE_PATH = PROMPTS_DIR / "qwen_chat.jinja"
+# local model path
 MODEL_PATH = (
     _PACKAGE_DIR.parent
     / "gz-data"
@@ -27,6 +28,19 @@ N_CTX = 32768
 N_GPU_LAYERS = -1
 
 MAX_TOOL_CALLS_PER_RESPONSE = 8
+
+# Stage 8 benchmark protocol, frozen in evals/bench/manifest.json. The control checkpoint is
+# served by vLLM in bf16 so that a LoRA adapter can later be compared on the same server with
+# only the adapter toggled. Sampling uses the model card's recommended values
+# (generation_config.json at this revision); each task is run once per seed in BENCH_SEEDS.
+BENCH_MODEL = {"id": "Qwen/Qwen3-4B-Instruct-2507",
+               "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+               "dtype": "bfloat16", "backend": "vllm"}
+BENCH_DECODING = {"temperature": 0.7, "top_p": 0.8, "top_k": 20, "min_p": 0.0,
+                  "max_tokens": MAX_TOKENS}
+BENCH_SEEDS = (0, 1, 2)
+BENCH_N_CTX = 32768
+VLLM_BASE_URL = "http://127.0.0.1:8000"
 
 
 @dataclass(frozen=True)

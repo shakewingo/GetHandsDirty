@@ -1,5 +1,0 @@
-{
-  "name": "production",
-  "output": "release-report.json",
-  "retries": 2
-}

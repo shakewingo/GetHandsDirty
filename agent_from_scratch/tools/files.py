@@ -11,6 +11,7 @@ from itertools import islice
 import json
 import os
 from pathlib import Path
+import re
 import stat
 from tempfile import NamedTemporaryFile
 
@@ -58,6 +59,17 @@ class _FileTool(Tool):
     def _replace(self, target: Path, data: bytes, before: os.stat_result | None) -> dict:
         if len(data) > self.max_file_bytes:
             raise ToolExecutionError(ToolErrorCode.EXECUTION_ERROR, f"Content exceeds {self.max_file_bytes} bytes.")
+        if target.suffix.lower() == ".json":
+            # A .json write that does not parse is refused, not reported after the fact:
+            # an ok result with a buried diagnostic reads as success to a small model.
+            try:
+                json.loads(data)
+            except ValueError as error:
+                hint = (" It starts with a read_file line prefix ('1| '); remove every 'N| ' prefix."
+                        if re.match(rb"\s*1\| ", data) else "")
+                raise ToolExecutionError(ToolErrorCode.EXECUTION_ERROR,
+                    f"Refused: the new content of {self._display(target)} is not valid JSON "
+                    f"({type(error).__name__}: {error}); the file was not changed.{hint}")
         target.parent.mkdir(parents=True, exist_ok=True)
         temporary = None
         try:
@@ -77,11 +89,9 @@ class _FileTool(Tool):
                 temporary.unlink(missing_ok=True)
         result = {"path": self._display(target), "bytes_written": len(data), "changed": True,
                   "created": before is None, "version": file_version(target.stat())}
-        # Parse-only checks surface a broken file now instead of on the next run.
+        # A broken .py may be an intermediate step, so it is written and reported, not refused.
         try:
-            if target.suffix.lower() == ".json":
-                json.loads(data)
-            elif target.suffix.lower() == ".py":
+            if target.suffix.lower() == ".py":
                 compile(data, str(target), "exec")
         except (ValueError, SyntaxError) as error:
             result["diagnostics"] = f"{type(error).__name__}: {error}"
@@ -140,7 +150,8 @@ class ReadFileTool(_FileTool):
         "Read local text/code, PDF or Office documents. Returns line-numbered content and a version. "
         "offset is a 1-based LINE number, limit is lines (default 2000). "
         "For more content use returned next_offset and next_column as offset and column. "
-        "Copy text without the 'N| ' prefix for edit_file. PDF pages accepts '2' or '2-5'. "
+        "The 'N| ' line prefixes are display only: never copy them into edit_file or write_file "
+        "content. PDF pages accepts '2' or '2-5'. "
         "Document extraction is text-only; images have metadata only, no OCR/visual understanding."
     )
     parameters = {
@@ -200,7 +211,8 @@ class WriteFileTool(_FileTool):
         "Create or replace a local text file, creating parent directories. Set append=true to append. "
         "Use edit_file for targeted changes. Optionally pass expected_version from read_file. "
         "Unchanged content is left untouched; existing file permissions are preserved. "
-        "Results include diagnostics when a written .py or .json file does not parse."
+        "Content that is not valid JSON is refused for .json files; a .py file that does not "
+        "parse is written and reported under diagnostics."
     )
     parameters = {
         "type": "object", "properties": {
@@ -230,7 +242,8 @@ class EditFileTool(_FileTool):
         "Ambiguous matches are rejected. Select occurrence (1-based), line_hint, or replace_all; "
         "these are mutually exclusive. expected_replacements and expected_version add optional checks. "
         "Empty old_text creates a missing/empty file. Preserves other bytes and file permissions. "
-        "Results include diagnostics when a written .py or .json file does not parse."
+        "Content that is not valid JSON is refused for .json files; a .py file that does not "
+        "parse is written and reported under diagnostics."
     )
     parameters = {
         "type": "object", "properties": {
@@ -272,9 +285,11 @@ class EditFileTool(_FileTool):
         locations = [content.count("\n", 0, index) + 1 for index in matches]
         if not matches:
             nearby = difflib.get_close_matches(old_text.splitlines()[0], content.splitlines()[:10000], n=3)
+            hint = (" old_text starts with a read_file line prefix ('1| '); remove every 'N| ' prefix."
+                    if re.match(r"\s*\d+\| ", old_text) else "")
             raise ToolExecutionError(ToolErrorCode.EXECUTION_ERROR,
                                      "old_text not found in file contents. Read the target region and copy its exact text. "
-                                     "To change the filename, use shell with mv; edit_file cannot rename files.",
+                                     f"To change the filename, use shell with mv; edit_file cannot rename files.{hint}",
                                      {"path": self._display(target), "nearby_lines": [line[:300] for line in nearby]})
         if occurrence is not None:
             selected = matches[occurrence - 1:occurrence]

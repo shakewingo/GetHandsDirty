@@ -41,8 +41,8 @@ as pilots; mark missing required outcomes incomplete instead of silently extendi
 | Completed | **1 — complete** | Multiple user turns, persisted Session history, structured per-turn state and traces |
 | Completed | **2 — implementation complete** | General filesystem/shell/search/fetch; restricted 2B baseline 8/17 → 12/17 |
 | Completed | **3 — implementation complete** | Context budgeting, automatic/manual compact, rule reload at the boundary, versioned checkpoints and restart replay; real-model evidence for 3B items 2-4 and 3C still outstanding |
-| Next | **4A–4B — required** | Bounded durable memory, search/read, correction/forget, fresh-session recall |
-| Before training | **8 — required** | Resettable benchmark, isolated splits, measured baseline, frozen harness |
+| Deferred past 11 | **4A–4B — deferred (decided September 22, 2026)** | Bounded durable memory, search/read, correction/forget, fresh-session recall |
+| Completed | **8 — complete: frozen benchmark and protocol, Qwen3-4B control baseline (test mean pass@1 0.667)** | Resettable benchmark, isolated splits, measured baseline, frozen harness |
 | Research | **9 — draft, required outcome** | 3–4B HF checkpoint on vLLM → verified trajectories → QLoRA SFT/reload → base/adapter comparison |
 | Later experiment | **10 — draft, conditional** | 2–3 rounds of expert iteration (weak-RSI question); GRPO pilot only if justified |
 | Delivery | **11 — draft, required outcome** | Held-out paired results and reproducible demo; dev-only recipe search optional |
@@ -204,7 +204,7 @@ Our `SessionStore` keeps that distinction without Nanobot's channels, hooks, or 
 
 **Completion boundary:** Stage 1 is complete for this rescope; context management remains
 Stage 3. Persistence is single-writer and saved at turn end, without exact mid-turn crash resume.
-The [foundation checkpoint](checkpoints/FOUNDATION_CHECKPOINT.md) records 82 deterministic tests
+The foundation checkpoint (a working record, not in the published docs) recorded 82 deterministic tests
 and real-model smoke results; those are historical evidence, not tests rerun by this document edit.
 A terminal answer still does not prove task success; premature stopping is an observed model gap.
 
@@ -220,8 +220,9 @@ Prompt rules describe expected behavior; runtime enforces paths, allowed operati
   recursive/paginated `list_files`, line-numbered `read_file`, full/append `write_file`, and
   targeted `edit_file`. Support general local paths, optional confinement, continuation,
   atomic replacement, mode preservation and optional version checks. Read PDF/Office text
-  through `file_documents.py`; images expose metadata only. Frozen evaluations retain the
-  original confined byte-based tools in `evals/legacy_files.py`.
+  through `file_documents.py`; images expose metadata only. The original confined byte-based
+  tools (`evals/legacy_files.py`) served the Stage 2B `dev` suite until both were retired after
+  Stage 8; they remain in git history at `ce2111a`.
 - [x] **`tools/web.py`:** synchronous general HTTP/HTTPS `web_fetch(url, extract_mode?)`
   with compressed responses and main-content or navigation-inclusive HTML text extraction,
   plus `web_search(query, count?)` via `ddgs`. Both return source URLs and retrieval time;
@@ -237,7 +238,7 @@ Prompt rules describe expected behavior; runtime enforces paths, allowed operati
   On interruption, record a pending call as interrupted/unknown if no result exists;
   never imply it succeeded or automatically replay its side effects. Keep the REPL usable.
 
-Evidence: [tools checkpoint](checkpoints/TOOLS_CHECKPOINT.md). The initial restricted 2A
+Evidence: the tools checkpoint (a working record, not in the published docs). The initial restricted 2A
 implementation had 102 tests; the general-tool follow-up has separate mechanism/live checks.
 The fixed 2B suite below remains the historical behavioral baseline.
 
@@ -260,7 +261,7 @@ No async runtime, provider catalogue or interactive approval engine is added.
   unintended writes, requests/usage/latency, settings and code/fixture hashes. Missing usage
   stays unknown. Train/test skeletons are reserved; their task sets are not yet generated.
 
-**Evidence:** [2B checkpoint](checkpoints/BEHAVIOR_CHECKPOINT.md), **118 tests**, 17/17 scripted
+**Evidence:** the 2B checkpoint (a working record, not in the published docs), **118 tests**, 17/17 scripted
 solutions; prompt ablations improve **8/17 → 12/17 strict passes**, retaining all original passes.
 The full prompt fixes no-op behavior; nested edits, web JSON/recovery and two answer formats
 still fail. Two false claims and one unintended-write task remain. The selected prompt trades
@@ -312,7 +313,6 @@ complete; **no local-model diagnostic was run for 3B items 2-4 or 3C** because t
   or imports; the prompt prohibits autonomous rule edits. Defaults are 8 KiB/source and
   16 KiB assembled, with visible setup errors instead of silent omission/truncation.
   **178 deterministic tests pass**; source metadata lives in the existing run settings.
-  Implementation guide: [Stage 3A item 2 plan](STAGE3A_ITEM2_PLAN.md).
 - [x] Count the actual formatted prompt, including schemas/role markers, with the generation
   formatter and tokenizer. Record total prompt tokens, effective backend window, configured
   response reserve and remaining room in request traces; no new CLI command. Custom or
@@ -431,7 +431,11 @@ Test pressure immediately after a tool result/parser error, a failing summarizer
 write failure, and restart. Keep prompt-size measurements and real-model retained/lost facts
 in `docs/context-memory.md`; compare full history versus compact on tasks fitting both.
 
-## Stage 4 — durable memory · 4A–4B required
+## Stage 4 — durable memory · 4A–4B deferred past Stage 11 (decided September 22, 2026)
+
+The Stage 8 freeze records `memory: off`; the primary weight comparisons in Stages 9–11 run
+with memory disabled, so 4A–4B is no longer a precondition of the freeze. Revisit after
+Stage 11. See [docs/STAGE8_DESIGN.md](STAGE8_DESIGN.md).
 
 Read: book Chapters 2/5; Appendix A.4/A.8. [Nanobot memory][nb-memory] separates an archive
 journal from durable facts, with [Dream-managed memory rules][nb-memory-skill]. Its builder
@@ -507,24 +511,52 @@ concurrent writes. Nanobot reference: [restricted subagent][nb-child]; this desi
 
 ## Stage 8 — benchmark and harness freeze · required
 
-Build on Stage 2 after Stages 3–4A/B. The local workspace is a learning benchmark, not a domain product.
+Build on Stage 2 after Stage 3. 4A–4B is deferred past Stage 11 (above), so this stage proceeds
+without it, freezing `memory: off`. The local workspace is a learning benchmark, not a domain product.
+Design: [docs/STAGE8_DESIGN.md](STAGE8_DESIGN.md); results in `docs/benchmark.md`.
 
-- [ ] Cover inspection/reporting, constrained updates, recovery/verification, and appropriate
+- [x] Cover inspection/reporting, constrained updates, recovery/verification, and appropriate
   stopping with roughly 2–6 dependent tool interactions. Vary layout, distractors, values,
-  dependency chains, and fault positions; allow multiple valid solutions.
-- [ ] Keep train, dev, and final test isolated by task skeleton before creating variants;
+  dependency chains, and fault positions; allow multiple valid solutions. 18 generated skeletons
+  (8 dev, 10 test), any valid tool path passes; every skeleton that edits a file offers
+  `edit_file` beside `write_file` (except `flaky_write_retry`, whose fault targets `write_file`).
+- [x] Keep train, dev, and final test isolated by task skeleton before creating variants;
   reset workspace/session/memory per task. Start from the 12–20 dev cases; target 50–100 reserved
   final cases if affordable, explicitly labelling smaller samples as pilots. A public benchmark
   subset is optional; identify adaptations and never present a local score as its official score.
-- [ ] Verify final artifacts/constraints independently. Report counts/denominators, false
+  60 reserved test tasks, `evals/bench/splits.json` fixed before any test skeleton was
+  implemented. Dev began at 15 tasks and was expanded to 64 (four more skeletons, one per
+  family, and more seeds) after the 7B pilot, so checkpoint selection in Stages 9–11 has enough
+  dev tasks. Each task gets a fresh temporary workspace and no memory.
+- [x] Verify final artifacts/constraints independently. Report counts/denominators, false
   completion, invalid calls, matched-fault recovery, stopping, tokens, requests, latency, and cost.
   Keep long-session/compact/restart and delayed-memory recall in separate harness evaluations.
-- [ ] Compare full history/compact on fitting tasks and memory off/on from identical facts.
+  `evals/bench/verify.py`'s `bench_summary()` reports all of these; long-context evaluation stays
+  in the separate `pressure` suite (`docs/EMPIRICAL_STUDY_PLAN.md`).
+- [x] Compare full history/compact on fitting tasks and memory off/on from identical facts.
   Freeze code, prompts, tools, checkpoint/template, decoding, budgets, compact policy, memory
-  snapshot/policy, task splits, and verifiers before comparing weights.
-- [ ] Run the intended trainable checkpoint as the base control. Primary weight comparisons
-  use short tasks and disabled or identical read-only memory; no cross-task accumulation or
-  evaluator coaching. For long-context comparisons, hold the summarizer checkpoint/config fixed.
+  snapshot/policy, task splits, and verifiers before comparing weights. `evals/bench/manifest.py`
+  freezes source, prompts, chat template, decoding, `AgentLimits` (including compact policy),
+  `memory: off`, splits and the verifier itself, all without loading a model. The full-history/
+  compact comparison itself runs through the existing `pressure`/`compare` commands, not `bench`;
+  memory is off rather than compared, since 4A–4B is deferred.
+- [x] Freeze the evaluation protocol on the control checkpoint, not the 7B engineering model:
+  `config.BENCH_MODEL` (Qwen3-4B-Instruct-2507 at a pinned revision, bf16, vLLM),
+  `BENCH_DECODING` (the model card's sampling: T 0.7, top-p 0.8, top-k 20), `BENCH_SEEDS`
+  (k = 3 samples per task) and `BENCH_N_CTX`, all in the manifest. `bench --final` refuses a
+  backend whose settings differ (`manifest.protocol_mismatch`). The OpenAI-compatible
+  `llm.VLLMClient` renders the project template itself and parses raw text through
+  `LLM.parse_response`, so training examples can later be exported token-identically; the GGUF
+  path stays for tests and local pipeline checks. `aggregate` combines the k runs.
+- [x] Run the intended trainable checkpoint as the base control: on a rented GPU, validate the
+  template/parser/measurement on the live server, run dev × 3 seeds (fix and re-freeze if that
+  surfaces a harness bug), then test × 3 seeds once under the final freeze. Primary weight
+  comparisons use short tasks and disabled or identical read-only memory; no cross-task
+  accumulation or evaluator coaching. For long-context comparisons, hold the summarizer
+  checkpoint/config fixed. Done September 27 on a RunPod A40 ($0.35): measurement exact on all
+  1,496 requests, no dev harness bug, test **mean pass@1 0.667** (pass^k 0.583), dev 0.542;
+  stopping is 0.00 on test. Results and the runbook as run are in `docs/benchmark.md`; per-task
+  pass counts are in `docs/baselines/stage8-control/`.
 
 **Gate/output:** scripted valid solutions pass and fake “done” outputs fail; real-model baseline
 includes interpretable failures. Save task-level results and a frozen manifest in `docs/benchmark.md`.
@@ -599,11 +631,13 @@ the attribution would be muddled.
 
 ## Stage 9 — verified trajectories and adapter SFT · draft
 
-**Required outcome.** It depends on the Stage 8 freeze, re-measured on the new checkpoint.
+**Required outcome.** It starts from Stage 8's frozen protocol and its control-checkpoint
+baseline (the vLLM backend and that baseline run moved into Stage 8 on September 26, so the
+benchmark is comparable before any training starts). Adapter runs reuse the baseline's exact
+server command (`docs/benchmark.md` runbook, including `VLLM_USE_FLASHINFER_SAMPLER=0`) and are
+paired by task ID against `docs/baselines/stage8-control/`. The baseline names the targets:
+stopping (0.00 on test), reading before answering, and acting on error feedback.
 
-- [ ] Add the OpenAI-compatible vLLM backend. Validate the 3–4B checkpoint's tool template
-  against parser/measurement, and re-run the Stage 8 baseline on it (adapter off). Keep the GGUF
-  path working for the existing tests and demos.
 - [ ] Write the train-skeleton task generator, with fault injection for recovery cases. Reserve
   the test skeletons first.
 - [ ] Collect data along two tracks, each recorded with provenance:
@@ -665,10 +699,12 @@ The capped memory index remains planned Stage 4 work.
 
 **Next coding session:** run `examples/continuation_demo.py` and `examples/compact_demo.py`
 on a host that can hold the 7B weights, and record the retained/lost facts in
-[context-memory.md](context-memory.md); that is Stage 3's one outstanding gap. Then start
-Stage 4A–4B memory, which attaches at the compact boundary beside the reloaded rules.
-Complete it before the Stage 8 freeze. For each session record: what I built, what I broke, what the evidence shows,
-what I can explain unaided, and the next smallest gap.
+[context-memory.md](context-memory.md); that is Stage 3's one outstanding gap. Stage 8 is
+complete: the benchmark and protocol are frozen and the Qwen3-4B control baseline is recorded
+(`docs/benchmark.md`). Start Stage 9 with the train-skeleton generator: new shapes that exercise
+the baseline's weak skills (exact stop replies, reading the file before reporting, using error
+feedback) without copying any dev or test skeleton. For each session record: what I built, what I broke,
+what the evidence shows, what I can explain unaided, and the next smallest gap.
 
 [ch1]: ../../../harness-books/book1-claude-code/chapter-01-why-harness-engineering.md
 [ch2]: ../../../harness-books/book1-claude-code/chapter-02-prompt-is-control-plane.md

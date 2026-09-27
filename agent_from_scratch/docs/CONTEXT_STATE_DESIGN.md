@@ -43,8 +43,7 @@ system messages. Actual mid-turn instruction replacement remains future compact 
 
 Item 2 checkpoint: **178 deterministic tests passed**, including literal loading, source selection,
 UTF-8 and combined caps, symlink/error handling, per-turn snapshots, provenance and REPL
-recovery. Implementation details and acceptance checks are in the
-[item 2 plan](STAGE3A_ITEM2_PLAN.md). The system prompt was revised; historical behavioral
+recovery. The system prompt was revised; historical behavioral
 scores do not measure this revision.
 
 Local Qwen2.5-7B Q4_K_M diagnostic: the model used the workspace's `project_check`

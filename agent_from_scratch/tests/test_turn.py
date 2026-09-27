@@ -434,24 +434,22 @@ class TurnTests(unittest.TestCase):
         self.assertFalse(agent.execute_tool("calculator", {"operation": "add", "left": 1, "right": 2}).ok)
 
     def test_read_recovers_from_bad_argument_then_continues_to_eof(self):
-        from agent_from_scratch.evals.legacy_files import ReadFileTool
-
         with TemporaryDirectory() as directory:
-            (Path(directory) / "notes.txt").write_text("abcdefghij")
+            (Path(directory) / "notes.txt").write_text("a\nb\nc\nd\ne\n")
             self.agent = Agent(self.model, registry=ToolRegistry([ReadFileTool(directory)]))
 
             def read(**arguments):
                 return LLMResponse('assistant', '', ResponseType.tool_call, tool_calls=[ToolCall('read_file', {'path': 'notes.txt', **arguments})])
 
-            self.script(read(limit=4), read(chunk_size=4), read(offset=4, chunk_size=4),
-                        read(offset=8, chunk_size=4), answer("Read all notes."))
+            self.script(read(chunk_size=2), read(limit=2), read(offset=3, limit=2),
+                        read(offset=5, limit=2), answer("Read all notes."))
             result = self.agent.run_turn("Read notes.txt in chunks without asking questions")
             observations = [json.loads(m.get("content") or "") for m in result.messages if m["role"] == "tool"]
             self.assertEqual(observations[0]["error_code"], "invalid_arguments")
             self.assertIn("chunk_size", observations[0]["error_message"])
             chunks = [o["output"] for o in observations[1:]]
-            self.assertEqual("".join(c["content"] for c in chunks), "abcdefghij")
-            self.assertEqual([c["next_offset"] for c in chunks], [4, 8, None])
+            self.assertEqual("\n".join(c["content"] for c in chunks), "1| a\n2| b\n3| c\n4| d\n5| e")
+            self.assertEqual([c["next_offset"] for c in chunks], [3, 5, None])
             self.assertTrue(chunks[-1]["eof"])
             self.assertEqual(result.stop_reason, RunStopReason.FINAL_RESPONSE)
 

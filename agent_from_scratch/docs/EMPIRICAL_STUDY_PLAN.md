@@ -1162,6 +1162,6 @@ scoring through `run_case`:
 | Shared run setup (`open_run`, `parse_limits`) and `--n-ctx` for the dev and pressure suites | `evals/run.py` |
 | Window-pressure suite with generated fixtures, `answer_found` and its tests | `evals/pressure.py`, `tests/test_pressure.py` |
 | Removed the Stage 1 read-coverage CLI; `digest` and `measure` moved into `verify.py` | `evals/foundation.py` deleted |
-| Checkpoint docs and the old README moved out of the script folder | `docs/checkpoints/` |
+| Checkpoint docs and the old README moved out of the script folder | `docs/checkpoints/` (later kept out of the published docs) |
 | Live-network tool demo moved beside the other demos | `examples/tools_smoke.py` |
 | New start-here README | `evals/README.md` |
