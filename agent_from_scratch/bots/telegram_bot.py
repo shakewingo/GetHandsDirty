@@ -16,6 +16,7 @@ import httpx
 from loguru import logger
 
 from ..agent import Agent
+from ..config import AgentLimits
 from ..context import InstructionConfig, InstructionLoadError
 from ..llm import LLM
 from ..session import SessionStore
@@ -247,7 +248,9 @@ def main() -> None:
         raise SystemExit(str(error)) from error
     Path(config.state_dir).mkdir(parents=True, exist_ok=True)
     llm = LLM()
+    # Planning lengthens weak-model runs, so the bot raises the turn budgets with it, as the REPL does.
     agent = Agent(llm, state_dir=config.state_dir,
+                  limits=AgentLimits(planning=True, max_iterations=30, max_tool_calls=60),
                   instruction_config=InstructionConfig(workspace=default_workspace))
     store = SessionStore(Path(config.state_dir, "sessions"))
     client = TelegramClient(config.token)

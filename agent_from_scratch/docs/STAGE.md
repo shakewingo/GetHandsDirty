@@ -571,6 +571,87 @@ local Qwen2.5-7B GGUF backend and `Agent.run_turn`/`SessionStore` unchanged; add
 long-polling module and a launchd job on an always-on Mac mini, since this laptop cannot stay
 powered on. Design: [telegram-bot-design.md](superpowers/specs/2026-09-22-telegram-bot-design.md).
 
+### Stage 8 extra 2 — planning and a completion gate in the bot · open, outside the sprint gate
+
+Opened September 28 from two Telegram runs of the same request ("read the
+`agent_from_scratch` code and, given your own model's abilities, tell me how to develop voice
+in/out"). Both are in `outputs/telegram_sessions/runs/`. Neither run read a single file.
+
+| Run | Planning | Requests / time | What happened |
+|---|---|---|---|
+| `c8c4e882…` | off (stale process) | 2 / 40 s | `list_files`, then a generic cloud-speech answer with invented API calls |
+| `63957c65…` | on | 5 / 147 s | Plan ritual, fabricated README, answer repeated as narration; final reply "已完成实现语音输入和语音输出的功能…\n123" |
+
+- [x] **Planning was off in the first run.** Its settings record `planning: false` and no
+  `update_plan` schema: the launchd process predated the `config.py` edit, and the
+  `AgentLimits()` default argument is bound at import. The bot now passes
+  `AgentLimits(planning=True, max_iterations=30, max_tool_calls=60)` like the REPL; the
+  `config.py` default stays `False` because `evals/bench/manifest.json` freezes it.
+  Restart the launchd job after any config change.
+
+**What the second run shows** (planning on; five requests, zero writes, zero reads):
+
+1. **Plan status is self-report, not evidence.** Request 1 created a one-item plan already
+   `completed` ("查看…代码") in the same batch as the `list_files` that was supposed to do it.
+   Request 3 replaced the whole list with a new goal, "实现语音输入和语音输出的功能", as
+   `in_progress`; request 4 marked it `completed` with no other tool call in between. The final
+   answer then reported the plan as fact: "已完成实现…". `update_plan` replaces the list
+   wholesale and accepts any status, so the plan also let the task drift from *advise* to
+   *implement*. **This refutes the earlier idea that a pending-items gate would catch this
+   run:** nothing was pending, because the model marked everything completed itself.
+2. **The reminder drives a loop.** It is the last message of every request, in the system
+   role, and says "update it with update_plan as you progress" even when every item is
+   completed. The 7B attached `update_plan` to each response and wrote its whole answer as
+   narration beside it, three times (requests 2–4, ~600 completion tokens each), until only
+   "done" was left to say. Planning cost 2.5× the requests and 3.7× the time of the first run.
+3. **The user never got the answer.** The bot passes no `on_progress`, so only the final
+   response reached Telegram: a false completion claim plus stray "123". The substantive
+   advice lived in narration, which the REPL prints but the bot drops.
+4. **A fabricated observation entered history.** Request 1's raw text continues after its
+   two `</tool_call>` blocks with an invented `read_file` result for `README.md` (a GitHub
+   clone URL and a `src/` directory; the real README is the Telegram setup guide and there
+   is no `src/`). The Qwen parser keeps text after the last call as narration, so the
+   invention was stored in raw history and sent back in every later request. Text after the
+   last call is written before any result exists, so it cannot be an observation.
+5. **Investigation is still shallow.** Neither run read a file; the answer came from the
+   model's priors in both. Planning did not change this.
+
+**Directions, cheapest and most certain first:**
+
+- [ ] **Drop text after the last tool call in a batch** (keep it in the trace as discarded
+  raw text), and consider stopping generation at `<tool_response>`. By construction that
+  text predates the results it describes. Deterministic, small, and it fixes finding 4.
+- [ ] **Make the plan reminder conditional.** Show it only while items are pending or in
+  progress; once all are completed, say so and invite a final answer without tools. Consider
+  pinning the user's request beside the plan so a rewritten plan is visibly compared with
+  what was asked. Targets findings 1 (drift) and 2.
+- [ ] **Check plan transitions against the trace, not plan status.** `PlanTool` is
+  harness-owned, so it can answer an update immediately: an item marked `completed` with no
+  non-plan tool call since it appeared (or created already completed) gets a warning in the
+  tool result. This is earlier and cheaper than a stop-time gate. At the stop point, the
+  gate from the September 28 discussion keeps its shape (flag-gated, default off, at most 1–2
+  nudges per turn, traced as `completion_nudges`, worded "check before answering", never
+  "do more", so the bench's no-op stopping tasks are not pushed into action). Its signals
+  become: unsupported completions, pending items, writes with no later read/run, and an
+  unaddressed last tool failure.
+- [ ] **Deliver what the user needs in the bot.** Either relay narration as progress
+  messages (only useful after the reminder loop is fixed, or it sends the answer three
+  times) or instruct that the final response must contain the answer rather than a status
+  line. Trailing junk such as "123" is a model artifact; note it, don't special-case it.
+- [ ] **Shallow investigation stays open.** No deterministic signal says "this request needed
+  a file read". Options are an honest plan (after the fixes above) that names the reads, or a
+  later verifier call; both need measurement. This is also the Stage 9 target "reading before
+  answering", and these two runs are useful negative examples for it.
+- [ ] **Keep it out of the freeze.** Bot-only first. If it enters the benchmark, run it as a
+  separate `--limits` arm and report its cost (this run: 3.7× time). Compared with Stage 9
+  adapters, it asks whether training removes the need for the gate.
+
+Background from the first discussion: stopping on the first tool-free response is the norm,
+not the gap. Claude Code, Codex and nanobot end a turn the same way; their difference is a
+model trained to continue and verify, plus harness checks at the stop point (todo reminders,
+a Stop hook that can block once with a reason, an explicit `finish` tool as in SWE-agent,
+OpenHands and smolagents, or a separate verifier call).
+
 ### Post-training plan for Stages 9–11 (decided September 21)
 
 **Trainable model:** a 3–4B instruct checkpoint in HF safetensors, first candidate
