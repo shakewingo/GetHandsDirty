@@ -324,11 +324,11 @@ def compile_chat_template(template: str):
     return environment.from_string(template)
 
 
-def render_chat(compiled, messages: list, tools: Dict[str, Any]) -> str:
+def render_chat(compiled, messages: list, tools: Dict[str, Any], *, add_generation_prompt: bool = True) -> str:
     def raise_exception(message: str):
         raise ValueError(message)
     return compiled.render(messages=messages, tools=list(tools.values()), tool_choice="auto",
-                           add_generation_prompt=True, eos_token=QWEN_END, bos_token="",
+                           add_generation_prompt=add_generation_prompt, eos_token=QWEN_END, bos_token="",
                            raise_exception=raise_exception)
 
 
