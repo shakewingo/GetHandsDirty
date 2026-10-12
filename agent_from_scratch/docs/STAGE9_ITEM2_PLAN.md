@@ -700,8 +700,10 @@ rule (201 from sample 0, 20 from sample 1, 34 from sample 2).
 - No target reads `"."`, copies an `N| ` prefix or holds an absolute workspace path. All 76 final
   answers are the bare token.
 - 71 examples (28%), all `points_save_recovery`, have the teacher's failed `"."` read in their
-  prompt as history. The student is never trained to write it, but its own history at inference
-  will usually not contain it.
+  prompt as history. The student is never trained to write it. (An earlier version of this note
+  said the student's own history would usually not contain a failed read. Step 10 showed the
+  opposite: the base model guesses a failing path in the first turn of 158 of 160 rollouts of
+  this skeleton, so these examples show the step it most needs, which is what to do next.)
 - Known gaps in `points_save_recovery`: the first step (read `points.json` alone) is
   demonstrated by 5 examples only, because a dropped first turn cannot be recovered; and 4 of
   the 20 tasks have no final-answer example.
@@ -777,7 +779,19 @@ Where the base model fails, from the `checks` of the 449 failed rollouts:
 - `inventory_reconciliation`: all 153 failures miss `format_exact`, and only 33 of them also
   have the wrong content. The model finds the answer and wraps it in explanation.
 - `eligibility_record_update`: 80 of 135 failures miss `evidence` and 57 miss `format_exact`.
-- `points_save_recovery`: all 159 failures leave the files wrong.
+  Split by expected answer: on the 80 `UPDATED` rollouts the model edited the file in 79 and the
+  file was right in 78, but it read the record back in 0 of 79, so none passed. On the 80
+  `BLOCKED` rollouts it never wrote and always named the right outcome, and 25 passed; the other
+  55 wrapped `BLOCKED` in explanation.
+- `points_save_recovery`: all 159 failures leave the files wrong, because the model almost never
+  reaches a write. In 158 of 160 rollouts the first turn reads `points.json` together with a
+  guessed account path (`accounts/1.json`, `accounts/account1.txt`), which fails. `points.json`
+  was read successfully in all 160 and names the account files, but only 5 rollouts ever read
+  `account_a.txt`; 155 end with a text answer saying the files cannot be located. The injected
+  save fault is therefore almost never met.
+- So the base model's failures on this pool are three specific behaviours: a final answer that
+  is not the bare token, no read-back after a write, and giving up after its own failed read
+  instead of using what it already read.
 - 11 of 80 tasks have mixed outcomes across the eight samples, which is the first evidence for
   Stage 10's GRPO precondition. 96 of 320 completion claims were false completions.
 

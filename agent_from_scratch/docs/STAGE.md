@@ -864,9 +864,13 @@ teacher only 51, RFT only 0, neither 0.
 **What the evidence shows.**
 
 - The teacher passed 80 of 80 on the first pass. The base model's mean pass@1 is 0.298, and
-  outside `address_conflict_stop` it is at most 0.16. Its failures are concentrated: every failed
-  `inventory_reconciliation` rollout misses the exact answer format, and every failed
-  `points_save_recovery` rollout leaves the files wrong.
+  outside `address_conflict_stop` it is at most 0.16. Its failures are three specific
+  behaviours. A final answer that is not the bare token: every failed `inventory_reconciliation`
+  rollout, and 55 of 80 `BLOCKED` rollouts of `eligibility_record_update`. No read-back after a
+  write: on the 80 `UPDATED` rollouts the edit was right in 78 and read back in 0. Giving up
+  after its own failed read: in 158 of 160 `points_save_recovery` rollouts the first turn
+  guesses an account path that fails, and 155 then stop without writing, although `points.json`,
+  which names the files, was read successfully every time.
 - Token identity holds for RFT: measured and served prompt tokens differ on 0 of 1,737
   requests, and the canonical target equals the sampled text on 62 of 63 examples (the one
   difference is a blank line before a `<tool_call>` block).
@@ -888,9 +892,10 @@ invoice). GPU: \$0.34 for one A40, read from the account balance. Both are far i
 **Known limits.**
 
 - 71 teacher examples (28%), all `points_save_recovery`, carry the teacher's failed `"."` read
-  in their prompt as history. It is never a target, but the student's own history at inference
-  will usually not contain it. The first step of that skeleton is demonstrated 5 times only, and
-  4 of its tasks have no final-answer example.
+  in their prompt as history. It is never a target. The base model itself guesses a failing path
+  in the first turn of 158 of 160 rollouts of this skeleton, so a failed read in the history is
+  the context it will usually be in. The first step of that skeleton (read `points.json` alone)
+  is demonstrated 5 times only, and 4 of its tasks have no final-answer example.
 - 74 of 179 teacher tool-call targets carry a sentence of narration before the call; it was kept.
 - The RFT set is small and lopsided: 40 of its 63 examples are the skeleton the base model
   already passes.
@@ -898,6 +903,31 @@ invoice). GPU: \$0.34 for one A40, read from the account balance. Both are far i
   count (6.8% higher on the full pass). The teacher ran on the Mac (`/private/tmp/...`
   workspace paths in tool descriptions) and RFT on Linux (`/tmp/...`).
 - Each teacher task has one trajectory; nothing here measures teacher variance.
+
+**What the two tracks say about the next steps.** The base model's three failing behaviours
+line up with weaknesses Stage 8 already recorded, and the teacher set demonstrates each one:
+
+| Base behaviour on the train pool | Closest weakness recorded in Stage 8 | Teacher demonstrations |
+|---|---|---|
+| Final answer is not the bare token | Test stopping is 0.00: the model "never replies with only the required token" | 76 bare final answers |
+| No read-back after a write | Dev `delete_key`: "removed" when the edit never landed | Every `UPDATED` and `SAVED` trajectory reads back, because the verifier requires it |
+| Gives up after its own failed read | No direct counterpart measured | 71 examples continue after a failed read; 5 show the clean first step |
+
+- **The RFT set cannot carry a training round on its own.** It covers 29 of 80 tasks and 40 of
+  its 63 examples are the skeleton the base model already passes. More sampling does not close
+  the gap: the base model passed 0 of 80 `UPDATED` rollouts and 1 of 160 `points_save_recovery`
+  rollouts, and with a per-sample pass probability $p$ the chance of at least one verified
+  trajectory in $N$ samples is $1 - (1 - p)^N$, so $p = 0.006$ needs about $N = 380$ for a 90%
+  chance. RFT-SFT stays in Item 3 as the control arm, capped per skeleton at training time, with
+  little gain expected. The filter is not loosened to enlarge it.
+- **`points_save_recovery` does not yet test saving for the student.** It reaches a write in 5
+  of 160 rollouts, so the injected save fault is almost never met. The task is left as it is
+  for now: the teacher data shows the missing step.
+- **Two Stage 8 weaknesses have no counterpart in the train pool:** doing nothing when the
+  requested state already holds (dev `no_op_correct_config`, 0.00) and reporting a missing file
+  (test `missing_file_report`, 0.00). No gain should be expected there from this data.
+
+These points set the entry conditions of Stage 10, listed in that section.
 
 **Manifests.** Measured with `manifest_drift` at `11e4205`: the Item 1 dataset manifest has
 drifted in `source_sha256` only (`llm.py`, `evals/bench/run.py`, `evals/__main__.py` changed;
@@ -912,7 +942,8 @@ Evidence: `outputs/stage9-item2-20261012-teacher-s{0,1,2}/`, `-rft/rft-train-s{0
 
 **Next smallest gap:** tokenize `prompt + completion` as one string, mask everything but the
 completion, and run the overfit → save → reload smoke test on a handful of teacher examples
-before any QLoRA pilot.
+before any QLoRA pilot. After the first teacher-SFT adapter, sample the train pool with it
+before anything else in Stage 10.
 
 ## Stage 10 — expert iteration and outcome learning · draft, conditional
 
@@ -922,6 +953,41 @@ verifier and training recipe. The measured weak-RSI question is:
 **is M_k a better data generator than M_{k-1}?** Report per round the verified-trajectory yield,
 hard-task coverage, dev pass rate, and whether round k+1's gain is at least round k's. Diminishing
 returns, drift, or collapse are valid results. Only verifier-passed data enters training.
+
+**Starting point, revised on the Stage 9 Item 2 evidence (October 12, 2026).** The loop does not
+start from M0's own samples. M0's verified data (the RFT set) covers 29 of 80 train tasks, and 9
+of the 60 outside the one skeleton it already passes, so a model trained on it would sample
+almost the same data again. The loop starts from the teacher-SFT adapter instead: **M1 is SFT on
+the teacher set**, M1 samples the train pool, the verifier filters, SFT produces M2, and so on.
+The weak-RSI question is asked from M1 onward, with M0's yield as the reference point below.
+RFT-SFT remains the control arm from Stage 9. Whether a round trains on the previous model's
+verified samples alone or together with the teacher set is fixed before round 1 and then held.
+
+M0's yield under the Item 2 protocol (8 samples per task, Stage 8 server command), the numbers
+M1 is compared against:
+
+| Skeleton | Mean pass@1 | Tasks with a verified trajectory |
+|---|---|---|
+| `inventory_reconciliation` | 0.044 | 3 of 20 |
+| `eligibility_record_update` | 0.156 | 5 of 20 |
+| `address_conflict_stop` | 0.988 | 20 of 20 |
+| `points_save_recovery` | 0.006 | 1 of 20 |
+| all | 0.298 | 29 of 80 |
+
+**Entry conditions.** Stage 10 starts only when each of these is settled:
+
+- [ ] Item 3 is done: the masked-loss recipe passes the overfit → save → reload smoke test, and
+  the teacher-SFT adapter is compared with the base on dev.
+- [ ] M1 has been sampled on the train pool under the same protocol as the table above, at
+  about the cost of the Item 2 session (\$0.34). If its yield on the three weak skeletons is no
+  higher than M0's, expert iteration has nothing to iterate on, and that is the result to report.
+- [ ] `points_save_recovery` is checked on M1's samples. M0 reaches a write in 5 of 160
+  rollouts, because it guesses an account path, fails and stops. If M1 still rarely reaches a
+  write, revise or split the skeleton before round 1, since the task pool is fixed across rounds.
+- [ ] A decision is recorded on the two Stage 8 weaknesses the train pool does not cover (doing
+  nothing when the state already holds; reporting a missing file): add a train skeleton for
+  them before round 1, or state that no gain is expected there. A new train skeleton must not
+  mirror a dev, test or holdout shape.
 
 **Conditional: a GRPO pilot.** Run it only if tasks show mixed outcomes across samples
 (0 < pass@k < 1; all-pass or all-fail groups give zero advantage), the terminal reward survives an
