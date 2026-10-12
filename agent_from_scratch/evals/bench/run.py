@@ -1,8 +1,9 @@
 """Build Stage 8 benchmark tasks from seeds, run them, and score them.
 
 Usage: python -m agent_from_scratch.evals bench --output DIR --split {dev,test,train,holdout} [--tasks a,b]
-           [--seed N] [--backend {llama_cpp,vllm}] [--base-url URL] [--served-model NAME]
+           [--seed N] [--backend {llama_cpp,vllm,teacher}] [--base-url URL] [--served-model NAME]
            [--adapter NAME] [--limits '{"planning": true}'] [--final] [--allow-drift]
+           [--teacher-model ID] [--teacher-effort {none,low,high,max}] [--student-gguf FILE]
 
 Every run uses the frozen sampled protocol (config.BENCH_DECODING); `--seed` picks the sample.
 Run once per seed in config.BENCH_SEEDS, then `aggregate` the runs.
@@ -128,6 +129,12 @@ def load_model(args):
     """The backend named by `--backend`, always with the frozen decoding and window."""
     decoding = dict(BENCH_DECODING)
     temperature, max_tokens = decoding.pop("temperature"), decoding.pop("max_tokens")
+    if args.backend == "teacher":
+        from ..sft.teacher import TeacherClient, student_token_counter
+        count, tokenizer = student_token_counter(args.student_gguf)
+        return TeacherClient(args.teacher_model, count=count, budget_tokenizer=tokenizer,
+                             effort=args.teacher_effort, sample=args.seed, n_ctx=BENCH_N_CTX,
+                             reserve=max_tokens)
     if args.backend == "vllm":
         return VLLMClient(args.base_url, args.served_model, adapter=args.adapter, seed=args.seed,
                           temperature=temperature, max_tokens=max_tokens, sampling=decoding,
@@ -144,8 +151,14 @@ def main():
     parser.add_argument("--tasks", help="Comma-separated task IDs; default: every task in --split")
     parser.add_argument("--seed", type=int, default=0,
                         help="Sample index passed to every request; workspaces are seeded separately")
-    parser.add_argument("--backend", choices=("llama_cpp", "vllm"), default="llama_cpp",
-                        help="llama_cpp: the local GGUF, for pipeline checks; vllm: the frozen control")
+    parser.add_argument("--backend", choices=("llama_cpp", "vllm", "teacher"), default="llama_cpp",
+                        help="llama_cpp: the local GGUF, for pipeline checks; vllm: the frozen control; "
+                             "teacher: an API model, --split train only")
+    parser.add_argument("--teacher-model", default="deepseek-flash", help="API model ID (--backend teacher)")
+    parser.add_argument("--teacher-effort", choices=("none", "low", "high", "max"), default="low",
+                        help="reasoning_effort; none turns thinking off (--backend teacher)")
+    parser.add_argument("--student-gguf", type=Path,
+                        help="A GGUF of the student; its tokenizer counts the context budget (--backend teacher)")
     parser.add_argument("--model-path", type=Path, default=MODEL_PATH,
                         help="GGUF file (--backend llama_cpp); default config.MODEL_PATH")
     parser.add_argument("--base-url", default=VLLM_BASE_URL, help="vLLM server (--backend vllm)")
@@ -159,6 +172,10 @@ def main():
     parser.add_argument("--manifest", type=Path, help="Explicit dataset manifest; default is the original Stage 8 freeze")
     args = parser.parse_args()
     overrides = parse_limits(parser, args.limits)
+    if args.backend == "teacher" and args.split != "train":
+        parser.error("The teacher may only see the train split.")
+    if args.backend == "teacher" and (args.student_gguf is None or not args.student_gguf.is_file()):
+        parser.error("--backend teacher needs --student-gguf, an existing GGUF of the student model.")
     if args.split == "test" and not args.final:
         parser.error("Running the test split needs --final (see docs/STAGE8_DESIGN.md).")
     if args.split == "holdout" and (not args.final or args.manifest is None or args.allow_drift or overrides):

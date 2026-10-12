@@ -154,11 +154,6 @@ class RejectionTests(unittest.TestCase):
         self.assertTrue(record["passed"], record["checks"])
         self.assertEqual(rejection(record, task, trace), "edited_view")
 
-    def test_a_fallback_served_teacher_request_is_rejected(self):
-        record, task, trace = rollout(self.root, "inventory_reconciliation-0-clean")
-        trace["model_requests"][1]["raw_response"] = {"usage": {"iterations": [{"type": "fallback_message"}]}}
-        self.assertEqual(rejection(record, task, trace), "fallback")
-
 
 def trajectory(task_id, seed, completions, run_dir="r"):
     return {"task_id": task_id, "seed": seed, "run_dir": run_dir,
@@ -240,7 +235,7 @@ class CollectTests(unittest.TestCase):
             collect([local], "rft")
         self.assertTrue(collect([local], "rft", pilot=True)[1]["pilot"])
         with self.assertRaisesRegex(ValueError, "backend"):
-            collect([self.run_dir("api", 0, backend="anthropic")], "rft")
+            collect([self.run_dir("api", 0, backend="deepseek")], "rft")
         with self.assertRaisesRegex(ValueError, "[Ss]cripted"):
             collect([self.run_dir("gate", 0, backend="scripted")], "rft", pilot=True)
 

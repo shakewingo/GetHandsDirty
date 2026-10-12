@@ -21,7 +21,7 @@ from ...llm import LLM, QWEN_END, ResponseError, compile_chat_template, render_c
 from ...utils import write_jsonl
 
 # The backend whose rollouts each track is made of, as `settings()["backend"]` records it.
-TRACK_BACKENDS = {"teacher": "anthropic", "rft": "vllm"}
+TRACK_BACKENDS = {"teacher": "deepseek", "rft": "vllm"}
 
 
 def examples_from_trace(trace: dict, template) -> list[dict]:
@@ -71,15 +71,6 @@ def examples_from_trace(trace: dict, template) -> list[dict]:
     return examples
 
 
-def _fallback_served(request: dict) -> bool:
-    """Whether the API answered this request with a model other than the one asked for."""
-    raw = request.get("raw_response")
-    usage = raw.get("usage") if isinstance(raw, dict) else None
-    iterations = usage.get("iterations") if isinstance(usage, dict) else None
-    return any(isinstance(step, dict) and step.get("type") == "fallback_message"
-               for step in iterations or [])
-
-
 def rejection(record: dict, task: dict, trace: dict) -> str | None:
     """Rejection sampling - Why a rollout may not become training data; None when it may.
 
@@ -105,8 +96,6 @@ def rejection(record: dict, task: dict, trace: dict) -> str | None:
            or request["input_messages"] != trace["messages"][:request["input_message_count"]]
            for request in requests):
         return "edited_view"
-    if any(_fallback_served(request) for request in requests):
-        return "fallback"
     return None
 
 
@@ -136,7 +125,7 @@ def collect(run_dirs: list[Path], track: str, *, max_per_task: int = 2,
     if len(set(names)) != len(names):
         raise ValueError("Run directories must have distinct names; provenance records the name.")
     sources, trajectories, rollouts = [], [], set()
-    rejected = dict.fromkeys(("failed", "own_error", "edited_view", "fallback"), 0)
+    rejected = dict.fromkeys(("failed", "own_error", "edited_view"), 0)
     for run in run_dirs:
         metadata = json.loads((run / "metadata.json").read_text(encoding="utf-8"))
         records = json.loads((run / "results.json").read_text(encoding="utf-8"))
