@@ -1,5 +1,28 @@
 # Evaluating the agent
 
+## Stage 9 task data
+
+The general-assistant training pool has 80 tasks from 4 shapes; a separate `holdout` split
+reserves 80 tasks from 4 different shapes. Stage 8's 64 dev / 60 test tasks remain unchanged.
+Generate initial workspaces and private contracts, optionally running real tool/verifier gates
+with a scripted model (no model weights or API calls):
+
+```sh
+python -m agent_from_scratch.evals dataset --output outputs/NEW_STAGE9_DATA --check
+python -m unittest agent_from_scratch.tests.test_stage9_tasks agent_from_scratch.tests.test_stage9_dataset -v
+```
+
+Each task's `workspace/` contains only its inputs; `task.json` beside it contains private
+expectations. Do not send the contract or scripted solution to the actor/teacher. A successful
+scripted gate is not a training demonstration or a real-model capability measurement.
+
+For Item 2, the ordinary model runner accepts `bench --split train`. Reserved `holdout` model
+runs require `--final --manifest outputs/NEW_STAGE9_DATA/manifest.json` and the frozen vLLM
+protocol. They reject drift and limit overrides; use dev for selection and reserve holdout
+results for the formal base/adapter comparison. The generated Stage 9 manifest is separate
+from the original `evals/bench/manifest.json`. Regeneration creates a new directory/version;
+never overwrite earlier evidence or silently refresh a freeze to hide changes.
+
 Start here. Everything runs from the **repository root** in the project environment through one
 entry point:
 

@@ -5,5 +5,6 @@
   "test": ["deep_chain_lookup", "grep_locate", "sum_across_files", "pointer_nested_edit",
            "rename_key_all_files", "append_list_item", "transient_read_failure",
            "flaky_write_retry", "ambiguous_choice_stop", "missing_file_report"],
-  "train": []
+  "train": ["inventory_reconciliation", "eligibility_record_update", "address_conflict_stop", "points_save_recovery"],
+  "holdout": ["three_source_join", "merge_record_requests", "backup_record_lookup", "unit_complete_total"]
 }

@@ -691,8 +691,11 @@ mix, and only after each license is checked. Its single-call distribution differ
 multi-step file/shell tasks.
 
 **Evaluation layers:**
-1. Primary: 50–100 new reserved test skeletons, never used for prompt or recipe tuning. The
-   Stage 2B dev tasks already influenced prompt choices and do not qualify.
+1. Primary small-scale experiment (revised October 12): **80 new held-out tasks from 4 reserved
+   skeletons**, never used for prompt or recipe tuning. This replaces the original 50–100-skeleton
+   target by explicit agreement; it is not a broad generalization benchmark. The Stage 2B dev
+   tasks already influenced prompt choices and do not qualify. Keep the existing frozen Stage 8
+   test split as a separate weight-comparison reference.
 2. Optional external reference: a locally adapted BFCL multi-turn subset, labeled as a local
    adaptation and never reported as an official score.
 3. Regression: a small IFEval/general-QA subset to catch damage outside tool use.
@@ -719,7 +722,7 @@ server command (`docs/benchmark.md` runbook, including `VLLM_USE_FLASHINFER_SAMP
 paired by task ID against `docs/baselines/stage8-control/`. The baseline names the targets:
 stopping (0.00 on test), reading before answering, and acting on error feedback.
 
-- [ ] Write the train-skeleton task generator, with fault injection for recovery cases. Reserve
+- [x] Write the train-skeleton task generator, with fault injection for recovery cases. Reserve
   the test skeletons first.
 - [ ] Collect data along two tracks, each recorded with provenance:
   (a) teacher distillation, where a stronger API model runs **inside our harness**;
@@ -732,6 +735,84 @@ stopping (0.00 on test), reading before answering, and acting on error feedback.
 **Output:** adapter weights reloaded into the ordinary loop, dataset/config/cost records, and a
 dev comparison of base, teacher-SFT and RFT-SFT against the same checkpoint/backend/precision with
 the adapter off.
+
+### Item 1 pilot — inventory reconciliation (October 12, 2026)
+
+One new train-only skeleton, `inventory_reconciliation`, compares two JSON ID lists and reports
+the shipment IDs absent from inventory, sorted and comma-separated, or `NONE`. Five seeds each
+produce clean and first-read-failure variants: **10 training tasks**. The successful observations
+must cover both sources, files must remain unchanged, and the reply format is the deliverable.
+The existing `Task`/`Expect`/`Fault`, runner and verifier are reused; scripted `solution()` is
+only a gate fixture, not teacher or RFT data. Core implementation was delegated to AI for this
+pilot at the user's explicit request; the default learning/coding rules above remain in force.
+
+**Mechanism evidence:** 311 unit tests pass (302 before the pilot). Scripted correct runs pass
+**10/10**, with the injected fault observed in all **5/5** fault runs. Correct answers without
+reading pass **0/10**; reading both sources then giving a wrong answer passes **0/10**. Additional
+gates reject one-source answers, clipped reads and failure-without-retry; repeated seeds reproduce files and
+expectations. These are real tool/verifier checks with a scripted model, not Qwen capability
+results. Review found that filenames alone could satisfy evidence on a partial read; the final
+gate requires both complete one-line JSON records in successful observations. Re-run with:
+
+```sh
+python -m unittest agent_from_scratch.tests.test_train_skeleton -v
+```
+
+Evidence: `outputs/stage9-train-pilot-20261012/summary.json`, `results.json`, generated fixtures,
+and per-run task/check/trace records. All 64 dev and 60 test task fingerprints, runtime source
+hashes relative to the pre-pilot tree, and frozen protocol fields remain unchanged. The original
+Stage 8 manifest is retained: adding train source, split membership and tasks causes expected
+manifest drift. A future formal weight comparison needs an explicit versioned freeze decision;
+this pilot neither overwrites the old baseline nor establishes a new training protocol.
+
+This is historical v1 evidence. In v2, inventory reconciliation expands to 20 instances and
+clean/fault pairs share the same initial files; v1 inputs/source and traces are retained in
+`outputs/stage9-item1-20261012/before/` and the original pilot directory.
+
+### Item 1 complete — general assistant task pool (October 12, 2026)
+
+The environment remains disposable local records, not a coding-agent curriculum. Four train
+shapes produce **80 tasks**: inventory reconciliation (20), eligibility-gated application updates
+(20), address agreement/clarification (20), and points saving with retry/readback (20). Four
+independent held-out shapes were reserved first and produce **80 tasks**: three-source record
+joins, compatible/conflicting contact-change requests, missing-primary/backup lookup, and
+unit-complete expense totals. Seeds vary values and order; clean/fault pairs share base data,
+except that missing-primary cases deliberately omit that file while retaining the same backup.
+
+Scripted gates exercise real tools and the ordinary agent loop. They reject answer-only claims,
+wrong answers, clipped observations, unauthorized or unrelated changes, missing readback, and
+observations obtained only after an oracle write. Stage 9 fault variants require an observed
+fault; backup lookup requires failure of the designated primary path, not an unrelated missing
+file. These additional checks are scoped to train/holdout in the evaluation runner; the
+Stage 8 verifier, task fingerprints, runtime, model/template and decoding remain unchanged.
+Alternate read order and targeted edits are allowed, rather than requiring the scripted path.
+
+Generate the versioned fixtures and run all gates without a model:
+
+```sh
+python -m agent_from_scratch.evals dataset --output outputs/NEW_STAGE9_DATA --check
+```
+
+The output contains `metadata.json`, a separate `manifest.json`, private `tasks/*/task.json`,
+isolated `tasks/*/workspace/` fixtures, scripted run traces and `summary.json`. Expected answers
+and `debug` are outside the agent's workspace and are not supplied as model input. Scripted
+solutions are test fixtures, not teacher/RFT demonstrations; their context measurements are
+controlled-fit fixtures, not real model token counts.
+
+Evidence: `outputs/stage9-item1-20261012/data/` records **160/160** correct scripted passes,
+**0/160** answer-only passes and **0/160** wrong-answer passes, with all **30/30** fault variants
+observed. Additional negative/alternative-path gates are in `tests/test_stage9_tasks.py`;
+command isolation and manifest guards are in `tests/test_stage9_dataset.py`.
+
+`bench --split train` is ready for Item 2. A real `--split holdout` run requires `--final` and an
+explicit dataset `--manifest`; drift and limit overrides are rejected. The old Stage 8 manifest
+is retained, not overwritten. Formal comparisons use the new versioned snapshot and add a base
+run on the new held-out tasks; old control evidence remains a separate reference. Data-generator
+completion establishes a reliable small-scale environment, not actor capability or SFT gains.
+
+**Next smallest gap:** add the teacher API backend, collect a few verifier-passed train runs,
+and inspect request-level input/assistant targets before scaling Item 2. Do not tune against
+the reserved held-out tasks. Teacher collection, RFT export and training remain pending.
 
 ## Stage 10 — expert iteration and outcome learning · draft, conditional
 
@@ -782,9 +863,9 @@ The capped memory index remains planned Stage 4 work.
 on a host that can hold the 7B weights, and record the retained/lost facts in
 [context-memory.md](context-memory.md); that is Stage 3's one outstanding gap. Stage 8 is
 complete: the benchmark and protocol are frozen and the Qwen3-4B control baseline is recorded
-(`docs/benchmark.md`). Start Stage 9 with the train-skeleton generator: new shapes that exercise
-the baseline's weak skills (exact stop replies, reading the file before reporting, using error
-feedback) without copying any dev or test skeleton. For each session record: what I built, what I broke,
+(`docs/benchmark.md`). Stage 9 Item 1 is complete as a small-scale general-assistant task pool.
+Start Item 2 with a teacher backend and a few verified training trajectories, then inspect their
+request-level inputs and assistant targets before scaling collection. For each session record: what I built, what I broke,
 what the evidence shows, what I can explain unaided, and the next smallest gap.
 
 [ch1]: ../../../harness-books/book1-claude-code/chapter-01-why-harness-engineering.md
@@ -850,3 +931,43 @@ introduce small loop/context state only where continuation needs shared mutable 
 Keep the configured state root (`outputs/sessions` today); add memory/checkpoint records
 there as needed. Raw history, active prompt, durable memory, trace evidence, and training
 examples have different roles. Optional branches are omitted from the required-path diagram.
+
+## Optional independent experiment — GEPA prompt optimization · draft
+
+**Question:** with the actor model and runtime fixed, can execution feedback improve a bounded
+behavior prompt on new tasks? This is a separate harness experiment, not a prerequisite for
+Stages 9–11. Its results are reported separately from adapter training and expert iteration.
+
+**Prerequisites:**
+
+- [ ] Build the Stage 9 train-skeleton generator first. Split skeletons before generating variants;
+  use new training shapes for search and dev tasks for candidate selection. Reserve new unseen
+  skeletons for a final generalization check; the existing frozen test split remains reserved
+  for the weight-comparison protocol.
+- [ ] Turn failed development runs into diagnostic records: task input, failed verifier checks,
+  relevant model/tool exchanges, actual versus expected state, and stop reason. Distinguish
+  answer-format failures from missing evidence, incorrect actions and incorrect completion claims.
+  Reference solutions are optional; actionable execution feedback is required for this experiment.
+
+**First pilot:**
+
+- [ ] Optimize one text component at a time: either the behavior rules in `prompts/system.md`
+  or one parser/tool-error feedback message. Target reading before reporting, reacting to tool
+  errors, or accurate stopping/reporting. Keep the other prompts, actor checkpoint, tools,
+  decoding and per-task limits fixed. Whole-agent code/architecture search is deferred;
+  compaction optimization requires a separate pressure-task suite.
+- [ ] Wrap the existing fresh-workspace runner and independent verifier as an
+  `optimize_anything` evaluator returning `(float(passed), diagnostics)`. Keep task expectations,
+  verifier, fault injection and splits outside the candidate's editable surface. Feed training
+  diagnostics to reflection; use full dev validation scores for selection.
+- [ ] Set an explicit rollout/time/cost cap and record it separately from the Stage 9–11 budget
+  before running. Compare the original and selected prompts over matched tasks and multiple
+  seeds. Report task pass rate, regressions, failed-check categories, requests, tokens and time;
+  a small-batch acceptance or lower cost alone does not establish an improvement.
+
+**Output:** an experiment ledger with every proposed prompt, parent, training/validation scores,
+accept/reject decision and cost; versioned candidate/config records; and a paired baseline versus
+selected-candidate report. Report dev-only gains as exploratory. Claim transfer only after the
+reserved new-task check. A null result is valid. Any adopted prompt becomes a new harness version;
+it must not be mixed into the frozen Stage 9–11 weight comparison. Describe this as reflective
+prompt search, not evidence of recursive improvement in the optimizer itself.

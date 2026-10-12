@@ -48,6 +48,9 @@ def build_manifest() -> dict:
                          "tools_sha256": digest(json.dumps(task.tools).encode()),
                          "workspace_sha256": digest(json.dumps(snapshot(workspace),
                                                                sort_keys=True).encode())})
+            if task.split in ("train", "holdout"):
+                tasks[-1]["fault_signal"] = list(task.fault_signal) if task.fault_signal is not None else None
+                tasks[-1]["fault_path"] = task.fault_path
     return {"source_sha256": _source_hashes(),
            "system_prompt_sha256": digest((ROOT / "prompts/system.md").read_bytes()),
            "chat_template_sha256": digest(CHAT_TEMPLATE_PATH.read_bytes()),
@@ -63,20 +66,28 @@ def save_manifest() -> None:
     MANIFEST_PATH.write_text(json.dumps(build_manifest(), indent=2, sort_keys=True) + "\n")
 
 
-def manifest_drift() -> dict[str, tuple]:
+def manifest_drift(path: Path | None = None) -> dict[str, tuple]:
     """Fields that differ from the committed manifest; {} if unfrozen or unchanged.
 
     `git_revision` is recorded for provenance but never compared: committing the frozen
     manifest itself always changes HEAD, so gating on it would make every freeze self-drift
     against its own commit the moment it lands.
     """
-    if not MANIFEST_PATH.exists():
+    path = MANIFEST_PATH if path is None else path
+    if not path.exists():
         return {}
-    frozen = json.loads(MANIFEST_PATH.read_text())
+    frozen = json.loads(path.read_text())
+    if not isinstance(frozen, dict) or not isinstance(frozen.get("tasks"), list):
+        raise ValueError("Expected a manifest object with a tasks list.")
+    if any(not isinstance(task, dict) or not isinstance(task.get("id"), str)
+           for task in frozen["tasks"]):
+        raise ValueError("Each manifest task needs a string id.")
+    if len({task["id"] for task in frozen["tasks"]}) != len(frozen["tasks"]):
+        raise ValueError("Duplicate manifest task ids.")
     current = build_manifest()
     drift = {key: (frozen.get(key), current.get(key)) for key in frozen.keys() | current.keys()
             if key not in ("tasks", "git_revision") and frozen.get(key) != current.get(key)}
-    if {t["id"]: t for t in frozen.get("tasks", [])} != {t["id"]: t for t in current.get("tasks", [])}:
+    if {t["id"]: t for t in frozen["tasks"]} != {t["id"]: t for t in current["tasks"]}:
         drift["tasks"] = "task set or content changed"
     return drift
 

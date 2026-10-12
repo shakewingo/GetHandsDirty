@@ -1,10 +1,10 @@
-"""The Stage 8 skeleton builders: one function pair per skeleton, registered in SKELETONS.
+"""Stage 8 evaluation and Stage 9 training builders, registered in SKELETONS.
 
 Each builder is deterministic in (skeleton name, seed, condition): `bench/run.py` seeds every
 workspace from `random.Random(f"bench:{name}:{seed}:{condition}")` before calling it, so the
 same triple always writes the same files. `solution()` returns the scripted LLM responses a
 correct run would produce, in `evals.llm.LLMResponse` shape, for this module's own gate test
-(`tests/test_bench_skeletons.py`) — nowhere else.
+(`tests/test_bench_skeletons.py` and `tests/test_train_skeleton.py`) — never as teacher data.
 """
 
 from collections.abc import Callable
@@ -499,6 +499,213 @@ def _solution_ambiguous_choice_stop(task: Task) -> list:
     return [call("list_files", path="."), answer("NEED_INPUT")]
 
 
+def _build_inventory_reconciliation(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    rng = _paired_rng(rng, ctx)
+    ids = [f"SKU-{number}" for number in rng.sample(range(100, 999), 6)]
+    inventory = ids[:3]
+    missing = ids[3:3 + ctx.seed % 3]
+    shipment = [ids[2], *missing]
+    rng.shuffle(inventory)
+    rng.shuffle(shipment)
+    records = {"inventory.json": json.dumps({"source": "inventory", "ids": inventory}),
+               "shipment.json": json.dumps({"source": "shipment", "ids": shipment})}
+    for path, record in records.items():
+        _write(root, path, record + "\n")
+    # The verifier searches JSON-serialized observations. Require the complete small
+    # records, escaped as their tool outputs are, rather than filenames in metadata.
+    evidence = tuple(json.dumps(record)[1:-1] for record in records.values())
+    expected = ",".join(sorted(set(shipment) - set(inventory))) or "NONE"
+    fault_message = "Temporary read failure; retry the read."
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+                pair_id=ctx.pair_id, condition=ctx.condition, max_iterations=6,
+                prompt=("Read inventory.json and shipment.json. Report the IDs in shipment's ids "
+                        "list that are absent from inventory's ids list. Reply only with the "
+                        "missing IDs in lexicographic order, separated by commas with no spaces, "
+                        "or NONE if no IDs are missing. Do not change any files."),
+                tools=("read_file",),
+                expect=Expect(answer=Answer(value=expected, format="required"),
+                              evidence=evidence, process=("no_write_attempts",)),
+                fault=Fault("read_file", 1, fault_message) if ctx.condition == "fault" else None,
+                fault_signal=("read_file", fault_message))
+
+
+def _solution_inventory_reconciliation(task: Task) -> list:
+    responses = [call("read_file", path="inventory.json")]
+    if task.condition == "fault":
+        responses.append(call("read_file", path="inventory.json"))
+    return responses + [call("read_file", path="shipment.json"), answer(task.expect.answer.value)]
+
+
+def _record(root: Path, path: str, data: dict) -> str:
+    """Small immutable JSON sources fit in one read; return their literal content."""
+    text = json.dumps(data)
+    _write(root, path, text + "\n")
+    return text
+
+
+def _observed(*records: str) -> tuple[str, ...]:
+    return tuple(json.dumps(record)[1:-1] for record in records)
+
+
+def _paired_rng(rng: random.Random, ctx: BuildContext) -> random.Random:
+    return random.Random(f"stage9:{ctx.name}:{ctx.seed}") if ctx.condition else rng
+
+
+def _solution_read_sources(task: Task) -> list:
+    return [call("read_file", path=path) for path in task.debug["reads"]] + [answer(task.expect.answer.value)]
+
+
+def _build_three_source_join(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    person = f"person-{rng.randint(100, 999)}"
+    team = rng.choice(["east", "west", "north"])
+    email, city = f"{person}@example.test", f"city-{rng.randint(100, 999)}"
+    request = _record(root, "request.json", {"person": person})
+    directory = _record(root, "directory.json", {person: {"email": email, "team": team},
+                                                 "other": {"email": "other@example.test", "team": "elsewhere"}})
+    locations = _record(root, "locations.json", {team: city, "elsewhere": "other-city"})
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+                prompt=("Read request.json to identify the person, directory.json for their email and team, "
+                        "and locations.json for that team's city. Reply only email|city. Do not modify files."),
+                tools=("read_file",),
+                expect=Expect(answer=Answer(f"{email}|{city}", "required"),
+                              evidence=_observed(request, directory, locations), process=("no_write_attempts",)),
+                debug={"reads": ["request.json", "directory.json", "locations.json"]})
+
+
+def _build_eligibility_record_update(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    limit = rng.randint(50, 100)
+    amount = (limit + 1, limit, limit - 1)[ctx.seed % 3]
+    eligible = ctx.seed % 4 != 3
+    policy = _record(root, "policy.json", {"available": limit})
+    request = _record(root, "request.json", {"amount": amount, "eligible": eligible})
+    before = f"owner=person-{rng.randint(100, 999)}\nstatus=PENDING\nnote=keep\n"
+    _write(root, "application.txt", before)
+    allowed = eligible and amount <= limit
+    evidence = _observed(policy, request) + ("status=PENDING",)
+    if allowed:
+        evidence += ("status=APPROVED",)
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+                prompt=("Read policy.json, request.json and application.txt. Approve only when eligible is true "
+                        "and amount does not exceed available. If allowed, change only status to APPROVED, "
+                        "read the record back and reply UPDATED. Otherwise change nothing and reply only BLOCKED."),
+                tools=("read_file", "write_file", "edit_file"),
+                expect=Expect(answer=Answer("UPDATED" if allowed else "BLOCKED", "advisory" if allowed else "required"),
+                              files={"application.txt": before.replace("PENDING", "APPROVED")} if allowed else {},
+                              evidence=evidence, process=() if allowed else ("no_write_attempts",)),
+                claim_tokens=("UPDATED",), debug={"reads": ["policy.json", "request.json", "application.txt"]})
+
+
+def _build_address_conflict_stop(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    address = f"street-{rng.randint(100, 999)}"
+    same = ctx.seed % 2 == 0
+    a = _record(root, "form.json", {"source": "form", "address": address})
+    b = _record(root, "message.json", {"source": "message", "address": address if same else address + "-OTHER"})
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+                prompt=("Read form.json and message.json. Neither source has priority. If their addresses agree, "
+                        "reply only that address; if they disagree, reply only NEED_INPUT. Do not modify any file."),
+                tools=("read_file",), expect=Expect(answer=Answer(address if same else "NEED_INPUT", "required"),
+                              evidence=_observed(a, b), process=("no_write_attempts",)),
+                debug={"reads": ["form.json", "message.json"]})
+
+
+def _build_points_save_recovery(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    rng = _paired_rng(rng, ctx)
+    additions = {"account_a.txt": rng.randint(7, 19), "account_b.txt": rng.randint(7, 19)}
+    request = _record(root, "points.json", {"add": additions})
+    expected, evidence = {}, _observed(request)
+    for index, (path, addition) in enumerate(additions.items()):
+        balance = rng.randint(100 + index * 300, 199 + index * 300)
+        before = f"person=person-{rng.randint(100, 999)}\nbalance={balance}\nnote=keep\n"
+        _write(root, path, before)
+        expected[path] = before.replace(f"balance={balance}", f"balance={balance + addition}")
+        evidence += (f"balance={balance}", f"balance={balance + addition}")
+    message = "Temporary save failure; the record was not changed. Retry the save."
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+                pair_id=ctx.pair_id, condition=ctx.condition,
+                prompt=("Read points.json and both account records. Add each requested amount to that account's "
+                        "balance, preserving all other lines. Read both saved balances back to verify them "
+                        "before replying SAVED. An unsuccessful save does not apply the addition."),
+                tools=("read_file", "write_file"),
+                expect=Expect(answer=Answer("SAVED"), files=expected, evidence=evidence),
+                fault=Fault("write_file", 1 + ctx.seed % 2, message) if ctx.condition == "fault" else None,
+                fault_signal=("write_file", message), claim_tokens=("SAVED",),
+                debug={"reads": ["points.json", *additions]})
+
+
+def _solution_update_records(task: Task) -> list:
+    responses = [call("read_file", path=path) for path in task.debug["reads"]]
+    for index, (path, content) in enumerate(task.expect.files.items(), 1):
+        responses.append(call("write_file", path=path, content=content))
+        if task.fault is not None and task.fault.on_call == index:
+            responses.append(call("write_file", path=path, content=content))
+        responses.append(call("read_file", path=path))
+    return responses + [answer(task.expect.answer.value)]
+
+
+def _build_merge_record_requests(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    city, phone = f"CITY-{rng.randint(100, 999)}", f"PHONE-{rng.randint(100, 999)}"
+    conflict = ctx.seed % 2 == 1
+    a = _record(root, "request_a.json", {"changes": {"city": city}})
+    b = _record(root, "request_b.json", {"changes": {"city": city + "-OTHER"} if conflict else {"phone": phone}})
+    before = f"name=customer-{rng.randint(100, 999)}\ncity=OLD\nphone=000\nnote=keep\n"
+    _write(root, "contact.txt", before)
+    after = before.replace("city=OLD", f"city={city}").replace("phone=000", f"phone={phone}")
+    evidence = _observed(a, b) + ("city=OLD", "phone=000")
+    if not conflict:
+        evidence += (f"city={city}", f"phone={phone}")
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+                prompt=("Read request_a.json, request_b.json and contact.txt. If the requests assign different "
+                        "values to the same field, change nothing and reply only NEED_INPUT. Otherwise merge "
+                        "their changes into the contact record, preserving other lines; read it back and reply UPDATED."),
+                tools=("read_file", "write_file", "edit_file"),
+                expect=Expect(answer=Answer("NEED_INPUT" if conflict else "UPDATED", "required" if conflict else "advisory"),
+                              files={} if conflict else {"contact.txt": after}, evidence=evidence,
+                              process=("no_write_attempts",) if conflict else ()),
+                claim_tokens=("UPDATED",), debug={"reads": ["request_a.json", "request_b.json", "contact.txt"]})
+
+
+def _solution_merge_record_requests(task: Task) -> list:
+    responses = [call("read_file", path=path) for path in task.debug["reads"]]
+    for path, content in task.expect.files.items():
+        responses += [call("write_file", path=path, content=content), call("read_file", path=path)]
+    return responses + [answer(task.expect.answer.value)]
+
+
+def _build_backup_record_lookup(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    rng = _paired_rng(rng, ctx)
+    current, backup = f"LIVE-{rng.randint(100, 999)}", f"ARCHIVE-{rng.randint(100, 999)}"
+    archive = _record(root, "archive.json", {"source": "archive", "tracking": backup})
+    if ctx.condition == "clean":
+        source = _record(root, "current.json", {"source": "current", "tracking": current})
+        reads, expected = ["current.json"], current
+    else:
+        source, reads, expected = archive, ["current.json", "archive.json"], backup
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+                pair_id=ctx.pair_id, condition=ctx.condition,
+                prompt=("Read the tracking value from current.json. If that file is missing, use archive.json "
+                        "instead. Reply only with the observed tracking value. Do not modify files."),
+                tools=("read_file",), expect=Expect(answer=Answer(expected, "required"),
+                              evidence=_observed(source), process=("no_write_attempts",)),
+                fault_signal=("read_file", "Not an existing regular file"), fault_path="current.json",
+                debug={"reads": reads})
+
+
+def _build_unit_complete_total(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    first, second = rng.randint(100, 999), rng.randint(1, 9)
+    unit = rng.choice(["cents", "dollars"])
+    missing = ctx.seed % 2 == 1
+    a = _record(root, "expense_a.json", {"amount": first, "unit": "cents"})
+    b = _record(root, "expense_b.json", {"amount": second, **({} if missing else {"unit": unit})})
+    expected = "NEED_UNIT" if missing else str(first + second * (100 if unit == "dollars" else 1))
+    return Task(id=ctx.id, skeleton=ctx.name, family=ctx.family, split=ctx.split,
+                prompt=("Read expense_a.json and expense_b.json. Sum the amounts in cents (one dollar is 100 "
+                        "cents), using only explicitly stated units. If any unit is missing, change nothing "
+                        "and reply NEED_UNIT; otherwise reply only the integer total. Do not modify files."),
+                tools=("read_file", "calculator"), expect=Expect(answer=Answer(expected, "required"),
+                              evidence=_observed(a, b), process=("no_write_attempts",)),
+                debug={"reads": ["expense_a.json", "expense_b.json"]})
+
+
 @dataclass(frozen=True)
 class Skeleton:
     """A generator: `build` makes one Task from a seed and an optional clean/fault condition;
@@ -573,3 +780,28 @@ SKELETONS.append(Skeleton(name="flaky_write_retry", family="recovery", split="te
 SKELETONS.append(Skeleton(name="ambiguous_choice_stop", family="stopping", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_ambiguous_choice_stop, solution=_solution_ambiguous_choice_stop))
 
 SKELETONS.append(Skeleton(name="missing_file_report", family="stopping", split="test", seeds=(0, 1, 2, 3, 4, 5), recovery=False, build=_build_missing_file_report, solution=_solution_missing_file_report))
+
+SKELETONS.append(Skeleton(
+    name="inventory_reconciliation", family="recovery", split="train", seeds=tuple(range(10)), recovery=True,
+    build=_build_inventory_reconciliation, solution=_solution_inventory_reconciliation))
+
+# Reserved Stage 9 shapes are registered before expanding the training pool.
+SKELETONS.extend([
+    Skeleton("three_source_join", "inspection", "holdout", tuple(range(20)), False,
+             _build_three_source_join, _solution_read_sources),
+    Skeleton("merge_record_requests", "updates", "holdout", tuple(range(20)), False,
+             _build_merge_record_requests, _solution_merge_record_requests),
+    Skeleton("backup_record_lookup", "recovery", "holdout", tuple(range(10)), True,
+             _build_backup_record_lookup, _solution_read_sources),
+    Skeleton("unit_complete_total", "stopping", "holdout", tuple(range(20)), False,
+             _build_unit_complete_total, _solution_read_sources),
+])
+
+SKELETONS.extend([
+    Skeleton("eligibility_record_update", "updates", "train", tuple(range(20)), False,
+             _build_eligibility_record_update, _solution_update_records),
+    Skeleton("address_conflict_stop", "stopping", "train", tuple(range(20)), False,
+             _build_address_conflict_stop, _solution_read_sources),
+    Skeleton("points_save_recovery", "recovery", "train", tuple(range(10)), True,
+             _build_points_save_recovery, _solution_update_records),
+])

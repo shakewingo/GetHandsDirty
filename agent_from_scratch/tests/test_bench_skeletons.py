@@ -109,7 +109,9 @@ class SkeletonGateTests(unittest.TestCase):
         names = [skeleton.name for skeleton in SKELETONS]
         self.assertEqual(len(names), len(set(names)), "duplicate skeleton name")
         splits = json.loads(SPLITS_PATH.read_text())
-        listed = {name for group in (splits["dev"], splits["test"], splits["train"]) for name in group}
+        groups = [splits[key] for key in ("dev", "test", "train", "holdout")]
+        listed = {name for group in groups for name in group}
+        self.assertEqual(len(listed), sum(map(len, groups)), "skeleton shared across splits")
         self.assertEqual(set(names), listed)
         for skeleton in SKELETONS:
             self.assertIn(skeleton.name, splits[skeleton.split])

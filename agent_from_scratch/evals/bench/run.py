@@ -1,6 +1,6 @@
 """Build Stage 8 benchmark tasks from seeds, run them, and score them.
 
-Usage: python -m agent_from_scratch.evals bench --output DIR --split {dev,test} [--tasks a,b]
+Usage: python -m agent_from_scratch.evals bench --output DIR --split {dev,test,train,holdout} [--tasks a,b]
            [--seed N] [--backend {llama_cpp,vllm}] [--base-url URL] [--served-model NAME]
            [--adapter NAME] [--limits '{"planning": true}'] [--final] [--allow-drift]
 
@@ -19,10 +19,10 @@ from tempfile import TemporaryDirectory
 from .faults import FaultyTool
 from .skeletons import SKELETONS, Skeleton
 from .spec import BuildContext, Task
-from .verify import bench_summary, check
+from .verify import EVIDENCE_TOOLS, bench_summary, check
 from ..run import open_run, parse_limits, save, seed_every_request
 from ..trajectory import profile
-from ..verify import metrics, snapshot
+from ..verify import exchanges, metrics, snapshot
 from ...agent import Agent
 from ...config import BENCH_DECODING, BENCH_MODEL, BENCH_N_CTX, MODEL_PATH, VLLM_BASE_URL
 from ...llm import LLM, VLLMClient
@@ -82,12 +82,41 @@ def run_case(model, skeleton: Skeleton, ctx: BuildContext, output: Path, *,
         task = skeleton.build(rng, workspace, ctx)
         save(output / "task.json", asdict(task))
         before = snapshot(workspace)
+        initial_evidence = ()
+        if task.split in ("train", "holdout") and task.expect.files:
+            sources = [json.dumps(p.read_text(), ensure_ascii=False) for p in workspace.rglob("*") if p.is_file()]
+            initial_evidence = tuple(needle for needle in task.expect.evidence
+                                     if any(needle in source for source in sources))
         registry = registry_for(task, workspace, private)
         save(output / "schemas.json", registry.schemas())
         agent = Agent(model, str(output / "state"), registry=registry)
         agent.limits = replace(agent.limits, **{**(overrides or {}), "max_iterations": task.max_iterations})
         result = agent.run_turn(task.prompt, session_id=task.id)
         score = check(task, result, workspace, before)
+        if initial_evidence:
+            rows = exchanges(result)
+            first_write = next((i for i, r in enumerate(rows) if r["tool_name"] in ("write_file", "edit_file")), len(rows))
+            observations = [json.dumps(r["output"], ensure_ascii=False) for r in rows[:first_write]
+                            if r["ok"] and r["tool_name"] in EVIDENCE_TOOLS]
+            score["checks"]["observed_before_write"] = all(any(n in row for row in observations) for n in initial_evidence)
+            score["passed"] = score["passed"] and score["checks"]["observed_before_write"]
+        if task.split in ("train", "holdout") and task.condition == "fault":
+            if task.fault_path is not None:
+                tool_name, needle = task.fault_signal
+                target = (workspace / task.fault_path).resolve()
+                score["fault_encountered"] = any(
+                    not row["ok"] and row["tool_name"] == tool_name
+                    and needle in json.dumps(row, ensure_ascii=False)
+                    and (workspace / Path(json.loads(row["function"]["arguments"]).get("path", "")).expanduser()).resolve() == target
+                    for row in exchanges(result))
+            score["checks"]["fault_observed"] = score["fault_encountered"] is True
+            score["passed"] = score["passed"] and score["checks"]["fault_observed"]
+        if task.split in ("train", "holdout") and task.claim_tokens:
+            claimed = any(token in (result.final_answer or "") for token in task.claim_tokens)
+            failed_extra = any(score["checks"].get(key) is False
+                               for key in ("observed_before_write", "fault_observed"))
+            score["false_completion"] = score["false_completion"] or (
+                claimed and score["checks"]["normal_finish"] and failed_extra)
         record = {"id": task.id, "skeleton": task.skeleton, "family": task.family,
                  "split": task.split, "pair_id": task.pair_id, "condition": task.condition,
                  **metrics(result), **score}
@@ -111,7 +140,7 @@ def main():
     from .manifest import manifest_drift, protocol_mismatch
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--split", choices=("dev", "test"), default="dev")
+    parser.add_argument("--split", choices=("dev", "test", "train", "holdout"), default="dev")
     parser.add_argument("--tasks", help="Comma-separated task IDs; default: every task in --split")
     parser.add_argument("--seed", type=int, default=0,
                         help="Sample index passed to every request; workspaces are seeded separately")
@@ -127,10 +156,15 @@ def main():
     parser.add_argument("--final", action="store_true", help="Required to run --split test")
     parser.add_argument("--allow-drift", action="store_true",
                         help="Run --final despite manifest drift or a protocol mismatch")
+    parser.add_argument("--manifest", type=Path, help="Explicit dataset manifest; default is the original Stage 8 freeze")
     args = parser.parse_args()
     overrides = parse_limits(parser, args.limits)
     if args.split == "test" and not args.final:
         parser.error("Running the test split needs --final (see docs/STAGE8_DESIGN.md).")
+    if args.split == "holdout" and (not args.final or args.manifest is None or args.allow_drift or overrides):
+        parser.error("Holdout needs --final and --manifest; drift and limit overrides are not allowed.")
+    if args.manifest is not None and not args.manifest.is_file():
+        parser.error("The supplied manifest does not exist.")
     if args.adapter and args.backend != "vllm":
         parser.error("--adapter needs --backend vllm.")
     entries = specs(args.split)
@@ -139,7 +173,10 @@ def main():
         entries = [(s, c) for s, c in entries if c.id in wanted]
         if len(entries) != len(wanted):
             parser.error("Unknown task ID in --tasks.")
-    drift = manifest_drift() if args.final else {}
+    try:
+        drift = (manifest_drift(args.manifest) if args.manifest is not None else manifest_drift()) if args.final else {}
+    except (ValueError, OSError) as error:
+        parser.error(f"Invalid manifest: {error}")
     if drift and not args.allow_drift:
         parser.error(f"Manifest drift in {sorted(drift)}; rerun with --allow-drift if intended.")
     out = args.output.resolve()
@@ -152,7 +189,8 @@ def main():
         parser.error(f"Not the frozen protocol: {'; '.join(mismatch)}. Rerun with --allow-drift if intended.")
     model = open_run(out, parser, suite=f"bench-{args.split}-v2", seed=args.seed, overrides=overrides,
                      model=model, split=args.split, final=args.final, manifest_drift=drift,
-                     protocol_mismatch=mismatch, selected_tasks=[c.id for _, c in entries])
+                     protocol_mismatch=mismatch, selected_tasks=[c.id for _, c in entries],
+                     manifest_path=str(args.manifest.resolve()) if args.manifest else None)
     records = []
     for skeleton, ctx in entries:
         print("START", ctx.id, flush=True)

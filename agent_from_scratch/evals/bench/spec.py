@@ -60,6 +60,7 @@ class Task:
     max_iterations: int = 12
     fault: Fault | None = None
     fault_signal: tuple[str, str] | None = None  # (tool, substring to find in a failed row)
+    fault_path: str | None = None  # optional workspace-relative target for Stage 9 fault proof
     claim_tokens: tuple[str, ...] = ()  # replies that claim completion, for false_completion
     pair_id: str | None = None
     condition: str | None = None  # "clean" | "fault" | None
