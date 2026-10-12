@@ -1,7 +1,7 @@
 """Turn verifier-passed train rollouts into (prompt, completion) SFT examples for one track.
 
 Usage: python -m agent_from_scratch.evals export --track {teacher,rft} --output DIR
-           [--max-per-task K] [--pilot] RUN_DIR [RUN_DIR ...]
+           [--max-per-task K] [--pilot] [--flawed-turns {reject,drop}] RUN_DIR [RUN_DIR ...]
 
 Each example is one model request: `prompt` is the recorded input rendered by the inference
 renderer, `completion` is the assistant turn that followed, as the template writes it. Only
@@ -71,42 +71,77 @@ def examples_from_trace(trace: dict, template) -> list[dict]:
     return examples
 
 
-def rejection(record: dict, task: dict, trace: dict) -> str | None:
+def flawed_turns(record: dict, task: dict, trace: dict) -> dict[int, str]:
+    """Request index -> why that turn must not be a target, in a rollout the verifier passed.
+
+    `own_error`: the turn holds a failed tool call of the model's own making, which is one that
+    is neither the injected fault nor a call skipped after an earlier failure in its batch.
+    `loose_answer`: the final answer is not exactly the requested value. The verifier accepts
+    that on tasks whose answer format is advisory.
+
+    Args:
+        record: the task's entry in results.json; `checks.format_exact` is read from it.
+        task: the task's task.json, read for `fault_signal` only.
+        trace: the run trace.
+    """
+    signal = task.get("fault_signal")
+    failed = set()
+    for message in trace["messages"]:
+        if message["role"] != "tool":
+            continue
+        result = json.loads(message["content"])
+        # Recovering from the injected fault is a target; the model's own slips are not.
+        injected = (bool(signal) and result["tool_name"] == signal[0]
+                    and signal[1] in (result["error_message"] or ""))
+        if not result["ok"] and result["error_code"] != "skipped" and not injected:
+            failed.add(message["tool_call_id"])
+    requests = trace["model_requests"]
+    flawed = {index: "own_error" for index, request in enumerate(requests)
+              if failed.intersection(request["call_ids"])}
+    if record["checks"].get("format_exact") is False and requests and not requests[-1]["call_ids"]:
+        flawed.setdefault(len(requests) - 1, "loose_answer")
+    return flawed
+
+
+def rejection(record: dict, task: dict, trace: dict, *, flawed: str = "reject") -> str | None:
     """Rejection sampling - Why a rollout may not become training data; None when it may.
 
     Args:
         record: the task's entry in results.json (verifier outcome plus metrics()).
         task: the task's task.json, read for `fault_signal` only.
         trace: the run trace.
+        flawed: "reject" refuses a rollout that has any flawed turn (see `flawed_turns`);
+            "drop" accepts it, and the caller leaves those turns out of the examples.
     """
     if not record["passed"]:
         return "failed"
-    signal = task.get("fault_signal")
-
-    def injected(error: dict) -> bool:
-        return (bool(signal) and error["tool_name"] == signal[0]
-                and signal[1] in (error["error_message"] or ""))
-    # Recovering from the injected fault is a target; the model's own slips are not.
-    if (record["parse_errors"] or record["invalid_calls"] or record["stuck_reminders"]
-            or any(error["error_code"] != "skipped" and not injected(error)
-                   for error in record["tool_errors"])):
+    reasons = set(flawed_turns(record, task, trace).values()) if flawed == "reject" else set()
+    # A parse error or a stuck reminder puts runtime feedback into the history, so neither
+    # mode keeps such a rollout.
+    if record["parse_errors"] or record["stuck_reminders"] or "own_error" in reasons:
         return "own_error"
     requests = trace["model_requests"]
     if any(request["purpose"] != "agent" or request["status"] != "completed"
            or request["input_messages"] != trace["messages"][:request["input_message_count"]]
            for request in requests):
         return "edited_view"
+    if "loose_answer" in reasons:
+        return "loose_answer"
     return None
 
 
 def select(trajectories: list[dict], max_per_task: int) -> list[dict]:
-    """Distinct trajectories per task, shortest first, at most `max_per_task` each.
+    """Distinct trajectories per task, at most `max_per_task` each: fewest own-error turns first
+    (those stay in the history of later examples), then fewest dropped turns, then shortest.
 
     Each trajectory has at least `task_id`, `seed`, `run_dir` and `examples`.
     """
+    def rank(trajectory: dict) -> tuple:
+        dropped = [example.get("dropped") for example in trajectory["examples"]]
+        return (trajectory["task_id"], dropped.count("own_error"), sum(map(bool, dropped)),
+                len(dropped), trajectory["seed"], trajectory["run_dir"])
     kept, distinct = [], {}
-    for trajectory in sorted(trajectories, key=lambda t: (t["task_id"], len(t["examples"]),
-                                                          t["seed"], t["run_dir"])):
+    for trajectory in sorted(trajectories, key=rank):
         actions = tuple(example["completion"] for example in trajectory["examples"])
         seen = distinct.setdefault(trajectory["task_id"], set())
         if actions in seen or len(seen) >= max_per_task:
@@ -116,16 +151,21 @@ def select(trajectories: list[dict], max_per_task: int) -> list[dict]:
     return kept
 
 
-def collect(run_dirs: list[Path], track: str, *, max_per_task: int = 2,
-            pilot: bool = False) -> tuple[list[dict], dict]:
-    """Read bench run directories and return (examples, metadata) for one track."""
+def collect(run_dirs: list[Path], track: str, *, max_per_task: int = 2, pilot: bool = False,
+            flawed: str = "reject") -> tuple[list[dict], dict]:
+    """Read bench run directories and return (examples, metadata) for one track.
+
+    `flawed` is "reject" or "drop": what to do with a verified rollout that has flawed turns
+    (see `flawed_turns`), refuse the rollout or leave only those turns out.
+    """
     text = CHAT_TEMPLATE_PATH.read_text(encoding="utf-8")
     template, template_sha256 = compile_chat_template(text), sha256(text.encode("utf-8")).hexdigest()
     names = [run.name for run in run_dirs]
     if len(set(names)) != len(names):
         raise ValueError("Run directories must have distinct names; provenance records the name.")
     sources, trajectories, rollouts = [], [], set()
-    rejected = dict.fromkeys(("failed", "own_error", "edited_view"), 0)
+    rejected = dict.fromkeys(("failed", "own_error", "edited_view", "loose_answer"), 0)
+    dropped = dict.fromkeys(("own_error", "loose_answer"), 0)
     for run in run_dirs:
         metadata = json.loads((run / "metadata.json").read_text(encoding="utf-8"))
         records = json.loads((run / "results.json").read_text(encoding="utf-8"))
@@ -151,14 +191,16 @@ def collect(run_dirs: list[Path], track: str, *, max_per_task: int = 2,
                                .read_text(encoding="utf-8"))
             if trace["schema_version"] != 5:
                 raise ValueError(f"{run.name}/{record['id']}: trace schema {trace['schema_version']}, not 5.")
-            reason = rejection(record, task, trace)
+            reason = rejection(record, task, trace, flawed=flawed)
             if reason is not None:
                 rejected[reason] += 1
                 continue
+            drop = flawed_turns(record, task, trace) if flawed == "drop" else {}
             trajectories.append({"task_id": record["id"], "skeleton": record["skeleton"],
                                  "family": record["family"], "condition": record["condition"],
                                  "seed": seed, "run_dir": run.name, "run_id": record["run_id"],
-                                 "examples": examples_from_trace(trace, template)})
+                                 "examples": [{**example, "dropped": drop.get(example["request_index"])}
+                                              for example in examples_from_trace(trace, template)]})
     kept = select(trajectories, max_per_task)
     examples, before, histories, by_skeleton = [], 0, set(), {}
     for trajectory in kept:
@@ -167,13 +209,21 @@ def collect(run_dirs: list[Path], track: str, *, max_per_task: int = 2,
         group["tasks"].add(trajectory["task_id"])
         provenance = {"track": track, "pilot": pilot,
                       **{key: trajectory[key] for key in ("task_id", "skeleton", "family", "condition",
-                                                          "seed", "run_dir", "run_id")}}
+                                                          "seed", "run_dir", "run_id")},
+                      # Turns of this rollout that are left out. An own_error turn is still in
+                      # the prompt of every later example, as history.
+                      "dropped_turns": [example["request_index"] for example in trajectory["examples"]
+                                        if example["dropped"]]}
         history = ()
         for example in trajectory["examples"]:
-            before += 1
             # Prompts never repeat across rollouts (each names its own temporary workspace), so
-            # a shared prefix is recognised by the task and the actions taken so far.
+            # a shared prefix is recognised by the task and the actions taken so far. A dropped
+            # turn stays in that history: what follows it was decided after it.
             history += (example["completion"],)
+            if example["dropped"]:
+                dropped[example["dropped"]] += 1
+                continue
+            before += 1
             if (trajectory["task_id"], history) in histories:
                 continue
             histories.add((trajectory["task_id"], history))
@@ -184,11 +234,11 @@ def collect(run_dirs: list[Path], track: str, *, max_per_task: int = 2,
                                             "raw_matches_canonical": example["raw_matches_canonical"]}})
     funnel = {"rollouts": len(rollouts), "rejected": rejected, "eligible": len(trajectories),
               "kept_trajectories": len(kept), "tasks_covered": len({t["task_id"] for t in kept}),
-              "examples_before_dedup": before, "examples": len(examples),
+              "dropped_turns": dropped, "examples_before_dedup": before, "examples": len(examples),
               "by_skeleton": {name: {"trajectories": group["trajectories"], "tasks": len(group["tasks"])}
                               for name, group in sorted(by_skeleton.items())}}
     return examples, {"track": track, "pilot": pilot, "max_per_task": max_per_task,
-                      "chat_template_sha256": template_sha256, "target": "canonical",
+                      "flawed_turns": flawed, "chat_template_sha256": template_sha256, "target": "canonical",
                       "sources": sources, "funnel": funnel}
 
 
@@ -202,6 +252,10 @@ def main():
                         help="Distinct trajectories kept per task, shortest first")
     parser.add_argument("--pilot", action="store_true",
                         help="Accept another backend's runs and mark every example as a pilot, if pilot==True, this dataset is a pipeline check not a real training data, it allows to run using llama.cpp as backend locally")
+    parser.add_argument("--flawed-turns", choices=("reject", "drop"), default="reject",
+                        help="A verified rollout with the model's own failed tool call, or a final answer "
+                             "that is not exactly the requested value: reject the rollout, or drop only "
+                             "those turns")
     args = parser.parse_args()
     out = args.output.resolve()
     if out.exists():
@@ -210,7 +264,7 @@ def main():
         parser.error("Evidence must be outside the source package.")
     try:
         examples, metadata = collect(args.runs, args.track, max_per_task=args.max_per_task,
-                                     pilot=args.pilot)
+                                     pilot=args.pilot, flawed=args.flawed_turns)
     except (ValueError, OSError, KeyError) as error:
         parser.error(f"{type(error).__name__}: {error}")
     if not examples:

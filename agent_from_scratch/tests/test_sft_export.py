@@ -10,13 +10,15 @@ from unittest.mock import patch
 
 from agent_from_scratch.config import CHAT_TEMPLATE_PATH
 from agent_from_scratch.evals.bench.run import run_case, specs
-from agent_from_scratch.evals.bench.skeletons import call
+from agent_from_scratch.evals.bench.skeletons import answer, call
 from agent_from_scratch.evals.run import save
 from agent_from_scratch.evals.sft import export
-from agent_from_scratch.evals.sft.export import collect, examples_from_trace, rejection, select
-from agent_from_scratch.llm import (LLM, ResponseError, ResponseErrorCode, compile_chat_template,
-                                    render_chat)
+from agent_from_scratch.evals.sft.export import (collect, examples_from_trace, flawed_turns, rejection,
+                                                 select)
+from agent_from_scratch.llm import (LLM, LLMResponse, ResponseError, ResponseErrorCode, ResponseType,
+                                    compile_chat_template, render_chat)
 from agent_from_scratch.tests.test_bench_skeletons import _model
+from agent_from_scratch.tools.base import ToolCall
 
 TEMPLATE = compile_chat_template(CHAT_TEMPLATE_PATH.read_text(encoding="utf-8"))
 END = "<|im_end|>"
@@ -155,6 +157,57 @@ class RejectionTests(unittest.TestCase):
         self.assertEqual(rejection(record, task, trace), "edited_view")
 
 
+def batch(*paths):
+    """One turn that reads several paths at once."""
+    return LLMResponse("assistant", "", ResponseType.tool_call,
+                       tool_calls=[ToolCall("read_file", {"path": path}) for path in paths])
+
+
+def wrong_first(solution):
+    """The scripted solution after one read of a file that does not exist."""
+    return [call("read_file", path="no-such-file.json"), *solution]
+
+
+class FlawedTurnTests(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(self.enterContext(TemporaryDirectory()))
+
+    def test_only_the_turn_holding_the_models_own_failed_call_is_flawed(self):
+        # The shape seen in teacher data: one batch with a good read and a read of a directory.
+        record, task, trace = rollout(
+            self.root, "inventory_reconciliation-0-clean",
+            script=lambda solution: [batch("inventory.json", "."), *solution[1:]])
+        self.assertTrue(record["passed"], record["checks"])
+        self.assertEqual(flawed_turns(record, task, trace), {0: "own_error"})
+        self.assertEqual(rejection(record, task, trace), "own_error")
+        self.assertIsNone(rejection(record, task, trace, flawed="drop"))
+
+    def test_the_injected_fault_and_a_call_skipped_after_it_are_not_flaws(self):
+        # The fault hits the first call of the batch, so the second is skipped.
+        record, task, trace = rollout(
+            self.root, "inventory_reconciliation-0-fault",
+            script=lambda solution: [batch("inventory.json", "shipment.json"), *solution[1:]])
+        self.assertTrue(record["passed"], record["checks"])
+        self.assertEqual([error["error_code"] for error in record["tool_errors"]],
+                         ["execution_error", "skipped"])
+        self.assertEqual(flawed_turns(record, task, trace), {})
+        self.assertIsNone(rejection(record, task, trace))
+
+    def test_a_loose_final_answer_flaws_the_last_turn_only(self):
+        loose = lambda solution: [*solution[:-1], answer(solution[-1].content + "\n\nBoth balances verified.")]
+        record, task, trace = rollout(self.root, "points_save_recovery-0-clean", script=loose)
+        self.assertTrue(record["passed"], record["checks"])
+        self.assertEqual(flawed_turns(record, task, trace), {record["actor_requests"] - 1: "loose_answer"})
+        self.assertEqual(rejection(record, task, trace), "loose_answer")
+        self.assertIsNone(rejection(record, task, trace, flawed="drop"))
+
+    def test_a_parse_error_rejects_the_whole_rollout_in_either_mode(self):
+        record, task, trace = rollout(self.root, "inventory_reconciliation-0-clean",
+                                      before=[ResponseError(ResponseErrorCode.INVALID_TOOL_CALL)])
+        self.assertTrue(record["passed"], record["checks"])
+        self.assertEqual(rejection(record, task, trace, flawed="drop"), "own_error")
+
+
 def trajectory(task_id, seed, completions, run_dir="r"):
     return {"task_id": task_id, "seed": seed, "run_dir": run_dir,
             "examples": [{"completion": text} for text in completions]}
@@ -173,6 +226,20 @@ class SelectTests(unittest.TestCase):
 
     def test_the_same_actions_on_different_tasks_are_both_kept(self):
         self.assertEqual(len(select([trajectory("t", 0, ["a"]), trajectory("u", 0, ["a"])], 1)), 2)
+
+    def test_a_trajectory_without_dropped_turns_comes_first(self):
+        flawed = trajectory("t", 0, ["x", "a"])
+        flawed["examples"][0]["dropped"] = "own_error"
+        kept = select([flawed, trajectory("t", 1, ["a", "b", "c"])], 1)
+        self.assertEqual([t["seed"] for t in kept], [1])
+
+    def test_a_dropped_answer_ranks_before_a_dropped_failure(self):
+        # A failed call stays in the history of every later example; a loose answer touches nothing else.
+        loose = trajectory("t", 0, ["a", "b", "x"])
+        loose["examples"][2]["dropped"] = "loose_answer"
+        failed = trajectory("t", 1, ["x", "a"])
+        failed["examples"][0]["dropped"] = "own_error"
+        self.assertEqual([t["seed"] for t in select([failed, loose], 1)], [0])
 
 
 class CollectTests(unittest.TestCase):
@@ -224,6 +291,32 @@ class CollectTests(unittest.TestCase):
                                   self.run_dir("t1", 1, tasks=task, script=again)], "rft",
                                  max_per_task=1)[1]["funnel"]["examples"], 3)
 
+    def test_drop_mode_keeps_a_flawed_rollout_without_its_flawed_turn(self):
+        run = self.run_dir("s0", 0, tasks=self.TASKS[:1], script=wrong_first)
+        examples, metadata = collect([run], "rft")
+        self.assertEqual((examples, metadata["funnel"]["rejected"]["own_error"], metadata["flawed_turns"]),
+                         ([], 1, "reject"))
+        examples, metadata = collect([run], "rft", flawed="drop")
+        funnel = metadata["funnel"]
+        self.assertEqual((metadata["flawed_turns"], funnel["eligible"], funnel["examples_before_dedup"],
+                          funnel["examples"]), ("drop", 1, 3, 3))
+        self.assertEqual(funnel["dropped_turns"], {"own_error": 1, "loose_answer": 0})
+        self.assertEqual([e["provenance"]["request_index"] for e in examples], [1, 2, 3])
+        self.assertEqual([e["provenance"]["dropped_turns"] for e in examples], [[0]] * 3)
+        # The failed call stays in the history the later turns saw; it is never a target.
+        self.assertIn("no-such-file.json", examples[0]["prompt"])
+        self.assertFalse(any("no-such-file.json" in e["completion"] for e in examples))
+
+    def test_a_flawed_trajectory_ranks_after_a_clean_one_and_is_not_its_duplicate(self):
+        task = self.TASKS[:1]
+        runs = [self.run_dir("s0", 0, tasks=task, script=wrong_first), self.run_dir("s1", 1, tasks=task)]
+        examples, metadata = collect(runs, "rft", flawed="drop")
+        self.assertEqual((metadata["funnel"]["kept_trajectories"], metadata["funnel"]["examples"]), (2, 6))
+        self.assertEqual([e["provenance"]["seed"] for e in examples], [1, 1, 1, 0, 0, 0])
+        self.assertEqual([e["provenance"]["dropped_turns"] for e in examples], [[]] * 3 + [[0]] * 3)
+        only = collect(runs, "rft", flawed="drop", max_per_task=1)[0]
+        self.assertEqual({e["provenance"]["seed"] for e in only}, {1})
+
     def test_only_the_train_split_can_become_training_data(self):
         for split in ("dev", "test", "holdout"):
             with self.subTest(split=split), self.assertRaisesRegex(ValueError, "train"):
@@ -264,6 +357,13 @@ class CollectTests(unittest.TestCase):
             export.main()
         self.assertEqual(error.exception.code, 2)
         self.assertEqual((out / "examples.jsonl").read_text().splitlines(), lines)
+
+    def test_command_takes_the_flawed_turn_mode(self):
+        run, out = self.run_dir("s0", 0), self.root / "sft"
+        argv = ["export", "--track", "rft", "--flawed-turns", "drop", "--output", str(out), str(run)]
+        with patch.object(sys, "argv", argv), patch("builtins.print"):
+            export.main()
+        self.assertEqual(json.loads((out / "metadata.json").read_text())["flawed_turns"], "drop")
 
 
 if __name__ == "__main__":
