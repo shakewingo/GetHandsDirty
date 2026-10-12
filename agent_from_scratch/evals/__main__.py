@@ -6,6 +6,7 @@ Commands:
   freeze    write/update the Stage 8 benchmark's frozen manifest (no model)
   aggregate combine k sampled bench runs into pass@1 / pass^k / pass@k      (no model)
   dataset   generate Stage 9 train/holdout fixtures; --check runs scripted gates (no model)
+  export    turn verifier-passed train rollouts into Stage 9 SFT examples     (no model)
   compare   profile one run, or pair two runs by task ID          (no model)
 
 Each command takes --help. Start with evals/README.md.
@@ -16,7 +17,8 @@ import sys
 
 COMMANDS = {"pressure": "pressure", "bench": "bench.run",
            "freeze": "bench.manifest",
-           "aggregate": "bench.aggregate", "compare": "trajectory", "dataset": "bench.dataset"}
+           "aggregate": "bench.aggregate", "compare": "trajectory", "dataset": "bench.dataset",
+           "export": "sft.export"}
 
 
 def main():
