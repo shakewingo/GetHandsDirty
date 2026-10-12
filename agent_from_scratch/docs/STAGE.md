@@ -724,7 +724,7 @@ stopping (0.00 on test), reading before answering, and acting on error feedback.
 
 - [x] Write the train-skeleton task generator, with fault injection for recovery cases. Reserve
   the test skeletons first.
-- [ ] Collect data along two tracks, each recorded with provenance:
+- [x] Collect data along two tracks, each recorded with provenance:
   (a) teacher distillation, where a stronger API model runs **inside our harness**;
   (b) rejection-sampling fine-tuning (RFT/STaR), which samples N base rollouts per task.
   Keep only verifier-passed trajectories, then deduplicate. Export from the schema-5 trace
@@ -814,6 +814,106 @@ completion establishes a reliable small-scale environment, not actor capability 
 and inspect request-level input/assistant targets before scaling Item 2. Do not tune against
 the reserved held-out tasks. Teacher collection, RFT export and training remain pending.
 
+### Item 2 complete — teacher and RFT trajectories as SFT examples (October 12, 2026)
+
+Two tracks ran the 80 train tasks inside the ordinary harness, tools and verifier, and a new
+`export` command turned the verifier-passed rollouts into `(prompt, completion)` examples, one
+per model request. The prompt is the recorded schema-5 `input_messages` rendered by the
+inference renderer (`llm.render_chat`, now usable with and without the generation prompt), and
+the completion is the assistant turn that followed, as the template writes it. Every example
+names its track, task, sample, run directory, run ID and request index. Design, decisions and
+step results: [STAGE9_ITEM2_PLAN.md](STAGE9_ITEM2_PLAN.md). Implementation was delegated to AI
+for this item at the user's explicit request, apart from the Step 1 renderer change.
+
+**Teacher track.** The teacher is DeepSeek-V4.1-Flash (API model ID `deepseek-flash`, thinking
+on at low effort for the main pass); Claude Opus 5.5 was the first choice and was dropped for
+cost. It runs behind
+`bench --backend teacher`, which refuses every split but train. Its context budget is counted in
+student tokens: the request rendered with the project template and tokenized with the Qwen3-4B
+vocabulary from a local GGUF, so harness triggers sit exactly where the student's would.
+
+**RFT track.** Eight samples per task of the base checkpoint on vLLM, with the Stage 8 server
+command unchanged, on one rented A40.
+
+```sh
+GGUF=<Qwen3-4B-Instruct-2507 Q8_0 GGUF>; RUN=outputs/stage9-item2-20261012
+TMPDIR=/tmp python -m agent_from_scratch.evals bench --backend teacher --split train --seed 0 \
+  --student-gguf $GGUF --output $RUN-teacher-s0        # then s1 (effort high) and s2 (thinking off) on 18 tasks
+python -m agent_from_scratch.evals export --track teacher --flawed-turns drop --max-per-task 1 \
+  --output $RUN-sft-teacher-v3 $RUN-teacher-s0 $RUN-teacher-s1 $RUN-teacher-s2
+# On the pod, per seed 0..7:
+python -m agent_from_scratch.evals bench --backend vllm --split train --seed $s --output outputs/rft-train-s$s
+python -m agent_from_scratch.evals export --track rft --flawed-turns drop \
+  --output $RUN-sft-rft $RUN-rft/rft-train-s?
+```
+
+| Skeleton | Teacher: tasks | Teacher: examples | Base pass@1 | Base pass@8 | RFT: tasks | RFT: examples |
+|---|---|---|---|---|---|---|
+| `inventory_reconciliation` | 20 of 20 | 59 | 0.044 | 0.15 | 3 of 20 | 6 |
+| `eligibility_record_update` | 20 of 20 | 60 | 0.156 | 0.25 | 5 of 20 | 10 |
+| `address_conflict_stop` | 20 of 20 | 40 | 0.988 | 1.00 | 20 of 20 | 40 |
+| `points_save_recovery` | 20 of 20 | 96 | 0.006 | 0.05 | 1 of 20 | 7 |
+| total | 80 of 80 | **255** | 0.298 | 0.36 | 29 of 80 | **63** |
+
+**Funnels.** Teacher: 116 rollouts over three passes, all passed by the verifier, none rejected;
+80 trajectories kept (one per task), 15 own-error turns and 4 loose final answers dropped, 255
+examples. RFT: 640 rollouts, 449 failed the verifier, 191 eligible, 29 distinct trajectories
+kept, 1 loose final answer dropped, 63 examples. Coverage of the 80 tasks: both tracks 29,
+teacher only 51, RFT only 0, neither 0.
+
+**What the evidence shows.**
+
+- The teacher passed 80 of 80 on the first pass. The base model's mean pass@1 is 0.298, and
+  outside `address_conflict_stop` it is at most 0.16. Its failures are concentrated: every failed
+  `inventory_reconciliation` rollout misses the exact answer format, and every failed
+  `points_save_recovery` rollout leaves the files wrong.
+- Token identity holds for RFT: measured and served prompt tokens differ on 0 of 1,737
+  requests, and the canonical target equals the sampled text on 62 of 63 examples (the one
+  difference is a blank line before a `<tool_call>` block).
+- Eleven tasks have mixed outcomes across the eight samples, the first evidence for Stage 10's
+  GRPO precondition.
+
+**A filter decision made on evidence.** The first teacher export rejected any rollout holding
+the model's own failed tool call, and covered 5 of 20 `points_save_recovery` tasks: the task
+does not name the account files, and the teacher explores with `read_file` on `"."`, which
+fails. Resampling at higher effort and with thinking off did not change the habit. `export` now
+takes `--flawed-turns drop`, which keeps a verified rollout and leaves out only the turn holding
+the failed call, or a final answer that is not format-exact. The rule names no model, tool or
+skeleton, and both datasets use it. The default remains `reject`.
+
+**Cost.** Teacher: about \$0.07, computed as usage times DeepSeek's off-peak list price (not an
+invoice). GPU: \$0.34 for one A40, read from the account balance. Both are far inside the
+\$10–25 trajectory-data line and the GPU line of the \$100 budget.
+
+**Known limits.**
+
+- 71 teacher examples (28%), all `points_save_recovery`, carry the teacher's failed `"."` read
+  in their prompt as history. It is never a target, but the student's own history at inference
+  will usually not contain it. The first step of that skeleton is demonstrated 5 times only, and
+  4 of its tasks have no final-answer example.
+- 74 of 179 teacher tool-call targets carry a sentence of narration before the call; it was kept.
+- The RFT set is small and lopsided: 40 of its 63 examples are the skeleton the base model
+  already passes.
+- The teacher's context budget is in student tokens while its `usage` is the teacher's own
+  count (6.8% higher on the full pass). The teacher ran on the Mac (`/private/tmp/...`
+  workspace paths in tool descriptions) and RFT on Linux (`/tmp/...`).
+- Each teacher task has one trajectory; nothing here measures teacher variance.
+
+**Manifests.** Measured with `manifest_drift` at `11e4205`: the Item 1 dataset manifest has
+drifted in `source_sha256` only (`llm.py`, `evals/bench/run.py`, `evals/__main__.py` changed;
+the three `evals/sft/` files added). The Stage 8 manifest also reports `splits_sha256` and
+`tasks`, which date from Item 1. Neither was refreshed. The versioned freeze happens once,
+before the holdout comparison in Item 3. No dev, test or holdout task was run or exported in
+Item 2.
+
+Evidence: `outputs/stage9-item2-20261012-teacher-s{0,1,2}/`, `-rft/rft-train-s{0..7}/` and
+`-rft/rft-train-aggregate.json` (runs); `-sft-teacher-v3/` and `-sft-rft/` (datasets, each
+`examples.jsonl` and `metadata.json`). 388 unit tests pass (342 before Item 2).
+
+**Next smallest gap:** tokenize `prompt + completion` as one string, mask everything but the
+completion, and run the overfit → save → reload smoke test on a handful of teacher examples
+before any QLoRA pilot.
+
 ## Stage 10 — expert iteration and outcome learning · draft, conditional
 
 **Primary: 2–3 rounds of expert iteration.** M0 samples → the verifier filters → SFT produces M1
@@ -838,13 +938,6 @@ uncertainty, regressions and limitations. Do not promise gains, and do not treat
 improvement as broad agent generalization. Package setup, fixture reset/eval, adapter reload, and
 a demo covering tools → recovery → compact → restart → corrected memory. Keep `docs/results.md`
 and `docs/demo.md`.
-
-**Optional, dev-only: autoresearch-style recipe search.** A coding agent proposes one bounded
-change at a time, drawn from data mix, filter threshold, LoRA rank/lr, epochs, and the
-teacher/RFT ratio. Each change gets a time/cost cap, a dev evaluation, keep/revert, and a
-ledger row that includes failed hypotheses. The agent never sees the test set, and the evaluator,
-harness and splits stay frozen. Report it as automated research, not RSI. Missing
-runtime/training evidence stays explicitly incomplete.
 
 ## Reference map and next step
 
@@ -931,6 +1024,13 @@ introduce small loop/context state only where continuation needs shared mutable 
 Keep the configured state root (`outputs/sessions` today); add memory/checkpoint records
 there as needed. Raw history, active prompt, durable memory, trace evidence, and training
 examples have different roles. Optional branches are omitted from the required-path diagram.
+
+## Optional autoresearch-style recipe search · draft
+A coding agent proposes one bounded change at a time, drawn from data mix, filter threshold, LoRA rank/lr, epochs, and the
+teacher/RFT ratio. Each change gets a time/cost cap, a dev evaluation, keep/revert, and a
+ledger row that includes failed hypotheses. The agent never sees the test set, and the evaluator,
+harness and splits stay frozen. Report it as automated research, not RSI. Missing
+runtime/training evidence stays explicitly incomplete.
 
 ## Optional independent experiment — GEPA prompt optimization · draft
 
