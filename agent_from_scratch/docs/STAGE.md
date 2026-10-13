@@ -43,8 +43,8 @@ as pilots; mark missing required outcomes incomplete instead of silently extendi
 | Completed | **3 — implementation complete** | Context budgeting, automatic/manual compact, rule reload at the boundary, versioned checkpoints and restart replay; real-model evidence for 3B items 2-4 and 3C still outstanding |
 | Deferred past 11 | **4A–4B — deferred (decided September 22, 2026)** | Bounded durable memory, search/read, correction/forget, fresh-session recall |
 | Completed | **8 — complete: frozen benchmark and protocol, Qwen3-4B control baseline (test mean pass@1 0.667)** | Resettable benchmark, isolated splits, measured baseline, frozen harness |
-| Research | **9 — draft, required outcome** | 3–4B HF checkpoint on vLLM → verified trajectories → QLoRA SFT/reload → base/adapter comparison |
-| Later experiment | **10 — draft, conditional** | 2–3 rounds of expert iteration (weak-RSI question); GRPO pilot only if justified |
+| Research | **9 — draft, required outcome** | 3–4B HF checkpoint on vLLM → verified trajectories → QLoRA SFT/reload → base/adapter comparison; then a wider train pool, a public-data arm and external evaluation (Items 4–6) |
+| Later experiment | **10 — draft, conditional** | 2–3 rounds of expert iteration (weak-RSI question); GRPO pilot as a second arm from M1 if M1's samples meet its go conditions |
 | Delivery | **11 — draft, required outcome** | Held-out paired results and reproducible demo; dev-only recipe search optional |
 | Future branches | **4C / 5 / 6 / 7 — optional** | Dream / skills and MCP / jobs / child agent and planning |
 
@@ -668,13 +668,16 @@ token-identical to the one used at inference. Merging into a quantized GGUF for 
 allowed only after the comparison, and it gets its own spot check.
 
 **Budget:** US$100 in total, including teacher API calls, GPU hours, storage and failed runs.
-These are rough allocations to recheck against live prices before renting:
+Revised October 13, 2026: the ceiling is US$200. The rows below are the original US$100 plan
+plus one row for Stage 9 Items 4–6. Spent so far: \$0.76 (Stage 8 baseline, teacher, RFT
+sampling). These are rough allocations to recheck against live prices before renting:
 
 | Item | Assumed scale | Estimate |
 |---|---|---:|
 | Trajectory data (teacher API + base self-sampling) | 1–2k trajectories × ~4k tokens | $10–25 |
 | QLoRA SFT, including one or two reruns | 2–8M tokens, 1–3 epochs, one 24–48 GB GPU | $5–15 |
 | Evaluation (base/adapter/rounds × 3 seeds) | 1–3 GPU-hours on vLLM | $3–10 |
+| Stage 9 Items 4–6 (wider pool, public-data arm, external evaluation) | teacher and base passes on the new tasks; 5–10k public examples × 1–3 epochs; two external suites | $5–20 |
 | Expert-iteration rounds (Stage 10) | 2–3 × (sampling + SFT) | $15–30 |
 | GRPO pilot (Stage 10, conditional) | a few GPU-hours | $0–30 |
 | Reserve: idle time, debugging, failures | ~25% | ~$20 |
@@ -686,9 +689,11 @@ experiment's ledger row.
 of **train skeletons** (layout, distractors, values, dependency length, injected fault position).
 Skeletons are split before variants are created, so no test skeleton shapes training. Public
 function-calling data (for example `Salesforce/xlam-function-calling-60k`, APIGen-MT,
-`NousResearch/hermes-function-calling-v1`, `THUDM/AgentInstruct`) is at most a ~20% regularizing
-mix, and only after each license is checked. Its single-call distribution differs from our
-multi-step file/shell tasks.
+`NousResearch/hermes-function-calling-v1`, `THUDM/AgentInstruct`) was planned as at most a ~20%
+regularizing mix, and only after each license is checked. Its single-call distribution differs
+from our multi-step file/shell tasks. Revised October 13, 2026: public data becomes its own
+training arm in Stage 9 Item 5, compared against the teacher-only arms. The 20% cap is dropped
+there, because 20% of 255 own examples is 64 rows; the license check stays.
 
 **Evaluation layers:**
 1. Primary small-scale experiment (revised October 12): **80 new held-out tasks from 4 reserved
@@ -696,8 +701,10 @@ multi-step file/shell tasks.
    target by explicit agreement; it is not a broad generalization benchmark. The Stage 2B dev
    tasks already influenced prompt choices and do not qualify. Keep the existing frozen Stage 8
    test split as a separate weight-comparison reference.
-2. Optional external reference: a locally adapted BFCL multi-turn subset, labeled as a local
-   adaptation and never reported as an official score.
+2. External reference: a locally adapted BFCL multi-turn subset, labeled as a local
+   adaptation and never reported as an official score, and the When2Call test set. Optional
+   for Item 3; required for any claim Stage 9 Item 5 makes (Item 6). Nothing derived from
+   either is ever trained on.
 3. Regression: a small IFEval/general-QA subset to catch damage outside tool use.
 
 Paired comparisons use [`evals/trajectory.py`](../evals/trajectory.py) (exact McNemar over
@@ -731,10 +738,25 @@ stopping (0.00 on test), reading before answering, and acting on error feedback.
   `input_messages`, so each example is exactly what the model saw.
 - [ ] Loss masks cover assistant tokens only; tool observations and runtime feedback are context.
   First run a tiny overfit → save → reload smoke test, then a QLoRA pilot.
+  Decided October 12: the pilot is LoRA on the bf16 base, without 4-bit quantization, because
+  the 8 GB of weights fit a 46 GB A40 and training then uses the same base as serving. Guide and
+  the other decisions: [STAGE9_ITEM3_PLAN.md](STAGE9_ITEM3_PLAN.md), section 3.
+- [ ] Item 4: widen the train pool from 4 skeletons to 16–20, with the new shapes drawn from
+  M1's failures, and rerun the teacher and the base on the new tasks.
+- [ ] Item 5: train a public-data arm (the wide teacher set plus samples of When2Call and
+  Toucan, rendered through the project template) and compare it with the teacher-only arms.
+- [ ] Item 6: add external evaluation (a local BFCL multi-turn subset and the When2Call test
+  set), run on the base first and then on every arm.
+- [ ] Final step: every arm run once on holdout, under one versioned manifest. This run moved
+  here from Item 3 on October 13, 2026.
+
+Items 4–6 were added on October 13, 2026; their plan is in the section
+"Items 4–6 planned" below.
 
 **Output:** adapter weights reloaded into the ordinary loop, dataset/config/cost records, and a
 dev comparison of base, teacher-SFT and RFT-SFT against the same checkpoint/backend/precision with
-the adapter off.
+the adapter off. After Items 4–6: the same comparison extended to the wide-pool and public-data
+arms, with external scores for every arm, and one holdout table for all arms.
 
 ### Item 1 pilot — inventory reconciliation (October 12, 2026)
 
@@ -933,7 +955,8 @@ These points set the entry conditions of Stage 10, listed in that section.
 drifted in `source_sha256` only (`llm.py`, `evals/bench/run.py`, `evals/__main__.py` changed;
 the three `evals/sft/` files added). The Stage 8 manifest also reports `splits_sha256` and
 `tasks`, which date from Item 1. Neither was refreshed. The versioned freeze happens once,
-before the holdout comparison in Item 3. No dev, test or holdout task was run or exported in
+before the holdout comparison (planned for Item 3; moved to the end of Stage 9 on October
+13). No dev, test or holdout task was run or exported in
 Item 2.
 
 Evidence: `outputs/stage9-item2-20261012-teacher-s{0,1,2}/`, `-rft/rft-train-s{0..7}/` and
@@ -944,6 +967,147 @@ Evidence: `outputs/stage9-item2-20261012-teacher-s{0,1,2}/`, `-rft/rft-train-s{0
 completion, and run the overfit → save → reload smoke test on a handful of teacher examples
 before any QLoRA pilot. After the first teacher-SFT adapter, sample the train pool with it
 before anything else in Stage 10.
+
+### Items 4–6 planned — a wider task pool, a public-data arm, external evaluation (decided October 13, 2026)
+
+**Why.** The Item 2 teacher set is 255 examples from four skeletons: 451,019 tokens per epoch,
+of which 13,393 are trained. Training it takes minutes, so compute is not the constraint;
+variety is. Two kinds of variety are missing, and they come from different places.
+
+- **Varied workspace tasks** (reading back, continuing after a failure, stopping with the bare
+  token) exist only in our own environment. They come from more train skeletons (Item 4).
+- **Varied tools, arguments and dialogue situations** are what public tool-use data has
+  (Item 5). It is added as an arm, not swapped in: none of it shows our tools, our tool-result
+  format or our tasks.
+
+**Order.** Item 3 runs as planned; its teacher-only adapter is the baseline for every later
+arm. Then Item 4, then the set-up of Item 6 (run on the base before any new adapter exists),
+then Item 5, then one comparison of all arms, which ends with the one holdout run.
+
+The starting values below were approved on October 13, 2026: 12–16 new skeletons, the
+2,000 / 3,000 / one-third mix, and our own system prompt as the default.
+
+| Arm | Trained on | What the step to it shows |
+|---|---|---|
+| base | nothing | the control |
+| teacher-v3 | the Item 2 teacher set, 4 skeletons | Item 3's result |
+| teacher-wide | the teacher set on the widened pool | the effect of more skeletons |
+| mix | teacher-wide plus the public sample | the effect of public data |
+
+Every arm uses Item 3's recipe (D1–D5) unchanged, the same server command and three dev
+seeds, paired by task ID. The RFT arm stays Item 3's control and is not repeated on the wide
+pool.
+
+**Item 4 — widen the train pool.**
+
+- [ ] Add 12–16 train skeletons, to reach 16–20, spread over the four families. The 80
+  existing train tasks do not change, so teacher-v3 stays comparable.
+- [ ] Take the shapes from evidence, in this order: M1's failures on the train pool (Item 3,
+  Step 9); the base model's three failing behaviours from Item 2; the two Stage 8 weaknesses
+  the pool does not cover (doing nothing when the requested state already holds, and
+  reporting a missing file).
+- [ ] Give each new skeleton at least two outcomes chosen by the seed (act, or stop with a
+  bare token), and a clean/fault pair where it tests recovery.
+- [ ] For each new skeleton, write down the closest dev, test and holdout shape and how it
+  differs. A new train skeleton must not mirror one of them. The missing-file behaviour is
+  the one to watch: holdout's `backup_record_lookup` is a missing primary file.
+- [ ] Each new skeleton passes the Item 1 gates: the scripted solution passes, answer-only and
+  wrong-answer score 0, and the fault is observed in every fault variant.
+- [ ] Decide here whether `points_save_recovery` is revised or split (M0 reaches a write in 5
+  of 160 rollouts).
+- [ ] Run the teacher on the new tasks with the Item 2 commands and export flags
+  (`--flawed-turns drop --max-per-task 1`), and the base model for eight samples, which gives
+  M0's yield on the wide pool.
+- [ ] Train `teacher-wide` with Item 3's recipe.
+
+The widened pool is the one Stage 10 holds fixed across rounds. Item 4 settles two of its
+entry conditions: the `points_save_recovery` check and the two uncovered weaknesses.
+
+**Item 5 — the public-data arm.**
+
+| Dataset | What it adds | Size | License | Use |
+|---|---|---|---|---|
+| `nvidia/When2Call` | when to call a tool, ask a follow-up, or say it cannot be done | `train_sft` 15,000 | CC-BY-4.0 | yes: the closest public match to the stopping family |
+| `Agent-Ark/Toucan-1.5M` | real executions on 495 MCP servers; multi-turn, irrelevant-tool and failed-call cases | SFT subset 119k | Apache-2.0 | yes: Hermes format, the family our template belongs to |
+| `Salesforce/xlam-function-calling-60k` | single-turn calls over 3,673 APIs, execution-checked | 60k | CC-BY-4.0, gated, research only | only if the first two leave argument filling uncovered |
+| `Salesforce/APIGen-MT-5k` | multi-turn dialogues in the tau-bench domains | 5k | CC-BY-NC-4.0 | no: non-commercial, and it would contaminate tau-bench as a later evaluation |
+
+- [ ] Before any download is used: record each dataset's license, card revision and download
+  date in the dataset metadata. The figures above were read from the dataset cards on October
+  13, 2026; no row has been inspected yet.
+- [ ] Read 20 rows of each dataset before writing the converter.
+- [ ] Convert each row to harness-shaped `messages` and `tools`, render it with `render_chat`
+  and `prompts/qwen_chat.jinja`, and write one `(prompt, completion)` example per assistant
+  turn, as `export` does. From there the rows go through the same `encode_example`.
+- [ ] Apply `export`'s round trip: a target must parse back through `LLM.parse_response` to
+  the calls it stands for. A row that fails it, or exceeds `BENCH_N_CTX`, is dropped and
+  counted, never repaired or truncated.
+- [ ] Decide the system prompt after reading the rows. The default is ours, because the
+  adapter is only ever served under it.
+- [ ] Sample with a fixed seed and record the multipliers. Starting mix: 2,000 When2Call rows,
+  3,000 Toucan rows (weighted toward its multi-turn and irrelevant subsets), and the own data
+  upsampled to one third of the rows. These are starting values, not measurements; they may
+  change at most twice, on dev.
+- [ ] Train `mix` with Item 3's recipe.
+
+Known risks, each with its check:
+
+- **Style drift.** Public replies are sentences, and a bare final token is one of the three
+  behaviours being trained. Read `format_exact` by skeleton and the false-completion count for
+  `mix` against `teacher-wide`, not only the pass rate.
+- **Foreign tool results.** Public rows carry their own tool-result formats, not our
+  `ToolResult` JSON. They are prompt context only and never a target.
+- **Contamination.** Nothing from BFCL or the When2Call test split enters training. When2Call's
+  train and test sets come from one generator, so the `mix` arm's When2Call test score is
+  in-distribution and is labeled so.
+
+**Item 6 — external evaluation.** Dev, test and holdout all live inside our harness, so they
+cannot show whether an adapter is more capable outside it or has lost something general.
+
+- [ ] A local BFCL multi-turn subset, labeled as a local adaptation and never as an official
+  score.
+- [ ] The When2Call test set (`mcq` 3,652 rows, `llm_judge` 300), scored the way the dataset's
+  own evaluation does; read its script before writing ours.
+- [ ] Build both and run them on the base before the `mix` adapter exists, so the evaluation
+  cannot be shaped by the result. Then run every arm, on the same server.
+- [ ] The IFEval/general-QA regression layer stays as planned.
+
+**Final step — holdout, once, for all arms (decided October 13, 2026).** Item 3 had planned
+the one holdout run in its Session B, for base, teacher-v3 and RFT. Holdout is looked at once,
+so the two new arms would have had only dev and the Stage 11 test split. The run moved here.
+
+- [ ] No source change after this point: the new skeletons, the converter and the external
+  evaluation code are final and committed.
+- [ ] On the pod, from a clean clone, generate the versioned fixtures and manifest and run the
+  gates (`dataset --output ... --check`). This is the one versioned freeze of Stage 9.
+- [ ] Run base, teacher-v3, RFT, teacher-wide and mix on the 80 holdout tasks, three seeds
+  each, with `--final --manifest`, in one session on one server process. Then `aggregate`
+  each arm and `compare` per seed.
+- [ ] Nothing is chosen on holdout. Each arm's epoch and the mix's sampling are chosen on dev
+  before this step.
+
+Holdout results are therefore unknown while Item 4's skeletons are designed. Item 3's Session
+B keeps only M1's eight-sample run of the train pool. The commands are kept at the end of
+Step 9 in [STAGE9_ITEM3_PLAN.md](STAGE9_ITEM3_PLAN.md), which was revised on October 13 to
+match.
+
+**Evidence behind the plan,** read from paper and dataset pages on October 12–13, 2026, and
+not reproduced here:
+
+- Agent Data Protocol (arXiv 2510.24702) reports that a mixed, diverse set beats
+  in-domain-only data; for Qwen3-8B on AgentBench OS, 21.5% with AgentInstruct alone and 25.7%
+  with the mix. Its models are 7–32B, not 4B.
+- TRACE (arXiv 2604.05336, abstract only) reports that environments built for the capabilities
+  a model's failures show are missing beat generic synthetic data and GRPO on the target
+  environment.
+- AgenticQwen (arXiv 2604.21590) grows linear tasks into branching ones from the student's own
+  rollouts. It has no component ablation, so it supports the direction of Item 4 and not its
+  size.
+
+**Cost.** Projected, not measured: the teacher pass on 80 tasks cost about \$0.07 and the base
+model's eight samples \$0.34, so both on a pool three to four times larger stay under \$2.
+Training on about 6,000 public rows has not been timed; Item 3's smoke run gives the seconds
+per row. The whole of Items 4–6 should fit the \$5–20 line in the budget table.
 
 ## Stage 10 — expert iteration and outcome learning · draft, conditional
 
@@ -963,6 +1127,12 @@ The weak-RSI question is asked from M1 onward, with M0's yield as the reference 
 RFT-SFT remains the control arm from Stage 9. Whether a round trains on the previous model's
 verified samples alone or together with the teacher set is fixed before round 1 and then held.
 
+**Pool, revised October 13, 2026.** Stage 9 Item 4 widens the train pool before Stage 10
+starts, and the wide pool is the one held fixed across rounds. M1 is then the Stage 9 adapter
+chosen on dev among the arms trained on it (`teacher-wide` or `mix`). M0's yield is measured
+again on the wide pool in Item 4; the table below stays as the reference for the original
+four skeletons.
+
 M0's yield under the Item 2 protocol (8 samples per task, Stage 8 server command), the numbers
 M1 is compared against:
 
@@ -978,6 +1148,9 @@ M1 is compared against:
 
 - [ ] Item 3 is done: the masked-loss recipe passes the overfit → save → reload smoke test, and
   the teacher-SFT adapter is compared with the base on dev.
+- [ ] Stage 9 Items 4–6 are done: the pool is widened, M1 is chosen among the arms, and the
+  external scores of every arm are recorded. Item 4 is where the third and fourth conditions
+  below are settled.
 - [ ] M1 has been sampled on the train pool under the same protocol as the table above, at
   about the cost of the Item 2 session (\$0.34). If its yield on the three weak skeletons is no
   higher than M0's, expert iteration has nothing to iterate on, and that is the result to report.
@@ -989,12 +1162,134 @@ M1 is compared against:
   them before round 1, or state that no gain is expected there. A new train skeleton must not
   mirror a dev, test or holdout shape.
 
-**Conditional: a GRPO pilot.** Run it only if tasks show mixed outcomes across samples
-(0 < pass@k < 1; all-pass or all-fail groups give zero advantage), the terminal reward survives an
-exploit review (fake "done" artifacts, verifier bypasses, reset leaks), and the measured rollout
-cost fits the remaining budget. **Output if selected:** reward diagnostics, and only if real
-updates were reloaded, a comparison against the best SFT round under the same harness. A reward
-lab alone is not an RL-trained model.
+### Conditional: a GRPO pilot (design written October 12, 2026)
+
+A second arm beside expert iteration, not a replacement for SFT. Both arms start from M1 and
+use the same task pool, sampling protocol and verifier. The question it answers:
+**at an equal number of rollouts, does an update that also uses the failed rollouts beat one
+that uses only the verified ones?**
+
+**What it adds to SFT.** Filtered SFT gives every rollout a weight of 1 (verified) or 0
+(dropped). GRPO replaces that with a signed advantage inside each group of $G$ samples of one
+task:
+
+$$A_i = \frac{r_i - \bar r}{\sigma_r}$$
+
+With a binary reward and $k$ of the $G$ samples passed, this is
+
+$$A_{\text{pass}} = \sqrt{\frac{G-k}{k}}, \qquad A_{\text{fail}} = -\sqrt{\frac{k}{G-k}}$$
+
+so with $G = 8$ a lone success weighs $+2.65$, and a lone failure $-2.65$.
+
+- **A signal from failures.** Item 2 dropped 449 of the base model's 640 rollouts unused.
+- **Reliability.** A task passed 7 times in 8 gives SFT only more of what the model already
+  does; GRPO pushes the one failure down. The measure is pass^k, not only mean pass@1.
+- **The student's own states.** It trains where the student actually arrives, and on the
+  outcome, not on the teacher's style (74 of 179 teacher tool-call targets carry narration).
+
+**What it cannot do.** Each of these is a reason not to run it, or a risk to check first.
+
+- It selects among behaviours the model already samples. One that never appears (the base
+  model's read-back: 0 of 80) has to come from demonstrations.
+- An all-pass or all-fail group has zero advantage. `points_save_recovery` is at 0.006 for M0,
+  which is why the pilot starts from M1 and never from M0.
+- It does not widen a narrow task pool. Train up and holdout flat is a task-diversity result,
+  and more optimization on the same 80 tasks makes it worse.
+- A verifier loophole. Under SFT a loophole lets a few bad examples in; under RL the policy
+  searches for it.
+
+**Pool size.** The numbers in this section are written for the 80-task pool. Once Stage 9
+Item 4 has widened it, the go threshold is the same share of the wide pool (3 tasks in 8),
+read from the chosen M1's eight-sample run of that pool. The batch of an iteration is set
+again in the pilot's plan, keeping one pass equal to one expert-iteration round of sampling.
+
+**Go / no-go.** Read from M1's eight-sample run of the train pool (Item 3, Step 9), counted
+with the reward below. `aggregate` counts `passed`, which is looser, so recount from
+`results.json`.
+
+- [ ] **Go** when at least 30 of the 80 tasks have mixed outcomes (0 < passes < 8), in at least
+  two skeletons. M0 has 11 under `passed`. The threshold is a judgement fixed before the
+  result, not a measured value.
+- [ ] **No-go, add tasks instead** when M1 passes nearly everything on train.
+- [ ] **No-go, add demonstrations instead** when the three weak skeletons are still nearly
+  all-fail.
+- [ ] The reward has passed the exploit review below.
+- [ ] The measured cost of one iteration, times the planned number, fits the budget.
+
+**Reward (decided October 12, 2026): strict binary, at the end of the rollout.**
+$r = 1$ when the verifier's `passed` is true and `checks.format_exact` is true; otherwise
+$r = 0$. `passed` alone is not enough: `UPDATED` and `SAVED` are advisory answers, so a reply
+that wraps the token in a sentence passes the verifier, and a bare final answer is one of the
+three behaviours being trained. A rollout that recovers from its own failed call and then
+passes still earns 1; the SFT export's own-error filter does not apply here. Partial credit
+(the share of `checks` passed, with `unchanged` and `process` as gates that zero the reward)
+is the fallback only if the strict reward leaves too few mixed groups, and choosing it reopens
+the exploit review.
+
+**Exploit review, before the first iteration.** `evidence` is a substring match on successful
+observations; `answer_content` is a whole-token match; a fault variant needs the fault
+observed. For each, write the cheapest rollout that would earn $r = 1$ without doing the task
+and confirm it scores 0, as the answer-only and wrong-answer gates already do (0 of 160).
+During the pilot, read a sample of reward-1 rollouts after every pass.
+
+**One iteration.** Sample, score, take one optimizer step, reload the adapter.
+
+1. **Sample** 20 train tasks (5 per skeleton) × 8 seeds with the current adapter, through the
+   existing `bench --split train --adapter NAME` and the Item 2 protocol. The tasks rotate, so
+   four iterations cover the 80 tasks once: one **pass** is 640 rollouts, the same amount of
+   sampling as one expert-iteration round. The eight seeds can run as eight processes against
+   one server.
+2. **Score** each rollout with the reward above and compute $A_i$ within each task's group.
+   Groups with zero variance are skipped.
+3. **Step.** Every actor request of a kept rollout is one row, with its rollout's advantage as
+   the row's weight. The loss is Item 3's (D3: the mean over a row's own completion tokens)
+   times that weight:
+
+   $$L(\theta) = -\frac{1}{N}\sum_{i=1}^{N} A_i \cdot \frac{1}{|y_i|}\sum_{t}\log \pi_\theta\left(y_{i,t}\mid x_i,\, y_{i,<t}\right)$$
+
+   One optimizer step per sampled batch keeps the update on-policy, so the importance ratio is
+   1 and no clipping term or stored log-probability is needed. SFT is the special case
+   $A_i = 1$ for verified rows with the other rows dropped.
+4. **Reload** the updated adapter into the server, then sample again.
+
+**What changes in the code.** The eval side does not change: the result is an adapter, and
+`bench --adapter`, `aggregate` and `compare` are used as they are.
+
+- `export` gains a mode that keeps every rollout of a mixed group with its reward. The target
+  is the text as sampled, not the canonical rendering, because the gradient must be taken on
+  the tokens the model produced (Item 2: 62 of 63 are identical, one is not). A request that
+  ended in a parse error is a row too.
+- `fit` takes a weight per row and continues from M1's adapter weights. The optimizer state is
+  carried from one iteration to the next: a fresh AdamW taking a single step is a sign update.
+- Negative weights make the loss unbounded below. So: one step per batch, a rate below the SFT
+  rate, and gradient clipping kept at 1.0.
+- The server loads a new adapter every iteration, by restart or by runtime loading
+  (`VLLM_ALLOW_RUNTIME_LORA_UPDATING`, which Item 3 chose not to use). This is the one new
+  operational piece.
+- No training framework is added (verl, used by AgenticQwen, targets multi-GPU full
+  fine-tuning); the loop stays in `evals/sft/`.
+
+The learning rate, the number of passes (at most 6, which is 24 optimizer steps and 3,840
+rollouts) and where the trainer runs beside the server are fixed in the pilot's own plan
+before the first iteration, once Item 3 has measured seconds per row.
+
+**Comparison and output.**
+
+- An adapter is saved after each pass. The pass is chosen on dev seed 0, as Item 3's D5
+  chooses the epoch.
+- Compare on dev, three seeds, same server command: M1, the GRPO adapter after pass $r$, and
+  expert iteration's $M_{1+r}$, which has seen the same number of rollouts. Report mean pass@1
+  and pass^k by family and skeleton, and the per-seed pairings.
+- Per iteration: mean reward, mixed and skipped groups, loss and gradient norm. Per pass:
+  verified yield by skeleton, beside M0's and M1's tables.
+- Reward diagnostics alone are a reward lab, not an RL-trained model: the comparison counts
+  only if updated adapters were reloaded and evaluated. A null result, or one where the
+  expert-iteration arm is better per rollout, is a valid result.
+
+**Cost.** Projected from Item 2, not measured: 640 sequential rollouts took 26 minutes and
+\$0.34 on one A40, and they parallelize; training time per row is unknown until Item 3's
+smoke run. A six-pass pilot should fit the existing \$0–30 line. The total budget may rise to
+\$150–200 if the pilot needs it (approved October 12, 2026); the projection does not need it.
 
 ## Stage 11 — final comparison and delivery · draft
 
