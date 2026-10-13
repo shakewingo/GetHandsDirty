@@ -9,6 +9,7 @@ Commands:
   export    turn verifier-passed train rollouts into Stage 9 SFT examples     (no model)
   compare   profile one run, or pair two runs by task ID          (no model)
   train     train a LoRA adapter on an exported SFT dataset (needs torch, transformers, peft)
+  replay    continue each SFT prompt greedily on a vLLM server and compare with its target
 
 Each command takes --help. Start with evals/README.md.
 """
@@ -19,7 +20,7 @@ import sys
 COMMANDS = {"pressure": "pressure", "bench": "bench.run",
            "freeze": "bench.manifest",
            "aggregate": "bench.aggregate", "compare": "trajectory", "dataset": "bench.dataset",
-           "export": "sft.export", "train": "sft.train"}
+           "export": "sft.export", "train": "sft.train", "replay": "sft.replay"}
 
 
 def main():
