@@ -47,6 +47,30 @@ and leaves only that turn out; the default `reject` refuses the whole rollout. `
 caps the distinct trajectories kept per task. Design, decisions and results:
 [docs/STAGE9_ITEM2_PLAN.md](../docs/STAGE9_ITEM2_PLAN.md).
 
+## Stage 9 adapter training
+
+`train` turns one exported dataset into LoRA adapters, and `replay` checks a served adapter
+against the examples it was trained on:
+
+```sh
+# Needs requirements-train.txt (torch, transformers, peft). One adapter per epoch, in PEFT
+# format, plus train_log.jsonl and metadata.json (dataset hash, selection, recipe, versions).
+python -m agent_from_scratch.evals train --examples outputs/NEW_SFT_TEACHER --output outputs/NEW_ADAPTERS
+# Against a vLLM server started with --lora-modules NAME=outputs/NEW_ADAPTERS/epoch-3:
+python -m agent_from_scratch.evals replay --examples outputs/NEW_SFT_TEACHER --adapter NAME \
+  --ids outputs/NEW_ADAPTERS/metadata.json --output outputs/NEW_REPLAY.json
+python -m agent_from_scratch.evals bench --backend vllm --split dev --seed 0 --adapter NAME --output outputs/NEW_DEV_RUN
+```
+
+The loss falls on the assistant's completion only; the prompt, with its tool results and
+runtime feedback, is context. `train` refuses a pilot dataset without `--pilot`, a dataset
+exported under another chat template, and a row longer than the window, which is never
+truncated. `--max-per-skeleton N` caps the examples per skeleton in whole trajectories, and
+`--limit N` with `--save-last` is the overfit smoke test. `replay` asks for a greedy
+continuation of each prompt and reports the exact matches; omit `--adapter` for the base
+model. Its rate is a fit measure on training prompts, never a capability result. Design,
+decisions and the pod runbook: [docs/STAGE9_ITEM3_PLAN.md](../docs/STAGE9_ITEM3_PLAN.md).
+
 Start here. Everything runs from the **repository root** in the project environment through one
 entry point:
 
@@ -63,6 +87,8 @@ python -m agent_from_scratch.evals COMMAND --output outputs/NEW_NAME [options]
 | How do two runs differ? | `compare outputs/A outputs/B`: paired outcomes, exact McNemar p, trajectory shape | none | instant |
 | How do I collect teacher demonstrations? | `bench --backend teacher --split train --student-gguf FILE`: an API model in the same harness | API | ~7 min for the 80 train tasks (measured) |
 | How do verified train runs become SFT data? | `export --track {teacher,rft} RUN_DIR ...`: one example per model request, with provenance and a funnel | none | seconds |
+| How do I train an adapter on that data? | `train --examples DATASET_DIR`: LoRA with loss on the completion only, one adapter per epoch | real (GPU) | not yet measured |
+| Does a served adapter reproduce its targets? | `replay --examples DATASET_DIR --adapter NAME`: greedy continuations against the targets | real (vLLM) | not yet measured |
 | Do the units still work? | `python -m unittest discover -s agent_from_scratch/tests -q` | scripted | seconds |
 | Does it feel right by hand? | `python -m agent_from_scratch.agent` (REPL) | real | — |
 
@@ -100,8 +126,8 @@ Run them one after another: each process holds about 6 GB, and two together slow
 
 | File | Role |
 |---|---|
-| `__main__.py` | the `bench` / `freeze` / `aggregate` / `dataset` / `export` / `pressure` / `compare` dispatcher |
-| `sft/` | Stage 9 Item 2: `export.py` turns verified train rollouts into SFT examples (eligibility, selection, the `export` command); `teacher.py` is the DeepSeek teacher backend behind `bench --backend teacher` |
+| `__main__.py` | the `bench` / `freeze` / `aggregate` / `dataset` / `export` / `train` / `replay` / `pressure` / `compare` dispatcher |
+| `sft/` | Stage 9 Items 2 and 3: `export.py` turns verified train rollouts into SFT examples (eligibility, selection, the `export` command); `teacher.py` is the DeepSeek teacher backend behind `bench --backend teacher`; `tensorize.py` turns an example into a token row with labels on the completion only; `train.py` is the LoRA training loop and the `train` command; `replay.py` is the `replay` command |
 | `bench/` | Stage 8 generated benchmark: 18 skeletons (8 dev = 64 tasks, 10 test = 60 tasks), one content-first verifier (`verify.py`), the trusted fixture check command (`check.py`), freeze manifest and protocol check (`manifest.py`), `aggregate.py` for k-sample runs. Shapes and rationale: [docs/STAGE8_DESIGN.md](../docs/STAGE8_DESIGN.md) |
 | `run.py` | `open_run`, `parse_limits` and `save`, which every suite shares |
 | `verify.py` | shared post-run measurement: `metrics()`, `snapshot()`, `exchanges()`; `pressure`'s answer verifier and `summarize()`. Never fed back to the agent |
