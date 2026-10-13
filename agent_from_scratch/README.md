@@ -14,7 +14,7 @@ cd GetHandsDirty
 
 python3 -m venv .venv
 source .venv/bin/activate
-pip install llama-cpp-python loguru huggingface_hub -r agent_from_scratch/requirements-tools.txt
+pip install -r agent_from_scratch/requirements.txt
 ```
 
 Once the bot is merged into `main`, you can leave out `-b feat/telegram-bot`.

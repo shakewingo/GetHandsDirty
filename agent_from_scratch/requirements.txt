@@ -1,0 +1,23 @@
+# Everything the agent, its tools, the evals and the Telegram bot need at runtime.
+# Install into a fresh environment: pip install -r agent_from_scratch/requirements.txt
+# Training-only packages (torch, transformers, peft) are not here; see requirements-train.txt.
+
+# Local GGUF backend and the `hf download` command. macOS only: the rented vLLM pod never
+# loads a GGUF, and vLLM brings its own huggingface_hub (2.2.0 with vllm==0.30.0 on
+# October 13, 2026, which this range matches).
+llama-cpp-python>=0.3,<0.4; sys_platform == "darwin"
+huggingface_hub>=2,<3; sys_platform == "darwin"
+
+# Runtime
+loguru>=0.7,<0.8
+jinja2>=3.1,<4
+httpx>=0.28,<0.29
+
+# Tools
+readability-lxml>=0.8.4,<0.9
+ddgs>=9,<10
+pypdf>=6,<7
+python-docx>=1.2,<2
+openpyxl>=3.1,<4
+python-pptx>=1,<2
+Pillow>=11,<13

@@ -275,8 +275,14 @@ stage8-src`, then tar it with `COPYFILE_DISABLE=1` (macOS `tar` otherwise adds `
 python3 -m venv /root/venv && /root/venv/bin/pip install -q uv && . /root/venv/bin/activate
 # VLLMClient's fields (/v1/models ModelCard id/root/max_model_len, /tokenize prompt/
 # add_special_tokens -> count, completion top_k/min_p/seed/stop) were checked against 0.30.0.
-uv pip install vllm==0.30.0 loguru -r stage8-src/agent_from_scratch/requirements-tools.txt
+uv pip install vllm==0.30.0 -r stage8-src/agent_from_scratch/requirements.txt
 ```
+
+As run on September 27 and in Stage 9 Item 2, the last line was
+`uv pip install vllm==0.30.0 loguru -r .../requirements-tools.txt`. On October 13, 2026 that
+file became `requirements.txt` and took in `loguru`, plus `llama-cpp-python` and
+`huggingface_hub` behind a macOS-only marker, so on the pod the same packages are requested
+as before. `jinja2` is now listed explicitly; vLLM already installed it.
 
 **Serve.** Two settings are required, not optional. The venv's `bin/` must be on `PATH` (FlashInfer
 calls `ninja` by name), and `VLLM_USE_FLASHINFER_SAMPLER=0`, because FlashInfer JIT-compiles its
