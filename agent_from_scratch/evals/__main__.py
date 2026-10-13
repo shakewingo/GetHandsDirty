@@ -8,6 +8,7 @@ Commands:
   dataset   generate Stage 9 train/holdout fixtures; --check runs scripted gates (no model)
   export    turn verifier-passed train rollouts into Stage 9 SFT examples     (no model)
   compare   profile one run, or pair two runs by task ID          (no model)
+  train     train a LoRA adapter on an exported SFT dataset (needs torch, transformers, peft)
 
 Each command takes --help. Start with evals/README.md.
 """
@@ -18,7 +19,7 @@ import sys
 COMMANDS = {"pressure": "pressure", "bench": "bench.run",
            "freeze": "bench.manifest",
            "aggregate": "bench.aggregate", "compare": "trajectory", "dataset": "bench.dataset",
-           "export": "sft.export"}
+           "export": "sft.export", "train": "sft.train"}
 
 
 def main():
