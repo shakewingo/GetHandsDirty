@@ -175,6 +175,9 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = transformers.AutoModelForCausalLM.from_pretrained(
         args.base, revision=args.revision, dtype=torch.bfloat16 if device == "cuda" else torch.float32)
+    # Recompute activations during the backward pass instead of storing them all: without this
+    # the longest rows do not fit in GPU memory.
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     # Attach the adapter, then move the base and the adapter to the device together.
     model = add_lora(model, rank=args.rank, alpha=args.alpha, dropout=args.dropout).to(device)
     model.print_trainable_parameters()
@@ -200,6 +203,7 @@ def main():
                       "examples": len(rows), "example_ids": [row["id"] for row in rows]},
         "tokens": {"total": sum(len(row["input_ids"]) for row in rows), "trained": trained},
         "base": args.base, "revision": args.revision, "dtype": str(next(model.parameters()).dtype),
+        "gradient_checkpointing": True,
         "lora": {"rank": args.rank, "alpha": args.alpha, "dropout": args.dropout, "targets": list(LORA_TARGETS)},
         "optimizer": {"epochs": args.epochs, "lr": args.lr, "accumulate": args.accumulate, "warmup": 0.1,
                       "schedule": "linear warmup, cosine decay", "clip": 1.0, "weight_decay": 0.0},
