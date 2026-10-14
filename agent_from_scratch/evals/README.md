@@ -68,8 +68,57 @@ exported under another chat template, and a row longer than the window, which is
 truncated. `--max-per-skeleton N` caps the examples per skeleton in whole trajectories, and
 `--limit N` with `--save-last` is the overfit smoke test. `replay` asks for a greedy
 continuation of each prompt and reports the exact matches; omit `--adapter` for the base
-model. Its rate is a fit measure on training prompts, never a capability result. Design,
-decisions and the pod runbook: [docs/STAGE9_ITEM3_PLAN.md](../docs/STAGE9_ITEM3_PLAN.md).
+model. Its rate is a fit measure on training prompts, never a capability result. Design and
+decisions: [docs/STAGE9_ITEM3_PLAN.md](../docs/STAGE9_ITEM3_PLAN.md). How to run it on a GPU:
+the next section.
+
+### Training on a rented GPU (RunPod)
+
+Training and every adapter evaluation need a CUDA GPU. We rent one RunPod pod per session and
+drive it from the Mac with `runpodctl`. The 4B model in bf16 needs a GPU with at least 24 GB; we
+use an A40 (48 GB). A session has six parts:
+
+1. **Prepare.** `runpodctl` 2.14 or later with its API key (`runpodctl doctor`), and your SSH
+   key added with `runpodctl ssh add-key` *before* the pod is created. Commit first: the pod
+   runs a shallow clone of the branch's last commit.
+2. **Rent.** `--min-cuda-version 13.0` is required, because vLLM 0.30.0 installs PyTorch for
+   CUDA 13. If no instance is available, `runpodctl gpu list` shows where each GPU is in stock.
+   The pod cannot stop itself, so start a cost guard on the Mac
+   (`sleep 7200 && runpodctl pod stop POD_ID`) and copy results back well before it fires.
+
+   ```sh
+   runpodctl pod create --name NAME --image runpod/pytorch:1.0.3-cu1281-torch291-ubuntu2404 \
+     --gpu-id "NVIDIA A40" --cloud-type SECURE --min-cuda-version 13.0 \
+     --container-disk-in-gb 60 --ports "22/tcp" --wait --wait-timeout 15m
+   runpodctl ssh info POD_ID   # the ssh command: host, port and key
+   ```
+
+3. **Ship and install.** Copy a shallow clone (tar it with `COPYFILE_DISABLE=1` on macOS) and
+   the exported datasets, which are not in git. On the pod, `chown -R root:root` the clone,
+   then install into a venv. Do not install `requirements-train.txt` there: vLLM pins its own
+   torch and transformers, and an adapter should be trained with the stack that serves it.
+
+   ```sh
+   uv pip install vllm==0.30.0 peft -r agent_from_scratch/requirements.txt
+   python -m unittest agent_from_scratch.tests.test_sft_tensorize \
+     agent_from_scratch.tests.test_sft_train agent_from_scratch.tests.test_sft_replay   # none skipped
+   ```
+
+4. **Train** before starting the server, which takes the GPU memory. Run the overfit smoke
+   first (`train --limit 8 --epochs 40 --accumulate 4 --lr 3e-4 --save-last`, `last_loss` below
+   0.05); its `elapsed_seconds` tells you how long the full runs will take. Start long runs with
+   `setsid nohup ... &` so a dropped SSH session does not stop them.
+5. **Serve and evaluate.** Use the Stage 8 server command unchanged and add one
+   `--lora-modules NAME=ADAPTER_DIR` per adapter. Then `replay --adapter NAME` checks the reload,
+   and `bench --backend vllm --adapter NAME` runs the evaluation.
+6. **Copy back and delete.** Copy `outputs/` into a new local directory and check it, then
+   `runpodctl pod delete POD_ID`, confirm `runpodctl pod list --all` is empty, and read the cost
+   from the balance in `runpodctl user`.
+
+The server command, the reasons for each setting and the traps that cost a retry are in the
+[GPU runbook in docs/benchmark.md](../docs/benchmark.md#runbook-control-baseline-on-a-rented-gpu-as-run-september-27-2026).
+The exact commands of each Stage 9 session are in its plan (Item 3: Step 8 and Appendix F of
+[docs/STAGE9_ITEM3_PLAN.md](../docs/STAGE9_ITEM3_PLAN.md)).
 
 Start here. Everything runs from the **repository root** in the project environment through one
 entry point:

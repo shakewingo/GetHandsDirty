@@ -322,6 +322,27 @@ curl -s localhost:8000/v1/models   # ready when it lists the model with max_mode
    then `aggregate`. `--final` refuses on manifest drift or a protocol mismatch.
 4. Copy `outputs/` back, remove the pod, confirm `runpodctl pod list` is empty.
 
+### Adapters on the same server (as run, Stage 9 Item 3, October 14, 2026)
+
+What the adapter sessions add to the runbook above. The commands as run are in
+[STAGE9_ITEM3_PLAN.md](STAGE9_ITEM3_PLAN.md), Step 8.
+
+- **Install** `peft` beside vLLM: `uv pip install vllm==0.30.0 peft -r .../requirements.txt`.
+  Do not install `requirements-train.txt` on the pod; with `vllm==0.30.0` the pod resolves the
+  same torch, transformers and peft that file pins.
+- **Train before serving.** The server takes the GPU memory training needs. `train` enables
+  gradient checkpointing, without which one step on a 3,599-token row does not fit an A40
+  (41.5 GiB allocated); with it the peak is 14.4 GiB, at about 1.3 s per row.
+- **Serve** with the command above plus `--lora-modules NAME=DIR NAME=DIR ...`: several pairs
+  after one flag work. The adapters appear in `/v1/models` with the base as `parent`.
+- **Smoke on examples the base gets wrong.** An overfit smoke on examples the base model
+  already reproduces passes trivially and makes the reload check meaningless.
+- **Availability.** CA-MTL-1 had no A40 on October 14; `runpodctl gpu list` showed one in
+  EU-SE-1.
+- **Copying back.** macOS `tar` adds `com.apple.provenance` headers that GNU `tar` reports and
+  ignores. Copying 244 MB of adapters from EU-SE-1 ran at about 120 KB/s, half an hour of
+  rental; start large copies early.
+
 ## Stage 8 control baseline (September 27, 2026)
 
 Qwen/Qwen3-4B-Instruct-2507 @ `cdbee75f`, bf16, vLLM 0.30.0 (`VLLM_USE_FLASHINFER_SAMPLER=0`) on

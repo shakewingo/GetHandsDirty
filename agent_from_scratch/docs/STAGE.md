@@ -43,7 +43,7 @@ as pilots; mark missing required outcomes incomplete instead of silently extendi
 | Completed | **3 — implementation complete** | Context budgeting, automatic/manual compact, rule reload at the boundary, versioned checkpoints and restart replay; real-model evidence for 3B items 2-4 and 3C still outstanding |
 | Deferred past 11 | **4A–4B — deferred (decided September 22, 2026)** | Bounded durable memory, search/read, correction/forget, fresh-session recall |
 | Completed | **8 — complete: frozen benchmark and protocol, Qwen3-4B control baseline (test mean pass@1 0.667)** | Resettable benchmark, isolated splits, measured baseline, frozen harness |
-| Research | **9 — draft, required outcome** | 3–4B HF checkpoint on vLLM → verified trajectories → QLoRA SFT/reload → base/adapter comparison; then a wider train pool, a public-data arm and external evaluation (Items 4–6) |
+| Research | **9 — in progress, required outcome** | LoRA SFT of the 4B student on train tasks and public data, chosen on val, reported once on test and an external benchmark; Items 1–3 done |
 | Later experiment | **10 — draft, conditional** | 2–3 rounds of expert iteration (weak-RSI question); GRPO pilot as a second arm from M1 if M1's samples meet its go conditions |
 | Delivery | **11 — draft, required outcome** | Held-out paired results and reproducible demo; dev-only recipe search optional |
 | Future branches | **4C / 5 / 6 / 7 — optional** | Dream / skills and MCP / jobs / child agent and planning |
@@ -669,15 +669,15 @@ allowed only after the comparison, and it gets its own spot check.
 
 **Budget:** US$100 in total, including teacher API calls, GPU hours, storage and failed runs.
 Revised October 13, 2026: the ceiling is US$200. The rows below are the original US$100 plan
-plus one row for Stage 9 Items 4–6. Spent so far: \$0.76 (Stage 8 baseline, teacher, RFT
-sampling). These are rough allocations to recheck against live prices before renting:
+plus one row for Stage 9 Items 4–6. Spent so far: \$2.45 (Stage 8 baseline \$0.35, teacher
+\$0.07, RFT sampling \$0.34, Item 3 Session A \$1.69). These are rough allocations to recheck against live prices before renting:
 
 | Item | Assumed scale | Estimate |
 |---|---|---:|
 | Trajectory data (teacher API + base self-sampling) | 1–2k trajectories × ~4k tokens | $10–25 |
 | QLoRA SFT, including one or two reruns | 2–8M tokens, 1–3 epochs, one 24–48 GB GPU | $5–15 |
 | Evaluation (base/adapter/rounds × 3 seeds) | 1–3 GPU-hours on vLLM | $3–10 |
-| Stage 9 Items 4–6 (wider pool, public-data arm, external evaluation) | teacher and base passes on the new tasks; 5–10k public examples × 1–3 epochs; two external suites | $5–20 |
+| Stage 9 Items 4–6 (more training data, external test, final test) | teacher pass on the new tasks; 5–10k public examples × 1–3 epochs; two external suites; the test run | $5–20 |
 | Expert-iteration rounds (Stage 10) | 2–3 × (sampling + SFT) | $15–30 |
 | GRPO pilot (Stage 10, conditional) | a few GPU-hours | $0–30 |
 | Reserve: idle time, debugging, failures | ~25% | ~$20 |
@@ -692,20 +692,18 @@ function-calling data (for example `Salesforce/xlam-function-calling-60k`, APIGe
 `NousResearch/hermes-function-calling-v1`, `THUDM/AgentInstruct`) was planned as at most a ~20%
 regularizing mix, and only after each license is checked. Its single-call distribution differs
 from our multi-step file/shell tasks. Revised October 13, 2026: public data becomes its own
-training arm in Stage 9 Item 5, compared against the teacher-only arms. The 20% cap is dropped
-there, because 20% of 255 own examples is 64 rows; the license check stays.
+candidate in Stage 9 Item 4, compared on val against the teacher-only candidates. The 20% cap
+is dropped, because 20% of 255 own examples is 64 rows; the license check stays.
 
-**Evaluation layers:**
-1. Primary small-scale experiment (revised October 12): **80 new held-out tasks from 4 reserved
-   skeletons**, never used for prompt or recipe tuning. This replaces the original 50–100-skeleton
-   target by explicit agreement; it is not a broad generalization benchmark. The Stage 2B dev
-   tasks already influenced prompt choices and do not qualify. Keep the existing frozen Stage 8
-   test split as a separate weight-comparison reference.
-2. External reference: a locally adapted BFCL multi-turn subset, labeled as a local
-   adaptation and never reported as an official score, and the When2Call test set. Optional
-   for Item 3; required for any claim Stage 9 Item 5 makes (Item 6). Nothing derived from
+**Evaluation layers** (revised October 14, 2026; the sets are defined in Stage 9):
+1. **Test**: 140 tasks on 14 shapes that training never sees, the Stage 8 test split together
+   with the Stage 9 holdout. It is run once per final candidate and nothing is chosen on it.
+   **Val**, the Stage 8 dev split, is where every choice is made. It is a small, local
+   benchmark, not a broad generalization claim.
+2. **External test**: the When2Call test set and a locally adapted BFCL multi-turn subset,
+   labelled as a local adaptation and never reported as an official score. Nothing derived from
    either is ever trained on.
-3. Regression: a small IFEval/general-QA subset to catch damage outside tool use.
+3. Optional regression check: a small IFEval/general-QA subset to catch damage outside tool use.
 
 Paired comparisons use [`evals/trajectory.py`](../evals/trajectory.py) (exact McNemar over
 task IDs).
@@ -720,43 +718,42 @@ keep/revert, and a full ledger. Harness self-modification (STOP, Gödel Agent, D
 Machine) is out of scope: a 3–4B actor cannot do it, so a teacher API would do the real work and
 the attribution would be muddled.
 
-## Stage 9 — verified trajectories and adapter SFT · draft
+## Stage 9 — adapter SFT, chosen on val and reported once on test · in progress
 
-**Required outcome.** It starts from Stage 8's frozen protocol and its control-checkpoint
-baseline (the vLLM backend and that baseline run moved into Stage 8 on September 26, so the
-benchmark is comparable before any training starts). Adapter runs reuse the baseline's exact
-server command (`docs/benchmark.md` runbook, including `VLLM_USE_FLASHINFER_SAMPLER=0`) and are
-paired by task ID against `docs/baselines/stage8-control/`. The baseline names the targets:
-stopping (0.00 on test), reading before answering, and acting on error feedback.
+**Direction (decided October 14, 2026).** Train LoRA adapters for the student on our train
+tasks and on public tool-use data, make every choice on val, and report the agent's
+performance once: on a test set of task shapes that training never saw, and on an external
+benchmark.
 
-- [x] Write the train-skeleton task generator, with fault injection for recovery cases. Reserve
-  the test skeletons first.
-- [x] Collect data along two tracks, each recorded with provenance:
-  (a) teacher distillation, where a stronger API model runs **inside our harness**;
-  (b) rejection-sampling fine-tuning (RFT/STaR), which samples N base rollouts per task.
-  Keep only verifier-passed trajectories, then deduplicate. Export from the schema-5 trace
-  `input_messages`, so each example is exactly what the model saw.
-- [ ] Loss masks cover assistant tokens only; tool observations and runtime feedback are context.
-  First run a tiny overfit → save → reload smoke test, then a QLoRA pilot.
-  Decided October 12: the pilot is LoRA on the bf16 base, without 4-bit quantization, because
-  the 8 GB of weights fit a 46 GB A40 and training then uses the same base as serving. Guide and
-  the other decisions: [STAGE9_ITEM3_PLAN.md](STAGE9_ITEM3_PLAN.md), section 3.
-- [ ] Item 4: widen the train pool from 4 skeletons to 16–20, with the new shapes drawn from
-  M1's failures, and rerun the teacher and the base on the new tasks.
-- [ ] Item 5: train a public-data arm (the wide teacher set plus samples of When2Call and
-  Toucan, rendered through the project template) and compare it with the teacher-only arms.
-- [ ] Item 6: add external evaluation (a local BFCL multi-turn subset and the When2Call test
-  set), run on the base first and then on every arm.
-- [ ] Final step: every arm run once on holdout, under one versioned manifest. This run moved
-  here from Item 3 on October 13, 2026.
+**The sets.** Tasks are split by shape (skeleton), not at random. Tasks of one shape differ
+only in their values, so a random split would put near-copies of test tasks into training,
+and the score would measure practice on a known shape rather than a new kind of task.
 
-Items 4–6 were added on October 13, 2026; their plan is in the section
-"Items 4–6 planned" below.
+| Set | Contents | `bench` split | Used for |
+|---|---|---|---|
+| train | 4 shapes, 80 tasks (more in Item 4), plus public SFT data | `train` | training data only |
+| val | 8 shapes, 64 tasks: the Stage 8 dev split | `dev` | every choice: epoch, data mix, recipe; run as often as needed |
+| test | 14 shapes, 140 tasks: the Stage 8 test split (10 shapes, 60 tasks) and the Stage 9 holdout (4 shapes, 80 tasks) | `test`, `holdout` | once per final candidate, at the end; nothing is chosen on it |
+| external test | the When2Call test set and a local BFCL multi-turn subset | separate scorers | performance outside our harness, run with test |
 
-**Output:** adapter weights reloaded into the ordinary loop, dataset/config/cost records, and a
-dev comparison of base, teacher-SFT and RFT-SFT against the same checkpoint/backend/precision with
-the adapter off. After Items 4–6: the same comparison extended to the wide-pool and public-data
-arms, with external scores for every arm, and one holdout table for all arms.
+**Headline numbers:** mean pass@1 on test, with pass^3 as its reliability, and the external
+scores. Every other number is diagnosis. All runs use Stage 8's server command and protocol
+(`docs/benchmark.md`), and each candidate is paired with the base by task ID.
+
+- [x] Item 1 — a task generator with fault injection; 80 train and 80 holdout tasks, the
+  holdout shapes reserved first.
+- [x] Item 2 — teacher and RFT trajectories run inside the harness, verified, and exported as
+  SFT examples (255 and 63).
+- [x] Item 3 — the LoRA recipe, and the first adapters compared on val. Guide and record:
+  [STAGE9_ITEM3_PLAN.md](STAGE9_ITEM3_PLAN.md).
+- [ ] Item 4 — more training data (more train shapes, public tool-use data) and the
+  candidates trained on it, chosen on val.
+- [ ] Item 5 — the external test, checked on the base.
+- [ ] Item 6 — the final test, run once for the base and the final candidates.
+
+**Output:** adapters that reload into the ordinary loop, with dataset, config and cost
+records; the val comparisons behind every choice; and one table of test and external scores
+for the base and the final candidates.
 
 ### Item 1 pilot — inventory reconciliation (October 12, 2026)
 
@@ -955,9 +952,7 @@ These points set the entry conditions of Stage 10, listed in that section.
 drifted in `source_sha256` only (`llm.py`, `evals/bench/run.py`, `evals/__main__.py` changed;
 the three `evals/sft/` files added). The Stage 8 manifest also reports `splits_sha256` and
 `tasks`, which date from Item 1. Neither was refreshed. The versioned freeze happens once,
-before the holdout comparison (planned for Item 3; moved to the end of Stage 9 on October
-13). No dev, test or holdout task was run or exported in
-Item 2.
+before the final test (Item 6). No dev, test or holdout task was run or exported in Item 2.
 
 Evidence: `outputs/stage9-item2-20261012-teacher-s{0,1,2}/`, `-rft/rft-train-s{0..7}/` and
 `-rft/rft-train-aggregate.json` (runs); `-sft-teacher-v3/` and `-sft-rft/` (datasets, each
@@ -968,173 +963,181 @@ completion, and run the overfit → save → reload smoke test on a handful of t
 before any QLoRA pilot. After the first teacher-SFT adapter, sample the train pool with it
 before anything else in Stage 10.
 
-### Items 4–6 planned — a wider task pool, a public-data arm, external evaluation (decided October 13, 2026)
+### Item 3 complete — the LoRA recipe, and adapters compared on val (October 14, 2026)
 
-**Why.** The Item 2 teacher set is 255 examples from four skeletons: 451,019 tokens per epoch,
-of which 13,393 are trained. Training it takes minutes, so compute is not the constraint;
-variety is. Two kinds of variety are missing, and they come from different places.
+`train` turns an exported dataset into LoRA adapters, one per epoch:
 
-- **Varied workspace tasks** (reading back, continuing after a failure, stopping with the bare
-  token) exist only in our own environment. They come from more train skeletons (Item 4).
-- **Varied tools, arguments and dialogue situations** are what public tool-use data has
-  (Item 5). It is added as an arm, not swapped in: none of it shows our tools, our tool-result
-  format or our tasks.
+- rank 16 on every attention and MLP projection of the bf16 base;
+- loss on the completion tokens only, each row's mean, with rows averaged;
+- AdamW without weight decay at a rate of 1e-4, 10% linear warmup then cosine decay, gradients
+  clipped at 1.0, three epochs;
+- gradient checkpointing always on: without it, one training step on the longest row (3,599
+  tokens) does not fit an A40.
 
-**Order.** Item 3 runs as planned; its teacher-only adapter is the baseline for every later
-arm. Then Item 4, then the set-up of Item 6 (run on the base before any new adapter exists),
-then Item 5, then one comparison of all arms, which ends with the one holdout run.
+`replay` asks a served adapter to continue its training prompts greedily, which checks that the
+server really applies it. The guide, its decisions and the session record are in
+[STAGE9_ITEM3_PLAN.md](STAGE9_ITEM3_PLAN.md). `fit` was written by the user and revised by AI
+at the user's request; the rest of the code was delegated to AI at the user's explicit request.
+414 unit tests pass.
 
-The starting values below were approved on October 13, 2026: 12–16 new skeletons, the
-2,000 / 3,000 / one-third mix, and our own system prompt as the default.
+**Session A** ran on one A40 in EU-SE-1, at commit `a82558b`, for \$1.69.
 
-| Arm | Trained on | What the step to it shows |
-|---|---|---|
-| base | nothing | the control |
-| teacher-v3 | the Item 2 teacher set, 4 skeletons | Item 3's result |
-| teacher-wide | the teacher set on the widened pool | the effect of more skeletons |
-| mix | teacher-wide plus the public sample | the effect of public data |
+- **Reload check.** An adapter overfitted on the eight teacher examples the base model predicts
+  worst (bare `NONE` and `BLOCKED` answers) reproduced 8 of 8 through vLLM. The base
+  reproduced 0 of 8.
+- **Training.** Teacher arm: 255 examples in 17 minutes, mean loss by epoch 0.273, 0.047, 0.030.
+  RFT arm, the control: 33 examples (10 per skeleton) in 2 minutes.
+- **Epoch.** On val seed 0 the teacher epochs passed 52, 59 and 59 of 64. The earlier of the
+  tied epochs, epoch 2, was used for both arms.
 
-Every arm uses Item 3's recipe (D1–D5) unchanged, the same server command and three dev
-seeds, paired by task ID. The RFT arm stays Item 3's control and is not repeated on the wide
-pool.
+Val, 64 tasks, three seeds per arm, mean pass@1 / pass^3:
 
-**Item 4 — widen the train pool.**
+| | base | teacher-SFT | RFT-SFT |
+|---|---|---|---|
+| all | 0.573 / 0.48 | **0.953 / 0.89** | 0.375 / 0.36 |
+| inspection | 0.562 / 0.38 | 1.000 / 1.00 | 0.000 / 0.00 |
+| recovery | 0.812 / 0.75 | 0.979 / 0.94 | 0.354 / 0.31 |
+| stopping | 0.208 / 0.19 | 0.833 / 0.62 | 0.188 / 0.19 |
+| updates | 0.708 / 0.62 | 1.000 / 1.00 | 0.958 / 0.94 |
 
-- [ ] Add 12–16 train skeletons, to reach 16–20, spread over the four families. The 80
-  existing train tasks do not change, so teacher-v3 stays comparable.
-- [ ] Take the shapes from evidence, in this order: M1's failures on the train pool (Item 3,
-  Step 9); the base model's three failing behaviours from Item 2; the two Stage 8 weaknesses
-  the pool does not cover (doing nothing when the requested state already holds, and
-  reporting a missing file).
-- [ ] Give each new skeleton at least two outcomes chosen by the seed (act, or stop with a
-  bare token), and a clean/fault pair where it tests recovery.
-- [ ] For each new skeleton, write down the closest dev, test and holdout shape and how it
-  differs. A new train skeleton must not mirror one of them. The missing-file behaviour is
-  the one to watch: holdout's `backup_record_lookup` is a missing primary file.
-- [ ] Each new skeleton passes the Item 1 gates: the scripted solution passes, answer-only and
-  wrong-answer score 0, and the fault is observed in every fault variant.
-- [ ] Decide here whether `points_save_recovery` is revised or split (M0 reaches a write in 5
-  of 160 rollouts).
-- [ ] Run the teacher on the new tasks with the Item 2 commands and export flags
-  (`--flawed-turns drop --max-per-task 1`), and the base model for eight samples, which gives
-  M0's yield on the wide pool.
-- [ ] Train `teacher-wide` with Item 3's recipe.
+- **Teacher-SFT is a large gain on val.** In no seed does the base pass a task the adapter
+  fails, and the adapter gains 21 to 27 tasks per seed. False completions fall from 13 of 87
+  claims to 0, and completion tokens by 37%. Final answers are now the bare token wherever one
+  is asked for.
+- **What remains weak is a decision, not a format.** `no_op_correct_config` rose from 0.00 to
+  0.73, although the train pool has no task like it. Every remaining failure replies `UPDATED`
+  without writing anything.
+- **RFT-SFT is worse than the base**: 0.375 overall, and 0.00 on inspection. 13 of its 14
+  training trajectories are two requests long, one batch of reads and then the answer, and the
+  adapter now answers after a single exploring call. Training only on a model's own narrow
+  successes teaches their length as well as their content. Stage 10's round design takes this
+  into account.
+- **The control is stable.** The base reproduced the Stage 8 control (0.573 against 0.542).
+  Measured and served prompt tokens agree on all 2,619 requests of the session.
 
-The widened pool is the one Stage 10 holds fixed across rounds. Item 4 settles two of its
-entry conditions: the `points_save_recovery` check and the two uncovered weaknesses.
+**Limits.** These are val results; test runs in Item 6. Each arm has one training seed. The
+epoch was chosen on seed 0, which scored lowest of the three seeds (59, 61 and 63 tasks).
+Evidence: `outputs/stage9-item3-20261014-session-a/`.
 
-**Item 5 — the public-data arm.**
+### Item 4 — more training data, chosen on val
 
-| Dataset | What it adds | Size | License | Use |
-|---|---|---|---|---|
-| `nvidia/When2Call` | when to call a tool, ask a follow-up, or say it cannot be done | `train_sft` 15,000 | CC-BY-4.0 | yes: the closest public match to the stopping family |
-| `Agent-Ark/Toucan-1.5M` | real executions on 495 MCP servers; multi-turn, irrelevant-tool and failed-call cases | SFT subset 119k | Apache-2.0 | yes: Hermes format, the family our template belongs to |
-| `Salesforce/xlam-function-calling-60k` | single-turn calls over 3,673 APIs, execution-checked | 60k | CC-BY-4.0, gated, research only | only if the first two leave argument filling uncovered |
-| `Salesforce/APIGen-MT-5k` | multi-turn dialogues in the tau-bench domains | 5k | CC-BY-NC-4.0 | no: non-commercial, and it would contaminate tau-bench as a later evaluation |
+Compute is not the constraint: the teacher set trains in 17 minutes. Variety is. Item 4 adds two
+kinds of data. Each becomes a candidate trained with Item 3's recipe and compared on val with
+Item 3's adapter.
 
-- [ ] Before any download is used: record each dataset's license, card revision and download
-  date in the dataset metadata. The figures above were read from the dataset cards on October
-  13, 2026; no row has been inspected yet.
-- [ ] Read 20 rows of each dataset before writing the converter.
-- [ ] Convert each row to harness-shaped `messages` and `tools`, render it with `render_chat`
-  and `prompts/qwen_chat.jinja`, and write one `(prompt, completion)` example per assistant
-  turn, as `export` does. From there the rows go through the same `encode_example`.
-- [ ] Apply `export`'s round trip: a target must parse back through `LLM.parse_response` to
-  the calls it stands for. A row that fails it, or exceeds `BENCH_N_CTX`, is dropped and
-  counted, never repaired or truncated.
-- [ ] Decide the system prompt after reading the rows. The default is ours, because the
-  adapter is only ever served under it.
-- [ ] Sample with a fixed seed and record the multipliers. Starting mix: 2,000 When2Call rows,
-  3,000 Toucan rows (weighted toward its multi-turn and irrelevant subsets), and the own data
-  upsampled to one third of the rows. These are starting values, not measurements; they may
-  change at most twice, on dev.
-- [ ] Train `mix` with Item 3's recipe.
+| Candidate | Trained on |
+|---|---|
+| teacher-v3 | the Item 2 teacher set, 4 train shapes (exists) |
+| teacher-wide | the teacher set on more train shapes |
+| mix | teacher-wide plus a sample of public tool-use data |
 
-Known risks, each with its check:
+- [ ] Confirm Item 3's recipe for the new candidates (D1–D5 and the epoch rule), or change it
+  on val evidence.
 
-- **Style drift.** Public replies are sentences, and a bare final token is one of the three
-  behaviours being trained. Read `format_exact` by skeleton and the false-completion count for
-  `mix` against `teacher-wide`, not only the pass rate.
-- **Foreign tool results.** Public rows carry their own tool-result formats, not our
-  `ToolResult` JSON. They are prompt context only and never a target.
-- **Contamination.** Nothing from BFCL or the When2Call test split enters training. When2Call's
-  train and test sets come from one generator, so the `mix` arm's When2Call test score is
-  in-distribution and is labeled so.
+**More train shapes.** Only tasks in our own environment teach the behaviours val checks:
+reading back, continuing after a failure, stopping with the bare token, and seeing that nothing
+needs doing.
 
-**Item 6 — external evaluation.** Dev, test and holdout all live inside our harness, so they
-cannot show whether an adapter is more capable outside it or has lost something general.
+- [ ] Add 12–16 train skeletons, to reach 16–20 across the four families. The 80 existing
+  train tasks stay as they are.
+- [ ] Cover the two behaviours the pool lacks. One is leaving a state that already holds
+  untouched; val's `no_op_correct_config` still replies `UPDATED`. The other is reporting a
+  missing file.
+- [ ] Give each new skeleton at least two outcomes chosen by the seed, and clean/fault pairs
+  where it tests recovery.
+- [ ] Record for each new skeleton the closest val and test shape and how it differs. No new
+  shape may mirror one; test's `backup_record_lookup` is a missing primary file.
+- [ ] Every new skeleton passes the Item 1 gates.
+- [ ] Decide whether `points_save_recovery` is revised: the base reaches a write in 5 of 160
+  rollouts.
+- [ ] Run the teacher on the new tasks and export with the Item 2 commands
+  (`--flawed-turns drop --max-per-task 1`).
 
-- [ ] A local BFCL multi-turn subset, labeled as a local adaptation and never as an official
-  score.
-- [ ] The When2Call test set (`mcq` 3,652 rows, `llm_judge` 300), scored the way the dataset's
-  own evaluation does; read its script before writing ours.
-- [ ] Build both and run them on the base before the `mix` adapter exists, so the evaluation
-  cannot be shaped by the result. Then run every arm, on the same server.
-- [ ] The IFEval/general-QA regression layer stays as planned.
+**Public tool-use data** is training data only: it cannot be run as tasks in our harness.
 
-**Final step — holdout, once, for all arms (decided October 13, 2026).** Item 3 had planned
-the one holdout run in its Session B, for base, teacher-v3 and RFT. Holdout is looked at once,
-so the two new arms would have had only dev and the Stage 11 test split. The run moved here.
+| Dataset | Adds | Size | License |
+|---|---|---|---|
+| `nvidia/When2Call` `train_sft` | when to call a tool, ask, or decline | 15,000 | CC-BY-4.0 |
+| `Agent-Ark/Toucan-1.5M` SFT subset | real multi-turn tool executions, irrelevant tools, failed calls | 119k | Apache-2.0 |
 
-- [ ] No source change after this point: the new skeletons, the converter and the external
-  evaluation code are final and committed.
-- [ ] On the pod, from a clean clone, generate the versioned fixtures and manifest and run the
-  gates (`dataset --output ... --check`). This is the one versioned freeze of Stage 9.
-- [ ] Run base, teacher-v3, RFT, teacher-wide and mix on the 80 holdout tasks, three seeds
-  each, with `--final --manifest`, in one session on one server process. Then `aggregate`
-  each arm and `compare` per seed.
-- [ ] Nothing is chosen on holdout. Each arm's epoch and the mix's sampling are chosen on dev
-  before this step.
+`xlam-function-calling-60k` (single-turn calls) is a fallback only. `APIGen-MT-5k` is excluded:
+it is non-commercial, and it covers the tau-bench domains.
 
-Holdout results are therefore unknown while Item 4's skeletons are designed. Item 3's Session
-B keeps only M1's eight-sample run of the train pool. The commands are kept at the end of
-Step 9 in [STAGE9_ITEM3_PLAN.md](STAGE9_ITEM3_PLAN.md), which was revised on October 13 to
-match.
+- [ ] Record each license, card revision and download date. Read 20 rows of each dataset
+  before writing the converter.
+- [ ] Convert each row to `messages` and `tools`, render it with `render_chat` and the project
+  template, and write one example per assistant turn, as `export` does.
+- [ ] Keep only rows whose target parses back to the same calls and that fit in
+  `BENCH_N_CTX`. Nothing is repaired or truncated.
+- [ ] Use our system prompt unless the rows give a reason not to.
+- [ ] Start from the mix approved on October 13: 2,000 When2Call rows, 3,000 Toucan rows, and
+  our own data upsampled to a third of the rows. Change it at most twice, on val.
+- [ ] On val, check what public data can break: `format_exact` and false completions against
+  teacher-wide, not only the pass rate. Public rows' tool results are prompt context, never
+  targets.
 
-**Evidence behind the plan,** read from paper and dataset pages on October 12–13, 2026, and
-not reproduced here:
+**Choosing.**
 
-- Agent Data Protocol (arXiv 2510.24702) reports that a mixed, diverse set beats
-  in-domain-only data; for Qwen3-8B on AgentBench OS, 21.5% with AgentInstruct alone and 25.7%
-  with the mix. Its models are 7–32B, not 4B.
-- TRACE (arXiv 2604.05336, abstract only) reports that environments built for the capabilities
-  a model's failures show are missing beat generic synthetic data and GRPO on the target
-  environment.
-- AgenticQwen (arXiv 2604.21590) grows linear tasks into branching ones from the student's own
-  rollouts. It has no component ablation, so it supports the direction of Item 4 and not its
-  size.
+- [ ] Train teacher-wide and mix, and run each on val with three seeds, on one server with the
+  base.
+- [ ] Name the final candidates for Item 6: at most three, teacher-v3 included. No candidate is
+  added once Item 6 has run.
 
-**Cost.** Projected, not measured: the teacher pass on 80 tasks cost about \$0.07 and the base
-model's eight samples \$0.34, so both on a pool three to four times larger stay under \$2.
-Training on about 6,000 public rows has not been timed; Item 3's smoke run gives the seconds
-per row. The whole of Items 4–6 should fit the \$5–20 line in the budget table.
+Agent Data Protocol (arXiv 2510.24702) reports that mixed, diverse agent data beats in-domain
+data alone on 7–32B models. TRACE (arXiv 2604.05336) builds training environments for the
+capabilities a model's failures show missing. Both were read from paper pages and not
+reproduced here.
+
+### Item 5 — the external test
+
+Val and test both live inside our harness. The external test asks whether a candidate is
+better outside it, or has lost something general.
+
+- [ ] Score the When2Call test set (`mcq` 3,652 rows, `llm_judge` 300) the way the dataset's
+  own evaluation does; read its script first.
+- [ ] Build a local BFCL multi-turn subset, always labelled a local adaptation and never an
+  official score.
+- [ ] Run each scorer on the base only, to check that it works.
+- [ ] Never train on anything derived from either set. When2Call's train and test sets come
+  from one generator, so mix's When2Call score is in-distribution and is labelled so.
+- [ ] Optional: a small IFEval or general-QA subset, to catch damage outside tool use.
+
+### Item 6 — the final test, once
+
+- [ ] All code is final and committed. On the pod, from a clean clone,
+  `dataset --output ... --check` writes the one versioned manifest, covering the test and
+  holdout tasks.
+- [ ] Run the base and the final candidates on `--split test` and `--split holdout`, three
+  seeds each, with `--final --manifest`, on one server process.
+- [ ] `aggregate` each split per arm, combine the two weighted by task count (60 and 80), and
+  pair each candidate with the base by task ID.
+- [ ] Run the external test on the same arms.
+- [ ] Report in this stage the headline table (test mean pass@1 and pass^3, and external
+  scores, per arm), the costs and the limits. Nothing is chosen on these results.
+
+**Cost.** Projected, not measured: the teacher pass on 80 tasks cost \$0.07 and Item 3's GPU
+session \$1.69. Items 4–6 should fit the \$5–20 line in the budget table.
 
 ## Stage 10 — expert iteration and outcome learning · draft, conditional
 
-**Primary: 2–3 rounds of expert iteration.** M0 samples → the verifier filters → SFT produces M1
-→ **M1 samples** the next data → M2 … Each round keeps the same task pool, sampling budget,
+**Primary: 2–3 rounds of expert iteration.** M1 samples → the verifier filters → SFT produces M2
+→ **M2 samples** the next data → M3 … Each round keeps the same task pool, sampling budget,
 verifier and training recipe. The measured weak-RSI question is:
 **is M_k a better data generator than M_{k-1}?** Report per round the verified-trajectory yield,
-hard-task coverage, dev pass rate, and whether round k+1's gain is at least round k's. Diminishing
-returns, drift, or collapse are valid results. Only verifier-passed data enters training.
+hard-task coverage, val pass rate, and whether round k+1's gain is at least round k's.
+Diminishing returns, drift, or collapse are valid results. Only verifier-passed data enters
+training.
 
-**Starting point, revised on the Stage 9 Item 2 evidence (October 12, 2026).** The loop does not
-start from M0's own samples. M0's verified data (the RFT set) covers 29 of 80 train tasks, and 9
-of the 60 outside the one skeleton it already passes, so a model trained on it would sample
-almost the same data again. The loop starts from the teacher-SFT adapter instead: **M1 is SFT on
-the teacher set**, M1 samples the train pool, the verifier filters, SFT produces M2, and so on.
-The weak-RSI question is asked from M1 onward, with M0's yield as the reference point below.
-RFT-SFT remains the control arm from Stage 9. Whether a round trains on the previous model's
-verified samples alone or together with the teacher set is fixed before round 1 and then held.
+**Starting point.** The loop starts from M1, the adapter Stage 9 chooses on val, not from the
+base model's own samples. M0's verified samples (the RFT set) cover 29 of the 80 train tasks.
+An adapter trained on them alone scored 0.375 on val against the base's 0.573 (Stage 9 Item 3),
+because it learned their shape: read once, then answer. A round therefore cannot train on M_k's
+own verified samples alone. Whether it trains on them together with the teacher set, and in
+what proportion, is fixed before round 1 and then held. The task pool is the train pool as
+Stage 9 Item 4 leaves it, also held fixed across rounds.
 
-**Pool, revised October 13, 2026.** Stage 9 Item 4 widens the train pool before Stage 10
-starts, and the wide pool is the one held fixed across rounds. M1 is then the Stage 9 adapter
-chosen on dev among the arms trained on it (`teacher-wide` or `mix`). M0's yield is measured
-again on the wide pool in Item 4; the table below stays as the reference for the original
-four skeletons.
-
-M0's yield under the Item 2 protocol (8 samples per task, Stage 8 server command), the numbers
-M1 is compared against:
+M0's yield on the original 80 train tasks, under the Stage 9 Item 2 protocol (8 samples per
+task, Stage 8 server command), is the reference for Item 1:
 
 | Skeleton | Mean pass@1 | Tasks with a verified trajectory |
 |---|---|---|
@@ -1144,23 +1147,44 @@ M1 is compared against:
 | `points_save_recovery` | 0.006 | 1 of 20 |
 | all | 0.298 | 29 of 80 |
 
-**Entry conditions.** Stage 10 starts only when each of these is settled:
+If Stage 9 Item 4 adds train shapes, M0 is sampled on them too, under the same protocol, so
+that both tables cover the same pool.
 
-- [ ] Item 3 is done: the masked-loss recipe passes the overfit → save → reload smoke test, and
-  the teacher-SFT adapter is compared with the base on dev.
-- [ ] Stage 9 Items 4–6 are done: the pool is widened, M1 is chosen among the arms, and the
-  external scores of every arm are recorded. Item 4 is where the third and fourth conditions
-  below are settled.
-- [ ] M1 has been sampled on the train pool under the same protocol as the table above, at
-  about the cost of the Item 2 session (\$0.34). If its yield on the three weak skeletons is no
-  higher than M0's, expert iteration has nothing to iterate on, and that is the result to report.
-- [ ] `points_save_recovery` is checked on M1's samples. M0 reaches a write in 5 of 160
-  rollouts, because it guesses an account path, fails and stops. If M1 still rarely reaches a
-  write, revise or split the skeleton before round 1, since the task pool is fixed across rounds.
-- [ ] A decision is recorded on the two Stage 8 weaknesses the train pool does not cover (doing
-  nothing when the state already holds; reporting a missing file): add a train skeleton for
-  them before round 1, or state that no gain is expected there. A new train skeleton must not
-  mirror a dev, test or holdout shape.
+### Item 1 — M1's yield on the train pool
+
+Moved here on October 14, 2026, from Stage 9 Item 3's planned Session B. Before any round,
+sample M1 the way M0 was sampled in Stage 9 Item 2: eight samples of every train task, on the
+Stage 8 server command with `--lora-modules M1=ADAPTER_DIR` added (runbook in
+`docs/benchmark.md`).
+
+```sh
+for s in 0 1 2 3 4 5 6 7; do
+  python -m agent_from_scratch.evals bench --backend vllm --split train --seed $s \
+    --adapter M1 --output outputs/m1-train-s$s
+done
+python -m agent_from_scratch.evals aggregate outputs/m1-train-s? --output outputs/m1-train-aggregate.json
+```
+
+- [ ] Read, per skeleton and beside M0's table: mean pass@1 and the tasks with a verified
+  trajectory.
+- [ ] Count the tasks with mixed outcomes under the GRPO pilot's strict reward (below).
+  `aggregate` counts `passed`, so recount from `results.json`.
+- [ ] Count the `points_save_recovery` rollouts that reach a `write_file` call (M0: 5 of 160).
+- [ ] Keep every failed run's directory: M1's remaining failures show what the next round, or
+  more train shapes, must cover.
+
+These runs are on training tasks, so they measure M1 as a data generator, not its capability.
+Stage 9 Item 2's 640 rollouts took 26 minutes and \$0.34 on one A40.
+
+**Entry conditions.** Stage 10's rounds start only when each of these is settled:
+
+- [ ] Stage 9 Item 4 has chosen M1 on val.
+- [ ] Item 1 is done. If M1's yield on the weak skeletons is no higher than M0's, expert
+  iteration has nothing to iterate on, and that is the result to report.
+- [ ] `points_save_recovery` reaches a write in M1's samples, or Stage 9 Item 4 revised it.
+- [ ] The two behaviours the original pool lacked (leaving a correct state untouched, and
+  reporting a missing file) are covered by Stage 9 Item 4's new shapes, or a note says no
+  gain is expected there.
 
 ### Conditional: a GRPO pilot (design written October 12, 2026)
 
@@ -1193,17 +1217,17 @@ so with $G = 8$ a lone success weighs $+2.65$, and a lone failure $-2.65$.
   model's read-back: 0 of 80) has to come from demonstrations.
 - An all-pass or all-fail group has zero advantage. `points_save_recovery` is at 0.006 for M0,
   which is why the pilot starts from M1 and never from M0.
-- It does not widen a narrow task pool. Train up and holdout flat is a task-diversity result,
+- It does not widen a narrow task pool. Train up and test flat is a task-diversity result,
   and more optimization on the same 80 tasks makes it worse.
 - A verifier loophole. Under SFT a loophole lets a few bad examples in; under RL the policy
   searches for it.
 
-**Pool size.** The numbers in this section are written for the 80-task pool. Once Stage 9
-Item 4 has widened it, the go threshold is the same share of the wide pool (3 tasks in 8),
-read from the chosen M1's eight-sample run of that pool. The batch of an iteration is set
-again in the pilot's plan, keeping one pass equal to one expert-iteration round of sampling.
+**Pool size.** The numbers in this section are written for the 80-task pool. If Stage 9
+Item 4 widens it, the go threshold is the same share of the wider pool (3 tasks in 8). The
+batch of an iteration is then set again in the pilot's plan, keeping one pass equal to one
+expert-iteration round of sampling.
 
-**Go / no-go.** Read from M1's eight-sample run of the train pool (Item 3, Step 9), counted
+**Go / no-go.** Read from M1's eight-sample run of the train pool (Item 1 above), counted
 with the reward below. `aggregate` counts `passed`, which is looser, so recount from
 `results.json`.
 
@@ -1271,13 +1295,14 @@ During the pilot, read a sample of reward-1 rollouts after every pass.
 
 The learning rate, the number of passes (at most 6, which is 24 optimizer steps and 3,840
 rollouts) and where the trainer runs beside the server are fixed in the pilot's own plan
-before the first iteration, once Item 3 has measured seconds per row.
+before the first iteration. Stage 9 Item 3 measured 1.33 seconds per training row on an A40,
+with gradient checkpointing.
 
 **Comparison and output.**
 
-- An adapter is saved after each pass. The pass is chosen on dev seed 0, as Item 3's D5
+- An adapter is saved after each pass. The pass is chosen on val seed 0, as Stage 9 Item 3
   chooses the epoch.
-- Compare on dev, three seeds, same server command: M1, the GRPO adapter after pass $r$, and
+- Compare on val, three seeds, same server command: M1, the GRPO adapter after pass $r$, and
   expert iteration's $M_{1+r}$, which has seen the same number of rollouts. Report mean pass@1
   and pass^k by family and skeleton, and the per-seed pairings.
 - Per iteration: mean reward, mixed and skipped groups, loss and gradient norm. Per pass:
@@ -1286,15 +1311,17 @@ before the first iteration, once Item 3 has measured seconds per row.
   only if updated adapters were reloaded and evaluated. A null result, or one where the
   expert-iteration arm is better per rollout, is a valid result.
 
-**Cost.** Projected from Item 2, not measured: 640 sequential rollouts took 26 minutes and
-\$0.34 on one A40, and they parallelize; training time per row is unknown until Item 3's
-smoke run. A six-pass pilot should fit the existing \$0–30 line. The total budget may rise to
+**Cost.** Projected, not measured: 640 sequential rollouts took 26 minutes and \$0.34 on one
+A40, and they parallelize; training takes about 1.3 seconds per row. A six-pass pilot should
+fit the existing \$0–30 line. The total budget may rise to
 \$150–200 if the pilot needs it (approved October 12, 2026); the projection does not need it.
 
 ## Stage 11 — final comparison and delivery · draft
 
-**Required outcome:** after dev selection, run the frozen base, the chosen SFT adapter and each
-expert-iteration round on the reserved test set. Report paired wins/losses, counts, costs,
+**Required outcome:** Stage 9 reports the base and its SFT candidates on test and the external
+test. After val selection, any Stage 10 round or GRPO adapter kept as a final candidate is run
+once on the same test and external test, under Stage 9's freeze or a new one if the harness
+changed; Stage 9's numbers stand as reported. Report paired wins/losses, counts, costs,
 uncertainty, regressions and limitations. Do not promise gains, and do not treat a local
 improvement as broad agent generalization. Package setup, fixture reset/eval, adapter reload, and
 a demo covering tools → recovery → compact → restart → corrected memory. Keep `docs/results.md`
@@ -1317,9 +1344,9 @@ The capped memory index remains planned Stage 4 work.
 on a host that can hold the 7B weights, and record the retained/lost facts in
 [context-memory.md](context-memory.md); that is Stage 3's one outstanding gap. Stage 8 is
 complete: the benchmark and protocol are frozen and the Qwen3-4B control baseline is recorded
-(`docs/benchmark.md`). Stage 9 Item 1 is complete as a small-scale general-assistant task pool.
-Start Item 2 with a teacher backend and a few verified training trajectories, then inspect their
-request-level inputs and assistant targets before scaling collection. For each session record: what I built, what I broke,
+(`docs/benchmark.md`). Stage 9 Items 1–3 are complete: the task pool, the teacher and RFT
+examples, and the LoRA recipe, whose teacher adapter reaches 0.953 on val. Item 4 is next: more
+train shapes and public data, chosen on val. For each session record: what I built, what I broke,
 what the evidence shows, what I can explain unaided, and the next smallest gap.
 
 [ch1]: ../../../harness-books/book1-claude-code/chapter-01-why-harness-engineering.md
