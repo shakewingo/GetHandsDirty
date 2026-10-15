@@ -212,7 +212,7 @@ class HarnessTests(unittest.TestCase):
 class BenchTests(unittest.TestCase):
     def test_the_teacher_may_only_see_the_train_split(self):
         with TemporaryDirectory() as temporary, patch.object(run, "load_model") as model:
-            for split in ("dev", "test", "holdout"):
+            for split in ("val", "test"):
                 args = ["bench", "--backend", "teacher", "--split", split, "--final",
                         "--student-gguf", __file__, "--output", str(Path(temporary) / split)]
                 with self.subTest(split=split), patch.object(sys, "argv", args), patch("sys.stderr"):

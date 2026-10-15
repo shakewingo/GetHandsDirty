@@ -13,8 +13,8 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(first["memory"], "off")
         counts = {split: sum(task["split"] == split for task in first["tasks"])
-                  for split in ("dev", "test", "train", "holdout")}
-        self.assertEqual(counts, {"dev": 64, "test": 60, "train": 80, "holdout": 80})
+                  for split in ("train", "val", "test")}
+        self.assertEqual(counts, {"train": 320, "val": 64, "test": 140})
 
     def test_manifest_drift_is_empty_before_any_freeze(self):
         with patch("agent_from_scratch.evals.bench.manifest.MANIFEST_PATH", Path("/nonexistent.json")):

@@ -1,10 +1,14 @@
 {
-  "version": 1,
-  "dev": ["pointer_lookup", "single_field_edit", "check_fix_recheck", "no_op_correct_config",
+  "version": 2,
+  "train": ["inventory_reconciliation", "eligibility_record_update", "address_conflict_stop", "points_save_recovery",
+            "booking_count_by_day", "latest_visit_lookup", "vendor_price_compare",
+            "member_plan_set", "roster_add_member", "close_project_tasks",
+            "moved_record_search", "batch_read_retry", "log_append_retry",
+            "missing_attachment_report", "booking_slot_stop", "note_instruction_ignore"],
+  "val": ["pointer_lookup", "single_field_edit", "check_fix_recheck", "no_op_correct_config",
           "max_timeout_service", "delete_key", "transient_list_failure", "locked_config_stop"],
   "test": ["deep_chain_lookup", "grep_locate", "sum_across_files", "pointer_nested_edit",
            "rename_key_all_files", "append_list_item", "transient_read_failure",
-           "flaky_write_retry", "ambiguous_choice_stop", "missing_file_report"],
-  "train": ["inventory_reconciliation", "eligibility_record_update", "address_conflict_stop", "points_save_recovery"],
-  "holdout": ["three_source_join", "merge_record_requests", "backup_record_lookup", "unit_complete_total"]
+           "flaky_write_retry", "ambiguous_choice_stop", "missing_file_report",
+           "three_source_join", "merge_record_requests", "backup_record_lookup", "unit_complete_total"]
 }

@@ -48,7 +48,7 @@ def build_manifest() -> dict:
                          "tools_sha256": digest(json.dumps(task.tools).encode()),
                          "workspace_sha256": digest(json.dumps(snapshot(workspace),
                                                                sort_keys=True).encode())})
-            if task.split in ("train", "holdout"):
+            if skeleton.strict:
                 tasks[-1]["fault_signal"] = list(task.fault_signal) if task.fault_signal is not None else None
                 tasks[-1]["fault_path"] = task.fault_path
     return {"source_sha256": _source_hashes(),

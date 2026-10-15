@@ -318,7 +318,7 @@ class CollectTests(unittest.TestCase):
         self.assertEqual({e["provenance"]["seed"] for e in only}, {1})
 
     def test_only_the_train_split_can_become_training_data(self):
-        for split in ("dev", "test", "holdout"):
+        for split in ("val", "test"):
             with self.subTest(split=split), self.assertRaisesRegex(ValueError, "train"):
                 collect([self.run_dir(split, 0, split=split)], "rft")
 

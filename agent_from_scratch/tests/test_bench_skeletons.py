@@ -59,7 +59,7 @@ class SkeletonGateTests(unittest.TestCase):
                 self.assertEqual(snapshot(a), snapshot(b))
 
     def test_advisory_answers_tolerate_a_reply_wrapped_in_prose(self):
-        # Regression: the Task 24 real-model dev pilot found single_field_edit,
+        # Regression: the Task 24 real-model val pilot found single_field_edit,
         # pointer_nested_edit, rename_key_all_files, append_list_item and flaky_write_retry
         # wrongly declared format="required" for their claim token, so a model that did the
         # actual work correctly but wrapped "DONE" in a sentence still failed. Only skeletons
@@ -109,17 +109,17 @@ class SkeletonGateTests(unittest.TestCase):
         names = [skeleton.name for skeleton in SKELETONS]
         self.assertEqual(len(names), len(set(names)), "duplicate skeleton name")
         splits = json.loads(SPLITS_PATH.read_text())
-        groups = [splits[key] for key in ("dev", "test", "train", "holdout")]
+        groups = [splits[key] for key in ("train", "val", "test")]
         listed = {name for group in groups for name in group}
         self.assertEqual(len(listed), sum(map(len, groups)), "skeleton shared across splits")
         self.assertEqual(set(names), listed)
         for skeleton in SKELETONS:
             self.assertIn(skeleton.name, splits[skeleton.split])
-        self.assertEqual(len([s for s in SKELETONS if s.split == "dev"]), 8)
-        self.assertEqual(len([s for s in SKELETONS if s.split == "test"]), 10)
-        dev_total = sum(len(s.seeds) * (2 if s.recovery else 1) for s in SKELETONS if s.split == "dev")
+        self.assertEqual(len([s for s in SKELETONS if s.split == "val"]), 8)
+        self.assertEqual(len([s for s in SKELETONS if s.split == "test"]), 14)
+        val_total = sum(len(s.seeds) * (2 if s.recovery else 1) for s in SKELETONS if s.split == "val")
         test_total = sum(len(s.seeds) * (2 if s.recovery else 1) for s in SKELETONS if s.split == "test")
-        self.assertEqual((dev_total, test_total), (64, 60))
+        self.assertEqual((val_total, test_total), (64, 140))
 
 
 if __name__ == "__main__":

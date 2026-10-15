@@ -45,7 +45,7 @@ def _solve(task):
     return [call("shell", command_id="check_fixture"), answer("CHECKED")]
 
 
-PROBE = Skeleton(name="probe_check", family="recovery", split="dev", seeds=(0,),
+PROBE = Skeleton(name="probe_check", family="recovery", split="val", seeds=(0,),
                  recovery=True, build=_write_config, solution=_solve)
 
 
@@ -64,13 +64,13 @@ class RunFrameworkTests(unittest.TestCase):
         with TemporaryDirectory() as private:
             workspace = Path(private) / "workspace"
             workspace.mkdir()
-            ctx = BuildContext("probe_check", "recovery", "dev", 0, None)
+            ctx = BuildContext("probe_check", "recovery", "val", 0, None)
             task = _write_config(None, workspace, ctx)
             registry = registry_for(task, workspace, Path(private))
             self.assertEqual(set(registry.schemas()), {"read_file", "write_file", "shell"})
 
     def test_run_case_scores_a_clean_recovery_task(self):
-        ctx = BuildContext("probe_check", "recovery", "dev", 0, "clean")
+        ctx = BuildContext("probe_check", "recovery", "val", 0, "clean")
         with TemporaryDirectory() as directory:
             record = run_case(_model(_solve(_write_config(None, Path(directory), ctx))),
                               PROBE, ctx, Path(directory) / "run")
@@ -78,7 +78,7 @@ class RunFrameworkTests(unittest.TestCase):
         self.assertEqual(record["id"], "probe_check-0-clean")
 
     def test_run_case_exercises_the_shell_fault_and_recovers(self):
-        ctx = BuildContext("probe_check", "recovery", "dev", 0, "fault")
+        ctx = BuildContext("probe_check", "recovery", "val", 0, "fault")
         with TemporaryDirectory() as directory:
             probe_workspace = Path(directory) / "probe"
             probe_workspace.mkdir()
@@ -117,12 +117,15 @@ class FinalGuardTests(unittest.TestCase):
         finally:
             sys.argv = old_argv
 
-    def test_drift_without_allow_drift_is_rejected(self):
+    def test_manifest_drift_is_rejected(self):
         import sys
+        from tempfile import NamedTemporaryFile
         from unittest.mock import patch
         from agent_from_scratch.evals.bench.run import main
         old_argv = sys.argv
-        sys.argv = ["bench", "--output", "/tmp/should-not-be-created-2", "--split", "test", "--final"]
+        manifest = self.enterContext(NamedTemporaryFile(suffix=".json"))
+        sys.argv = ["bench", "--output", "/tmp/should-not-be-created-2", "--split", "test", "--final",
+                    "--manifest", manifest.name]
         try:
             # Patch where manifest_drift is defined: `main()` does `from .manifest import
             # manifest_drift` fresh on every call, so the patched module attribute is what

@@ -38,7 +38,7 @@ class VerifyTests(unittest.TestCase):
         (self.workspace / "config.json").write_text('{"output": "old.json"}\n')
 
     def test_a_correct_advisory_answer_wrapped_in_prose_still_passes(self):
-        task = Task(id="t", skeleton="s", family="inspection", split="dev", prompt="p",
+        task = Task(id="t", skeleton="s", family="inspection", split="val", prompt="p",
                     tools=("read_file",), expect=Expect(answer=Answer(value="FINISH-LIME")))
         before = snapshot(self.workspace)
         result = _turn([_row("read_file", {"content": "..."})], "The value is FINISH-LIME.")
@@ -47,7 +47,7 @@ class VerifyTests(unittest.TestCase):
         self.assertFalse(score["checks"]["format_exact"])
 
     def test_a_required_answer_needs_the_exact_format(self):
-        task = Task(id="t", skeleton="s", family="stopping", split="dev", prompt="p",
+        task = Task(id="t", skeleton="s", family="stopping", split="val", prompt="p",
                     tools=("read_file",),
                     expect=Expect(answer=Answer(value="UNCHANGED", format="required")))
         before = snapshot(self.workspace)
@@ -57,7 +57,7 @@ class VerifyTests(unittest.TestCase):
         self.assertTrue(check(task, exact, self.workspace, before)["passed"])
 
     def test_answer_match_is_whole_token_not_substring(self):
-        task = Task(id="t", skeleton="s", family="updates", split="dev", prompt="p", tools=(),
+        task = Task(id="t", skeleton="s", family="updates", split="val", prompt="p", tools=(),
                     expect=Expect(answer=Answer(value="DONE", reject=("UNDONE",))))
         before = snapshot(self.workspace)
         self.assertFalse(check(task, _turn([], "UNDONE"), self.workspace, before)["passed"])
@@ -66,14 +66,14 @@ class VerifyTests(unittest.TestCase):
     def test_files_check_compares_json_by_value_and_text_after_stripping_newline(self):
         (self.workspace / "config.json").write_text('{"a": 1, "b": 2}\n')
         (self.workspace / "note.txt").write_text("hello\n")
-        task = Task(id="t", skeleton="s", family="updates", split="dev", prompt="p", tools=(),
+        task = Task(id="t", skeleton="s", family="updates", split="val", prompt="p", tools=(),
                     expect=Expect(files={"config.json": '{"b": 2, "a": 1}',
                                         "note.txt": "hello"}))
         before = {"config.json": "h", "note.txt": "h2"}
         self.assertTrue(check(task, _turn([], ""), self.workspace, before)["checks"]["files"])
 
     def test_unchanged_fails_on_an_unexpected_write(self):
-        task = Task(id="t", skeleton="s", family="updates", split="dev", prompt="p", tools=(),
+        task = Task(id="t", skeleton="s", family="updates", split="val", prompt="p", tools=(),
                     expect=Expect(files={"config.json": '{"output": "old.json"}'}))
         before = {"config.json": "OLDHASH", "other.txt": "SAMEHASH"}
         after_snapshot_note = "other.txt changed relative to `before`"  # documents the scenario
@@ -85,7 +85,7 @@ class VerifyTests(unittest.TestCase):
         self.assertIn("other.txt", score["changed_paths"])
 
     def test_evidence_requires_the_value_in_a_successful_observation(self):
-        task = Task(id="t", skeleton="s", family="inspection", split="dev", prompt="p",
+        task = Task(id="t", skeleton="s", family="inspection", split="val", prompt="p",
                     tools=("read_file",), expect=Expect(answer=Answer(value="X"),
                                                         evidence=("secret-42",)))
         before = {}
@@ -95,7 +95,7 @@ class VerifyTests(unittest.TestCase):
         self.assertTrue(check(task, present, self.workspace, before)["checks"]["evidence"])
 
     def test_process_rules_no_write_attempts_and_check_before_write(self):
-        task = Task(id="t", skeleton="s", family="stopping", split="dev", prompt="p", tools=(),
+        task = Task(id="t", skeleton="s", family="stopping", split="val", prompt="p", tools=(),
                     expect=Expect(process=("no_write_attempts",)))
         before = {}
         clean = _turn([_row("read_file", {})], "")
@@ -103,7 +103,7 @@ class VerifyTests(unittest.TestCase):
         self.assertTrue(check(task, clean, self.workspace, before)["checks"]["process"])
         self.assertFalse(check(task, wrote, self.workspace, before)["checks"]["process"])
 
-        recovery = Task(id="t2", skeleton="s", family="recovery", split="dev", prompt="p",
+        recovery = Task(id="t2", skeleton="s", family="recovery", split="val", prompt="p",
                         tools=(), expect=Expect(process=("check_before_write", "passing_check_after_last_write")))
         bad_order = _turn([_row("write_file", {}, call_id="c1"),
                            _row("shell", {"exit_code": 0}, call_id="c2")], "")
@@ -115,18 +115,18 @@ class VerifyTests(unittest.TestCase):
         self.assertTrue(check(recovery, good_order, self.workspace, before)["checks"]["process"])
 
     def test_false_completion_flags_a_claimed_but_unmet_task(self):
-        task = Task(id="t", skeleton="s", family="updates", split="dev", prompt="p", tools=(),
+        task = Task(id="t", skeleton="s", family="updates", split="val", prompt="p", tools=(),
                     expect=Expect(files={"config.json": '{"output": "new.json"}'}),
                     claim_tokens=("DONE",))
         before = {"config.json": "h"}
         lied = _turn([], "DONE")  # config.json was never changed to new.json
         self.assertTrue(check(task, lied, self.workspace, before)["false_completion"])
-        no_claim = Task(id="t2", skeleton="s", family="updates", split="dev", prompt="p", tools=(),
+        no_claim = Task(id="t2", skeleton="s", family="updates", split="val", prompt="p", tools=(),
                         expect=Expect())
         self.assertIsNone(check(no_claim, _turn([], "anything"), self.workspace, before)["false_completion"])
 
     def test_fault_encountered_searches_the_whole_failed_row(self):
-        task = Task(id="t", skeleton="s", family="recovery", split="dev", prompt="p",
+        task = Task(id="t", skeleton="s", family="recovery", split="val", prompt="p",
                     tools=("read_file",), expect=Expect(answer=Answer(value="X")),
                     fault_signal=("read_file", "Simulated transient read failure."))
         before = {}
@@ -142,15 +142,15 @@ class VerifyTests(unittest.TestCase):
         usage_b1 = {"prompt_tokens": 50, "completion_tokens": 5, "total_tokens": 55}
         usage_b2 = {"prompt_tokens": 80, "completion_tokens": 8, "total_tokens": 88}
         records = [
-            {"skeleton": "a", "family": "inspection", "split": "dev", "passed": True,
+            {"skeleton": "a", "family": "inspection", "split": "val", "passed": True,
              "checks": {"format_exact": True}, "false_completion": None, "fault_encountered": None,
              "pair_id": None, "condition": None, "invalid_calls": 0, "model_requests": 2,
              "elapsed_seconds": 1.0, "usage": usage_a},
-            {"skeleton": "b", "family": "recovery", "split": "dev", "passed": True,
+            {"skeleton": "b", "family": "recovery", "split": "val", "passed": True,
              "checks": {}, "false_completion": False, "fault_encountered": False,
              "pair_id": "b-0", "condition": "clean", "invalid_calls": 0, "model_requests": 2,
              "elapsed_seconds": 1.0, "usage": usage_b1},
-            {"skeleton": "b", "family": "recovery", "split": "dev", "passed": True,
+            {"skeleton": "b", "family": "recovery", "split": "val", "passed": True,
              "checks": {}, "false_completion": False, "fault_encountered": True,
              "pair_id": "b-0", "condition": "fault", "invalid_calls": 1, "model_requests": 3,
              "elapsed_seconds": 2.0, "usage": usage_b2},
@@ -165,7 +165,7 @@ class VerifyTests(unittest.TestCase):
                                             "total_tokens": 253})
 
     def test_bench_summary_usage_is_none_when_any_record_is_missing_it(self):
-        records = [{"skeleton": "a", "family": "inspection", "split": "dev", "passed": True,
+        records = [{"skeleton": "a", "family": "inspection", "split": "val", "passed": True,
                    "checks": {}, "false_completion": None, "fault_encountered": None,
                    "pair_id": None, "condition": None, "invalid_calls": 0, "model_requests": 1,
                    "elapsed_seconds": 1.0, "usage": {"prompt_tokens": None,

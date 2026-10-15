@@ -1,6 +1,6 @@
 """Run-directory helpers shared by every suite (`bench`, `pressure`).
 
-The Stage 2B `dev` suite that used to live here was removed after Stage 8; its tasks, fixtures and
+The 17-task Stage 2B suite that used to live here was removed after Stage 8; its tasks, fixtures and
 byte-offset file tools are in git history (see docs/checkpoints/EVAL_HISTORY.md).
 """
 

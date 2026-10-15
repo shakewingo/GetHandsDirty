@@ -1,12 +1,13 @@
 """Build Stage 8 benchmark tasks from seeds, run them, and score them.
 
-Usage: python -m agent_from_scratch.evals bench --output DIR --split {dev,test,train,holdout} [--tasks a,b]
+Usage: python -m agent_from_scratch.evals bench --output DIR --split {train,val,test} [--tasks a,b]
            [--seed N] [--backend {llama_cpp,vllm,teacher}] [--base-url URL] [--served-model NAME]
-           [--adapter NAME] [--limits '{"planning": true}'] [--final] [--allow-drift]
+           [--adapter NAME] [--limits '{"planning": true}'] [--final --manifest FILE]
            [--teacher-model ID] [--teacher-effort {none,low,high,max}] [--student-gguf FILE]
 
 Every run uses the frozen sampled protocol (config.BENCH_DECODING); `--seed` picks the sample.
-Run once per seed in config.BENCH_SEEDS, then `aggregate` the runs.
+Run once per seed in config.BENCH_SEEDS, then `aggregate` the runs. Val is where every choice is
+made; test is run once per final candidate, with --final and a versioned dataset --manifest.
 """
 
 import argparse
@@ -84,7 +85,7 @@ def run_case(model, skeleton: Skeleton, ctx: BuildContext, output: Path, *,
         save(output / "task.json", asdict(task))
         before = snapshot(workspace)
         initial_evidence = ()
-        if task.split in ("train", "holdout") and task.expect.files:
+        if skeleton.strict and task.expect.files:
             sources = [json.dumps(p.read_text(), ensure_ascii=False) for p in workspace.rglob("*") if p.is_file()]
             initial_evidence = tuple(needle for needle in task.expect.evidence
                                      if any(needle in source for source in sources))
@@ -101,7 +102,7 @@ def run_case(model, skeleton: Skeleton, ctx: BuildContext, output: Path, *,
                             if r["ok"] and r["tool_name"] in EVIDENCE_TOOLS]
             score["checks"]["observed_before_write"] = all(any(n in row for row in observations) for n in initial_evidence)
             score["passed"] = score["passed"] and score["checks"]["observed_before_write"]
-        if task.split in ("train", "holdout") and task.condition == "fault":
+        if skeleton.strict and task.condition == "fault":
             if task.fault_path is not None:
                 tool_name, needle = task.fault_signal
                 target = (workspace / task.fault_path).resolve()
@@ -112,7 +113,7 @@ def run_case(model, skeleton: Skeleton, ctx: BuildContext, output: Path, *,
                     for row in exchanges(result))
             score["checks"]["fault_observed"] = score["fault_encountered"] is True
             score["passed"] = score["passed"] and score["checks"]["fault_observed"]
-        if task.split in ("train", "holdout") and task.claim_tokens:
+        if skeleton.strict and task.claim_tokens:
             claimed = any(token in (result.final_answer or "") for token in task.claim_tokens)
             failed_extra = any(score["checks"].get(key) is False
                                for key in ("observed_before_write", "fault_observed"))
@@ -147,7 +148,7 @@ def main():
     from .manifest import manifest_drift, protocol_mismatch
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--split", choices=("dev", "test", "train", "holdout"), default="dev")
+    parser.add_argument("--split", choices=("train", "val", "test"), default="val")
     parser.add_argument("--tasks", help="Comma-separated task IDs; default: every task in --split")
     parser.add_argument("--seed", type=int, default=0,
                         help="Sample index passed to every request; workspaces are seeded separately")
@@ -166,20 +167,17 @@ def main():
                         help="Base model name as the vLLM server serves it")
     parser.add_argument("--adapter", help="LoRA module name on the vLLM server; omit for the base control")
     parser.add_argument("--limits", default="{}", help='JSON AgentLimits overrides')
-    parser.add_argument("--final", action="store_true", help="Required to run --split test")
-    parser.add_argument("--allow-drift", action="store_true",
-                        help="Run --final despite manifest drift or a protocol mismatch")
-    parser.add_argument("--manifest", type=Path, help="Explicit dataset manifest; default is the original Stage 8 freeze")
+    parser.add_argument("--final", action="store_true",
+                        help="Required to run --split test; refuses manifest drift and a protocol mismatch")
+    parser.add_argument("--manifest", type=Path, help="The versioned dataset manifest a test run is checked against")
     args = parser.parse_args()
     overrides = parse_limits(parser, args.limits)
     if args.backend == "teacher" and args.split != "train":
         parser.error("The teacher may only see the train split.")
     if args.backend == "teacher" and (args.student_gguf is None or not args.student_gguf.is_file()):
         parser.error("--backend teacher needs --student-gguf, an existing GGUF of the student model.")
-    if args.split == "test" and not args.final:
-        parser.error("Running the test split needs --final (see docs/STAGE8_DESIGN.md).")
-    if args.split == "holdout" and (not args.final or args.manifest is None or args.allow_drift or overrides):
-        parser.error("Holdout needs --final and --manifest; drift and limit overrides are not allowed.")
+    if args.split == "test" and (not args.final or args.manifest is None or overrides):
+        parser.error("The test split needs --final and --manifest; limit overrides are not allowed.")
     if args.manifest is not None and not args.manifest.is_file():
         parser.error("The supplied manifest does not exist.")
     if args.adapter and args.backend != "vllm":
@@ -194,16 +192,16 @@ def main():
         drift = (manifest_drift(args.manifest) if args.manifest is not None else manifest_drift()) if args.final else {}
     except (ValueError, OSError) as error:
         parser.error(f"Invalid manifest: {error}")
-    if drift and not args.allow_drift:
-        parser.error(f"Manifest drift in {sorted(drift)}; rerun with --allow-drift if intended.")
+    if drift:
+        parser.error(f"Manifest drift in {sorted(drift)}.")
     out = args.output.resolve()
     if out.exists():
         parser.error(f"{out} already exists; evidence is never overwritten.")
     model = load_model(args)
     mismatch = protocol_mismatch(model.settings(), args.seed) if args.final else []
-    if mismatch and not args.allow_drift:
+    if mismatch:
         model.close()
-        parser.error(f"Not the frozen protocol: {'; '.join(mismatch)}. Rerun with --allow-drift if intended.")
+        parser.error(f"Not the frozen protocol: {'; '.join(mismatch)}.")
     model = open_run(out, parser, suite=f"bench-{args.split}-v2", seed=args.seed, overrides=overrides,
                      model=model, split=args.split, final=args.final, manifest_drift=drift,
                      protocol_mismatch=mismatch, selected_tasks=[c.id for _, c in entries],

@@ -13,13 +13,16 @@ from agent_from_scratch.evals.verify import snapshot
 from agent_from_scratch.tests.test_bench_skeletons import _model
 
 
-class HeldOutTaskTests(unittest.TestCase):
-    split = "holdout"
+class Stage9TestTaskTests(unittest.TestCase):
+    """The four Stage 9 shapes of the test split; `TrainingTaskTests` runs the same gates on train."""
+
+    split = "test"
     expected_names = {"three_source_join", "merge_record_requests", "backup_record_lookup", "unit_complete_total"}
+    expected_count = 80
 
     def setUp(self):
-        self.entries = specs(self.split)
-        self.assertEqual(len(self.entries), 80)
+        self.entries = [(s, ctx) for s, ctx in specs(self.split) if s.strict]
+        self.assertEqual(len(self.entries), self.expected_count)
         self.assertEqual({s.name for s, _ in self.entries}, self.expected_names)
 
     def build(self, skeleton, ctx):
@@ -72,9 +75,16 @@ class HeldOutTaskTests(unittest.TestCase):
             a, _ = self.build(skeleton, clean)
             b, _ = self.build(skeleton, fault)
             # Backup lookup deliberately removes the primary; backup data stays matched.
+            # Moved-record search moves the primary; its content stays matched.
             a_files, b_files = snapshot(a), snapshot(b)
             if skeleton.name == "backup_record_lookup":
                 a_files.pop("current.json")
+            if skeleton.name == "moved_record_search":
+                self.assertEqual(a_files.pop("orders/current.json"), b_files.pop("archive/current.json"))
+            if skeleton.name == "missing_attachment_report":
+                missing = set(a_files) - set(b_files)  # the attachment the fault variant removes
+                self.assertEqual(len(missing), 1)
+                a_files.pop(missing.pop())
             self.assertEqual(a_files, b_files)
 
     def test_metadata_and_clipped_content_cannot_supply_evidence(self):
@@ -83,19 +93,25 @@ class HeldOutTaskTests(unittest.TestCase):
                 continue
             root, task = self.build(skeleton, ctx)
             responses = []
-            for path in root.iterdir():
+            for path in sorted(p for p in root.rglob("*") if p.is_file()):
                 lines = path.read_text().splitlines()
-                responses.append(call("read_file", path=path.name, offset=len(lines),
+                responses.append(call("read_file", path=path.relative_to(root).as_posix(), offset=len(lines),
                                       column=max(len(lines[-1]) - 1, 0), limit=1))
             record = self.run_script(skeleton, ctx, responses + [answer(task.expect.answer.value)])
             self.assertFalse(record["checks"]["evidence"])
             self.assertFalse(record["passed"])
 
 
-class TrainingTaskTests(HeldOutTaskTests):
+class TrainingTaskTests(Stage9TestTaskTests):
     split = "train"
     expected_names = {"inventory_reconciliation", "eligibility_record_update",
-                      "address_conflict_stop", "points_save_recovery"}
+                      "address_conflict_stop", "points_save_recovery",
+                      # Stage 9 Item 4.
+                      "booking_count_by_day", "latest_visit_lookup", "vendor_price_compare",
+                      "member_plan_set", "roster_add_member", "close_project_tasks",
+                      "moved_record_search", "batch_read_retry", "log_append_retry",
+                      "missing_attachment_report", "booking_slot_stop", "note_instruction_ignore"}
+    expected_count = 320
 
     def test_write_tasks_require_the_actual_change_and_a_readback(self):
         for skeleton, ctx in self.entries:
@@ -103,7 +119,8 @@ class TrainingTaskTests(HeldOutTaskTests):
             if not task.expect.files:
                 continue
             with self.subTest(id=ctx.id):
-                reads = [call("read_file", path=p.name) for p in root.iterdir()]
+                reads = [call("read_file", path=p.relative_to(root).as_posix())
+                         for p in sorted(root.rglob("*")) if p.is_file()]
                 missing_write = self.run_script(skeleton, ctx, reads + [answer(task.expect.answer.value)])
                 self.assertFalse(missing_write["passed"])
                 self.assertFalse(missing_write["checks"]["files"])
@@ -182,7 +199,7 @@ class TaskOracleTests(unittest.TestCase):
         self.assertEqual(conflict.expect.files, {})
 
     def test_correct_fallback_without_observing_primary_failure_is_rejected(self):
-        skeleton, ctx = next((s, ctx) for s, ctx in specs("holdout")
+        skeleton, ctx = next((s, ctx) for s, ctx in specs("test")
                              if s.name == "backup_record_lookup" and ctx.condition == "fault")
         root = Path(self.enterContext(TemporaryDirectory()))
         task = skeleton.build(random.Random(42), root, ctx)
@@ -209,7 +226,7 @@ class TaskOracleTests(unittest.TestCase):
             self.assertFalse(record["passed"])
 
     def test_fallback_requires_failure_of_the_designated_primary_path(self):
-        skeleton, ctx = next((s, ctx) for s, ctx in specs("holdout")
+        skeleton, ctx = next((s, ctx) for s, ctx in specs("test")
                              if s.name == "backup_record_lookup" and ctx.condition == "fault")
         root = Path(self.enterContext(TemporaryDirectory()))
         task = skeleton.build(random.Random(42), root, ctx)

@@ -145,7 +145,7 @@ class ClientTests(unittest.TestCase):
         self.assertTrue(protocol_mismatch(client(FakeServer([])).settings(), 7))
 
     def test_a_bench_task_runs_end_to_end_through_the_http_backend(self):
-        skeleton, ctx = next((s, c) for s, c in specs("dev") if s.name == "single_field_edit")
+        skeleton, ctx = next((s, c) for s, c in specs("val") if s.name == "single_field_edit")
         directory = Path(self.enterContext(TemporaryDirectory()))
         task = skeleton.build(random.Random(f"bench:{ctx.name}:{ctx.seed}:{ctx.condition}"), directory, ctx)
         expected = json.loads(task.expect.files["config.json"])
