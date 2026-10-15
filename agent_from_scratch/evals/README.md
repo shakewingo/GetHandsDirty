@@ -127,7 +127,10 @@ use an A40 (48 GB). A session has six parts:
 4. **Train** before starting the server, which takes the GPU memory. Run the overfit smoke
    first (`train --limit 8 --epochs 40 --accumulate 4 --lr 3e-4 --save-last`, `last_loss` below
    0.05); its `elapsed_seconds` tells you how long the full runs will take. Start long runs with
-   `setsid nohup ... &` so a dropped SSH session does not stop them.
+   `setsid nohup ... &` so a dropped SSH session does not stop them. The three Stage 9
+   candidates (teacher-v3, teacher-wide, mix) are trained, one after the other, by
+   [`scripts/train_stage9_adapters.sh`](../scripts/train_stage9_adapters.sh); its header gives
+   the GPU each needs and how long each takes.
 5. **Serve and evaluate.** Use the Stage 8 server command unchanged and add one
    `--lora-modules NAME=ADAPTER_DIR` per adapter. Then `replay --adapter NAME` checks the reload,
    and `bench --backend vllm --adapter NAME` runs the evaluation.
@@ -156,7 +159,7 @@ python -m agent_from_scratch.evals COMMAND --output outputs/NEW_NAME [options]
 | How do two runs differ? | `compare outputs/A outputs/B`: paired outcomes, exact McNemar p, trajectory shape | none | instant |
 | How do I collect teacher demonstrations? | `bench --backend teacher --split train --student-gguf FILE`: an API model in the same harness | API | ~7 min for the 80 train tasks (measured) |
 | How do verified train runs become SFT data? | `export --track {teacher,rft} RUN_DIR ...`: one example per model request, with provenance and a funnel | none | seconds |
-| How do I train an adapter on that data? | `train --examples DATASET_DIR`: LoRA with loss on the completion only, one adapter per epoch | real (GPU) | not yet measured |
+| How do I train an adapter on that data? | `train --examples DATASET_DIR`: LoRA with loss on the completion only, one adapter per epoch | real (GPU) | 3 epochs: teacher-v3 17 min on an A40; teacher-wide 28 min and mix 5.3 h on an A100 (measured) |
 | Does a served adapter reproduce its targets? | `replay --examples DATASET_DIR --adapter NAME`: greedy continuations against the targets | real (vLLM) | not yet measured |
 | Do the units still work? | `python -m unittest discover -s agent_from_scratch/tests -q` | scripted | seconds |
 | Does it feel right by hand? | `python -m agent_from_scratch.agent` (REPL) | real | — |

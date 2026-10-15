@@ -6,17 +6,13 @@ passing), for review before any code is written. Spec: [STAGE.md](STAGE.md), Sta
 [STAGE9_ITEM2_PLAN.md](STAGE9_ITEM2_PLAN.md) (export), [STAGE9_ITEM3_PLAN.md](STAGE9_ITEM3_PLAN.md)
 (recipe).
 
-> **Who writes what (D1, to confirm).** The coding rules in STAGE.md make the environment and
-> the training-data logic yours to write. Items 2 and 3 were delegated to AI at your explicit
-> request. This plan assumes the same for Item 4. Say which parts you want to write yourself:
-> the natural candidates are one or two skeleton builders, or `convert_row` in the public-data
-> converter.
+> **Who wrote what (D1).** The coding rules in STAGE.md make the environment and the
+> training-data logic the user's to write. At the user's explicit request, as in Items 2 and 3,
+> AI wrote Item 4's code.
 
-**Status (October 14, 2026, branch `feat/stage9-wider-train-data`, uncommitted).** Approved and
-started. All of Item 4's code is written, with 447 tests passing (33 new). Steps 0–2, 7 and 9
-are done, Step 3's review file is written, and Step 6 is done for When2Call and for 20 Toucan
-rows. Nothing has been spent. Waiting on you (section 11): approval of the shapes (Step 3), and
-three Step 6 findings that change D6 or the mix.
+**Status: done (October 15, 2026).** Final candidates for Item 6: teacher-v3 and mix; M1 for
+Stage 10: mix. Results in [STAGE.md](STAGE.md), Stage 9 ("Item 4 complete"); the record of every
+step is in sections 11 and 12. Commits `edc56d7`, `9638b34`, `33867ec` and the results commit.
 
 **Goal.** Train two new candidates with Item 3's recipe, teacher-wide (more train shapes) and
 mix (teacher-wide plus public tool-use data), compare them with teacher-v3 and the base on val,
@@ -322,19 +318,25 @@ something, but hardly that a wider one gained. The rules are fixed now, before a
 
 ## 9. Exit gate
 
-- [ ] The suite passes; 12 new skeletons pass the Item 1 gates and their negative tests.
-- [ ] Val, test and the 80 old train tasks are unchanged (Step 2).
-- [ ] teacher-wide contains all 255 teacher-v3 examples; its funnel is recorded.
-- [ ] Both public datasets have licence, revision, date and funnel recorded, and mix's
+- [x] The suite passes (449 tests); the 12 new skeletons pass the Item 1 gates and their negative
+  tests.
+- [x] Val, test and the 80 old train tasks are unchanged (Step 2; the split rename moved labels
+  only).
+- [x] teacher-wide contains all 255 teacher-v3 examples; its funnel is recorded.
+- [x] Both public datasets have licence, revision, date and funnel recorded, and mix's
   `metadata.json` gives its sources and shares.
-- [ ] teacher-wide and mix trained with the Item 3 recipe, epochs chosen on val seed 0.
-- [ ] Base, teacher-v3, teacher-wide and mix ran on val with three seeds each, on one server
+- [x] teacher-wide and mix trained with the Item 3 recipe, epochs chosen on val seed 0.
+- [x] Base, teacher-v3, teacher-wide and mix ran on val with three seeds each, on one server
   process. No test task was run.
-- [ ] Final candidates and M1 named by section 8; results, costs and limits in STAGE.md.
+- [x] Final candidates and M1 named by section 8; results, costs and limits in STAGE.md.
 
 ## 10. Cost
 
-Projected, not measured. Spent so far: \$2.45 of the \$200 ceiling.
+Measured (October 15): teacher \$0.18 at off-peak list prices, at most \$0.37 if all of it billed
+at the peak rate; Session A \$13.21 (A100 80 GB, about 7.5 hours). Item 4 came to about
+\$13.5, against the projection below; the project has spent about \$16.0 of its \$200 ceiling.
+
+The projection, as written before the work:
 
 | Part | Basis | Estimate |
 |---|---|---|
@@ -420,6 +422,126 @@ This fits the \$5–20 line for Items 4–6 in STAGE.md's budget table.
 attribution in what is published. Toucan-1.5M: Apache-2.0, revision
 `0df3cf37f2abefb380370cfb02eabea2a35ae782`.
 
-**Next, once you answer:** Step 4 (teacher on the 240 new tasks, about \$0.10–0.30), Step 5,
-Step 8 for both sources, Step 9's `sft-mix-v1`, Step 10's token counts, then Step 11 (commit)
-and the GPU session.
+**Approved October 15:** the three decisions above, and the shapes (Step 3).
+
+## 12. Record of Steps 4–13 (October 15)
+
+**Step 4 — teacher.** The 12-task smoke passed 11. `moved_record_search` failed because the
+teacher globbed for `current.json` before reading the named path, so the fault was never met
+and the trajectory showed no recovery. The prompt now says "Read orders/current.json and
+report only its total field. If the read fails because the file is not there, ..."; with it,
+4 of 4 smoke tasks pass. The first full pass (`teacher-s0`) then failed all 10 "missing"
+outcomes of `missing_attachment_report`: the runtime stops a batch at its first failed call, so
+attachments listed after the missing one were never read, while the contract required their
+codes as evidence. The shape is now a clean/fault pair: the fault variant needs a failed read
+of exactly the missing file (`fault_path`) and nothing after it; a new test checks both sides.
+`dataset --check` at that code: 460 of 460 correct, 0 answer-only, 0 wrong-answer, 76 of 76
+fault variants observed. The pass was rerun at the fixed code (`teacher-final-s0` for 200
+tasks; the last 40 in four parallel processes, `-s1` to `-s4`, because DeepSeek's peak hours
+slowed one process to a task every three minutes): **240 of 240 passed**. `teacher-s0` is kept
+as evidence of the defect and is not training data.
+
+**Step 5 — teacher-wide.** Exported from the three Item 2 runs and the five final runs: 356
+rollouts, none rejected, 320 trajectories, **all 320 tasks covered**, 16 own-error and 4
+loose-answer turns dropped, **956 examples**. All 255 teacher-v3 example IDs are in it.
+
+**Steps 6 and 8 — public data.** `pyarrow` could not be installed: this session reaches
+Hugging Face but not PyPI. Toucan rows were therefore fetched through the datasets-server JSON
+API instead of the parquet files: 160 seeded offsets of 10 rows, 1,600 rows, with their
+`row_idx` and a `.meta.json` (repository revision `0df3cf3`, unchanged since 2025-10-04,
+fetched October 15). Converted:
+
+| Dataset | Rows visited | Dropped | Examples | Kinds |
+|---|---:|---|---:|---|
+| `public-when2call` (`train_pref`, seed 0) | 2,022 | 10 bad tools, 12 unknown type | 2,000 | 684 call, 646 question, 670 decline |
+| `public-toucan` (seed 0) | 1,015 | 34 round trip, 9 bad call, 6 too long | 3,002 | 316 irrelevant, 275 multi-turn, 230 single-turn, 145 diversified (rows) |
+
+**Step 9 — mix.** `sft-mix-v1`: 7,870 rows, $k = 3$, own share 0.364.
+
+**Step 10 — tokens.** Every trained token decodes back to its completion in both datasets.
+teacher-wide: 1.6M tokens, longest row 3,780. Mix: 17.0M tokens per epoch, longest row 29,549;
+Toucan rows average 3,563 tokens (p99 18,350). A bug found here: `train` and `replay` split
+`examples.jsonl` with `str.splitlines()`, which also breaks on U+2028, and 7 Toucan rows hold
+one inside a JSON string. Both now split on `"\n"` only, with a regression test.
+
+**D9, revised: one A100 80 GB instead of A40s.** Item 3 measured 14.4 GiB for a 3,599-token
+row; the estimate for 29,549 tokens was above an A40's 44.5 GiB. On the pod, one training step
+on a 23,481-token mix row peaked at **51.8 GiB**, which confirms it. The A100 (\$1.79 per hour,
+secure cloud) holds every row, so D6's rule (drop only rows longer than the window) stands.
+
+**Step 11.** Commits `edc56d7`, `9638b34`, `33867ec`; a shallow clone passes 449 tests.
+
+**Steps 12–13 — Session A**, pod `wo80nlx0p5x481` (A100-SXM4-80GB), from 08:03 UTC. Upload
+from the Mac ran at about 25 KB/s and dropped twice, so the pod got a sparse clone of
+`agent_from_scratch/` (commit `33867ec`, clean tree), the datasets via `rsync --partial`, and
+the teacher-v3 adapter in the background. Versions as in Item 3; the 33 SFT tests pass.
+teacher-wide trained in 1,656 seconds (0.35 ms per token, against 0.75 on the A40), 360 steps,
+mean loss by epoch 0.258, 0.034, 0.027. Mix trained in 5.3 hours, 2,952 steps, mean loss by
+epoch 0.515, 0.368, 0.291. The CUDA allocator logged three "allocation failed with OOM"
+warnings during mix and recovered from each by freeing its cache; the training script now sets
+`expandable_segments`. Training commands: `scripts/train_stage9_adapters.sh`.
+
+## 13. Record of Steps 14–18 (October 15)
+
+**Step 14 — serve and reload.** The Stage 8 command plus seven adapters (teacher-v3 from Item 3,
+hash `7a7357fd…` as recorded, and three epochs of each candidate). `replay` on the first 40
+teacher-wide examples: wide-e3 and mix-e3 reproduce 34, the base 31. These rows are mostly
+shapes the base already handles, so the gap is small; the val runs settle it.
+
+**Step 15 — epochs** (val seed 0): teacher-wide 44, 45, 51, so epoch 3; mix 57, 60, 60, so
+epoch 2 (the earlier on a tie).
+
+**Step 16 — comparison.** Results and reading in STAGE.md. Paired gains and losses per seed
+(seeds 0, 1, 2):
+
+| From → to | Gains, losses |
+|---|---|
+| base → teacher-v3 | 24, 1 · 24, 1 · 23, 3 |
+| base → teacher-wide | 20, 5 · 20, 14 · 19, 11 |
+| base → mix | 27, 3 · 26, 2 · 22, 2 |
+| teacher-v3 → mix | 4, 3 · 3, 2 · 4, 4 |
+| teacher-v3 → teacher-wide | 5, 13 · 3, 20 · 1, 13 |
+| teacher-wide → mix | 11, 2 · 19, 1 · 13, 1 |
+
+Format exact: base 93, teacher-v3 179, teacher-wide 156, mix 182 of 192. False completions:
+7, 0, 14 and 1 of 87 claims. Failed val runs whose final reply declines or asks: 3, 0, 0, 0.
+Measured and served prompt tokens agree on all 3,902 requests.
+
+teacher-wide's failures where teacher-v3 passes, by kind: `delete_key` edits and reads back
+until the 6-request limit (13) or saves the wrong content (1); `check_fix_recheck` edits after a passing check, or edits a
+correct file (15); `transient_list_failure` repeats reads until `no_progress` (8);
+`single_field_edit` loops edits (4); `max_timeout_service` answers before reading every file
+(3); `locked_config_stop` replies `DONE` on an unlocked config without writing (2).
+
+**Step 17 — M0 on the new shapes (D12).** Eight base samples of the 240 new tasks, Item 2
+protocol, eight processes against one server, about 10 minutes:
+
+| Skeleton | Mean pass@1 | Tasks with a verified trajectory | Mixed (strict reward) |
+|---|---:|---:|---:|
+| `batch_read_retry` | 0.975 | 20 of 20 | 2 |
+| `booking_count_by_day` | 0.237 | 7 of 20 | 6 |
+| `booking_slot_stop` | 0.019 | 1 of 20 | 1 |
+| `close_project_tasks` | 0.013 | 2 of 20 | 2 |
+| `latest_visit_lookup` | 0.013 | 1 of 20 | 1 |
+| `log_append_retry` | 0.287 | 13 of 20 | 10 |
+| `member_plan_set` | 0.175 | 10 of 20 | 10 |
+| `missing_attachment_report` | 0.800 | 19 of 20 | 8 |
+| `moved_record_search` | 0.506 | 11 of 20 | 1 |
+| `note_instruction_ignore` | 0.000 | 0 of 20 | 0 |
+| `roster_add_member` | 0.431 | 9 of 20 | 2 |
+| `vendor_price_compare` | 0.125 | 8 of 20 | 7 |
+| all | 0.298 | 101 of 240 | 50 |
+
+On `note_instruction_ignore` the base reads one note and answers; it never writes, so it never
+follows the injected instruction.
+
+**Step 18 — copy back and delete.** Runs, comparisons, M0 runs, logs and the two chosen
+adapters are in `outputs/stage9-item4-20261015-session-a/`; archive checksums match the pod, and
+the adapter hashes match their `metadata.json` (teacher-wide epoch 3 `a81297dd…`, mix epoch 2
+`1388d076…`). The pod was deleted at about 15:30 UTC; `runpodctl pod list --all` is empty. The
+session cost \$13.21 (account balance). While the Mac lid had to close, the val work ran on the
+pod from a script, and a guard on the pod (configured with the account's API key, which left
+with the pod) was set to delete it at 18:30 UTC.
+
+**Steps 19–20.** No mix change: mix is better than teacher-wide on every count Step 19 names.
+Candidates named by section 8; recorded in STAGE.md.
