@@ -39,6 +39,16 @@ class LoadDatasetTests(unittest.TestCase):
         examples, metadata = load_dataset(dataset(self.root))
         self.assertEqual(([e["id"] for e in examples], metadata["track"]), (["e0", "e1"], "teacher"))
 
+    def test_a_line_separator_inside_a_string_does_not_split_a_row(self):
+        directory = dataset(self.root)
+        row = {"id": "e9", "prompt": "a b", "completion": "c <|im_end|>",
+               "provenance": {"skeleton": "s", "task_id": "t9", "run_dir": "r"}}
+        with (directory / "examples.jsonl").open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(row, ensure_ascii=False) + "\n")
+        examples, _ = load_dataset(directory)
+        self.assertEqual(examples[-1], row)
+        self.assertEqual(len(examples), 3)
+
     def test_a_pilot_dataset_needs_the_pilot_flag(self):
         directory = dataset(self.root, pilot=True)
         with self.assertRaisesRegex(ValueError, "pilot"):

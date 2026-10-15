@@ -58,8 +58,9 @@ def main():
     args = parser.parse_args()
     if args.output.exists():
         parser.error(f"{args.output} already exists; evidence is never overwritten.")
+    # Split on "\n" only, as `train.load_dataset` does: splitlines() also breaks on U+2028.
     examples = [json.loads(line) for line in
-                (args.examples / "examples.jsonl").read_text(encoding="utf-8").splitlines()]
+                (args.examples / "examples.jsonl").read_text(encoding="utf-8").split("\n") if line]
     if args.ids is not None:
         wanted = set(json.loads(args.ids.read_text(encoding="utf-8"))["selection"]["example_ids"])
         examples = [example for example in examples if example["id"] in wanted]

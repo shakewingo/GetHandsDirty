@@ -37,8 +37,10 @@ def load_dataset(directory: Path, *, pilot: bool = False) -> tuple[list[dict], d
     template = sha256(CHAT_TEMPLATE_PATH.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
     if metadata["chat_template_sha256"] != template:
         raise ValueError(f"{directory.name} was exported under a different chat template than the one on disk.")
-    lines = (directory / "examples.jsonl").read_text(encoding="utf-8").splitlines()
-    return [json.loads(line) for line in lines], metadata
+    # Split on "\n" only: str.splitlines() also breaks on U+2028 and similar characters, which
+    # JSON written with ensure_ascii=False may hold inside a string.
+    lines = (directory / "examples.jsonl").read_text(encoding="utf-8").split("\n")
+    return [json.loads(line) for line in lines if line], metadata
 
 
 def fit(model, rows: list[dict], *, epochs: int, lr: float, accumulate: int = 8, seed: int = 0,

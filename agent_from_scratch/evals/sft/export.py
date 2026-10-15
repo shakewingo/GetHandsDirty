@@ -24,6 +24,33 @@ from ...utils import write_jsonl
 TRACK_BACKENDS = {"teacher": "deepseek", "rft": "vllm"}
 
 
+def render_turn(template, messages: list[dict], turn: dict, tools) -> tuple[str, str]:
+    """(prompt, completion) for one assistant `turn` that follows `messages`.
+
+    The prompt is what the model saw; the completion is what the template adds when the turn
+    joins the conversation, without the newline after its stop token. Raises ValueError unless
+    the completion parses back to the turn's calls and content.
+    """
+    prompt = render_chat(template, messages, tools)
+    full = render_chat(template, [*messages, turn], tools, add_generation_prompt=False)
+    if not full.startswith(prompt) or not full.endswith(QWEN_END + "\n"):
+        raise ValueError("the rendered turn does not extend its prompt.")
+    # The server stops on <|im_end|>, so the newline the template writes after it is never generated.
+    completion = full[len(prompt):].removesuffix("\n")
+    # Round trip: the text the model is trained to write must parse to the action it took.
+    calls = turn.get("tool_calls") or []
+    try:
+        parsed = LLM.parse_response({"choices": [{"message": {
+            "role": "assistant", "content": completion.removesuffix(QWEN_END)}}]}, len(calls))
+    except ResponseError as error:
+        raise ValueError(f"the target does not parse: {error}") from error
+    taken = [(call["function"]["name"], json.loads(call["function"]["arguments"])) for call in calls]
+    if ([(call.name, call.arguments) for call in parsed.tool_calls] != taken
+            or parsed.content != (turn.get("content") or "")):
+        raise ValueError("the target does not parse back to the recorded turn.")
+    return prompt, completion
+
+
 def examples_from_trace(trace: dict, template) -> list[dict]:
     """One example per completed actor request, in request order.
 
@@ -43,24 +70,10 @@ def examples_from_trace(trace: dict, template) -> list[dict]:
         calls = turn.get("tool_calls") or []
         if turn.get("role") != "assistant" or [call["id"] for call in calls] != request["call_ids"]:
             raise ValueError(f"Request {index} does not line up with messages[{count}].")
-        prompt = render_chat(template, request["input_messages"], request["tools"])
-        # The target is what the template adds when the turn joins the conversation. The server
-        # stops on <|im_end|>, so the newline the template writes after it is never generated.
-        full = render_chat(template, [*request["input_messages"], turn], request["tools"],
-                           add_generation_prompt=False)
-        if not full.startswith(prompt) or not full.endswith(QWEN_END + "\n"):
-            raise ValueError(f"Request {index}: the rendered turn does not extend its prompt.")
-        completion = full[len(prompt):].removesuffix("\n")
-        # Round trip: the text the model is trained to write must parse to the action it took.
         try:
-            parsed = LLM.parse_response({"choices": [{"message": {
-                "role": "assistant", "content": completion.removesuffix(QWEN_END)}}]}, len(calls))
-        except ResponseError as error:
-            raise ValueError(f"Request {index}: the target does not parse: {error}") from error
-        taken = [(call["function"]["name"], json.loads(call["function"]["arguments"])) for call in calls]
-        if ([(call.name, call.arguments) for call in parsed.tool_calls] != taken
-                or parsed.content != (turn.get("content") or "")):
-            raise ValueError(f"Request {index}: the target does not parse back to the recorded turn.")
+            prompt, completion = render_turn(template, request["input_messages"], turn, request["tools"])
+        except ValueError as error:
+            raise ValueError(f"Request {index}: {error}") from error
         try:
             sampled = request["raw_response"]["choices"][0]["text"]
         except (KeyError, IndexError, TypeError):
