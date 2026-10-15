@@ -1,12 +1,12 @@
 # Stage 8 benchmark: real-model evidence
 
 Design: [STAGE8_DESIGN.md](STAGE8_DESIGN.md). This file
-records the dev pilot (Task 24) and, once frozen, the test-split pipeline check (Task 25).
+records the val pilot (Task 24) and, once frozen, the test-split pipeline check (Task 25).
 
-## Dev pilot (15 tasks)
+## Val pilot (15 tasks)
 
 ```sh
-python -m agent_from_scratch.evals bench --output outputs/bench-dev-pilot --split dev
+python -m agent_from_scratch.evals bench --output outputs/bench-val-pilot --split val
 ```
 
 Run September 22, 2026, one greedy pass (temperature 0), Qwen2.5-7B-Instruct Q4_K_M, `N_CTX =
@@ -50,7 +50,7 @@ field was actually load-bearing.
 `false_completion`: 1/9 claims reviewed (a task claimed `DONE` while its state checks did not
 all pass). `invalid_calls`: 2. `model_requests`: 66. `elapsed_seconds`: 348. `total_tokens`:
 122,292. No run reached `context_limit`; the two non-`final_response` stops were `max_iterations`
-(one fault-recovery run) — the dev tasks stay far below the window's pressure thresholds, as
+(one fault-recovery run) — the val tasks stay far below the window's pressure thresholds, as
 already established in the pressure suite (`EMPIRICAL_STUDY_PLAN.md`).
 
 ### Genuine model failures (left as-is; not evaluator bugs)
@@ -92,7 +92,7 @@ python -m agent_from_scratch.evals bench --output outputs/bench-test-run --split
 ```
 
 Run September 22, 2026, once, after freezing `evals/bench/manifest.json` (git revision `7a01104`
-onward). Same settings as the dev pilot: greedy, Qwen2.5-7B-Instruct Q4_K_M, `N_CTX = 32768`.
+onward). Same settings as the val pilot: greedy, Qwen2.5-7B-Instruct Q4_K_M, `N_CTX = 32768`.
 `metadata.json`'s `manifest_drift` field is `{}` — the run matched its own frozen manifest.
 
 **Superseded by the final-review fix wave (commits `be4d8d3`, `0e3a937`, revision `9e8538f`
@@ -105,7 +105,7 @@ remaining four `append_list_item` seeds are unchanged and still describe the cur
 Not re-run: Task 25 runs the test split once as a pipeline check, not to be repeated on every
 manifest edit; the next real test-split evidence belongs to Stage 9's baseline.
 
-**Re-frozen after retiring the Stage 2B `dev` suite** (source hashes only). Removing
+**Re-frozen after retiring the Stage 2B suite** (source hashes only). Removing
 `evals/legacy_files.py`, moving `evals/check.py` to `evals/bench/check.py` (byte-identical) and
 trimming the shared `run.py`/`verify.py` changed `source_sha256`. All 75 task entries (prompt,
 expect, fault, tools, workspace digests) and `verifier_sha256` are unchanged, so the benchmark
@@ -118,7 +118,7 @@ content is the same as at `9e8538f`.
 field `manifest_drift()` compared — so every freeze would self-drift against its own commit the
 instant it landed, permanently. Fixed in `3da39b9`: `git_revision` stays in the manifest for
 provenance but is excluded from the drift comparison, with a regression test
-(`test_manifest_drift_never_gates_on_git_revision`). This is a design gap the dev pilot could
+(`test_manifest_drift_never_gates_on_git_revision`). This is a design gap the val pilot could
 not have surfaced, since Task 20/21's tests build and check a manifest in memory without ever
 freezing and immediately re-checking against the committed file in one real sequence.
 
@@ -158,7 +158,7 @@ that had no way to observe the field it was told to keep; not a recovery-capabil
   - `pointer_nested_edit-0`: `max_iterations` reached with no answer — manifest read, settings
     read, and a correct write did not fit the skeleton's 6-request budget for this seed.
   - `rename_key_all_files-0`, `append_list_item-0`: finished normally, claimed `DONE` truthfully
-    in tone, but the written JSON was wrong — the same failure mode the dev pilot already
+    in tone, but the written JSON was wrong — the same failure mode the val pilot already
     documented (the model sometimes writes back the `N| `-prefixed text `read_file` displays,
     producing invalid or mismatched content).
   - `flaky_write_retry-0-clean`: `no_progress` after 3 consecutive invalid tool calls, offered
@@ -168,11 +168,11 @@ that had no way to observe the field it was told to keep; not a recovery-capabil
     note above. `flaky_write_retry`'s whole 0/6 in the table above reflects the unsolvable
     version and should not be read as a recovery-capability result.
 
-  These are the same content-writing failure already named in the dev pilot section, now seen at
+  These are the same content-writing failure already named in the val pilot section, now seen at
   a larger sample. No new evaluator bug found in the *other* updates-family skeletons; per this
   task's own instruction, their difficulty is not retuned from this result.
 - **`stopping` (1/12)** shows the same over-eager-write and format patterns as
-  `no_op_correct_config` in the dev pilot. `flaky_write_retry`'s clean condition (0/3) is the
+  `no_op_correct_config` in the val pilot. `flaky_write_retry`'s clean condition (0/3) is the
   same unsolvable-task artifact noted above, not a stopping-pattern finding.
 - **`false_completion` at 9/24** (37.5% of claims) is the sharpest single number here: over a
   third of the replies that claimed done, checked, or a value were wrong in a way the harness
@@ -181,7 +181,7 @@ that had no way to observe the field it was told to keep; not a recovery-capabil
 ### Reading these numbers
 
 Also a **pipeline check on one greedy sample**, run once as instructed — not a capability score
-and not compared against the dev pilot's rate (different families, different task counts). Its
+and not compared against the val pilot's rate (different families, different task counts). Its
 purpose was to confirm the frozen benchmark runs end to end at this scale with interpretable
 failures, which it did, and to catch pipeline-level bugs before Stage 9, which it also did (the
 `git_revision` drift gate above). The 7B model is not the training control; the real base
@@ -190,13 +190,13 @@ control is the Stage 9 checkpoint on vLLM, per `docs/STAGE8_DESIGN.md`'s real-mo
 ## Protocol freeze on the control checkpoint (September 26, 2026)
 
 The 7B results above are the engineering model's pipeline checks. Before the control run, the
-benchmark was revised from dev-pilot evidence and re-frozen with the evaluation protocol; details
+benchmark was revised from val-pilot evidence and re-frozen with the evaluation protocol; details
 and rationale are in `STAGE8_DESIGN.md`, *Revision after the 7B pilot*:
 
 - `read_file` now says its `N| ` prefixes must never be copied into `write_file` or `edit_file`;
   a `.json` write or edit that does not parse is refused and the file left unchanged.
 - Every skeleton that edits a file offers `edit_file` (except `flaky_write_retry`).
-- Dev grew from 15 to 64 tasks: four new skeletons (`max_timeout_service`, `delete_key`,
+- Val grew from 15 to 64 tasks: four new skeletons (`max_timeout_service`, `delete_key`,
   `transient_list_failure`, `locked_config_stop`) and more seeds. Test is still 60 tasks; 27
   existing tasks changed only their tool list, none their prompt, workspace or expectation.
 - The manifest freezes `model` (Qwen/Qwen3-4B-Instruct-2507 at revision `cdbee75f`, bf16, vLLM),
@@ -208,8 +208,8 @@ The 7B numbers above are not comparable with anything measured under this protoc
 ### Local pipeline check on Qwen3-4B (September 27, 2026)
 
 ```sh
-python -m agent_from_scratch.evals bench --backend llama_cpp --split dev --seed 0 \
-  --model-path <unsloth/Qwen3-4B-Instruct-2507-GGUF @ a06e946, Q8_0> --output outputs/q3-4b-dev-s0
+python -m agent_from_scratch.evals bench --backend llama_cpp --split val --seed 0 \
+  --model-path <unsloth/Qwen3-4B-Instruct-2507-GGUF @ a06e946, Q8_0> --output outputs/q3-4b-val-s0
 ```
 
 The control's weights as a Q8_0 GGUF through llama.cpp on the Mac, at the frozen sampling and
@@ -299,10 +299,10 @@ PATH=/root/venv/bin:$PATH VLLM_USE_FLASHINFER_SAMPLER=0 setsid nohup \
 curl -s localhost:8000/v1/models   # ready when it lists the model with max_model_len 32768
 ```
 
-1. **Smoke and validate** on four dev tasks, then check measured against served prompt tokens:
+1. **Smoke and validate** on four val tasks, then check measured against served prompt tokens:
 
    ```sh
-   python -m agent_from_scratch.evals bench --backend vllm --split dev --seed 0 \
+   python -m agent_from_scratch.evals bench --backend vllm --split val --seed 0 \
      --tasks pointer_lookup-0,single_field_edit-0,check_fix_recheck-0-fault,locked_config_stop-0 \
      --output outputs/ctl-smoke
    python - <<'PY'
@@ -315,11 +315,12 @@ curl -s localhost:8000/v1/models   # ready when it lists the model with max_mode
    ```
 
    Expect 0 mismatches and no `parse_errors`.
-2. **Dev × 3:** `for s in 0 1 2; do python -m agent_from_scratch.evals bench --backend vllm
-   --split dev --seed $s --output outputs/ctl-dev-s$s; done`, then `aggregate` the three runs.
-   Review for evaluator/harness bugs before test; fix, re-freeze and re-run dev if any.
+2. **Val × 3:** `for s in 0 1 2; do python -m agent_from_scratch.evals bench --backend vllm
+   --split val --seed $s --output outputs/ctl-val-s$s; done`, then `aggregate` the three runs.
+   Review for evaluator/harness bugs before test; fix, re-freeze and re-run val if any.
 3. **Test × 3, once:** the same loop with `--split test --final` into `outputs/ctl-test-s$s`,
-   then `aggregate`. `--final` refuses on manifest drift or a protocol mismatch.
+   then `aggregate`. `--final` refuses on manifest drift or a protocol mismatch. Since October 14,
+   2026, test also needs the versioned dataset `--manifest FILE`, and has 140 tasks.
 4. Copy `outputs/` back, remove the pod, confirm `runpodctl pod list` is empty.
 
 ### Adapters on the same server (as run, Stage 9 Item 3, October 14, 2026)
@@ -348,26 +349,26 @@ What the adapter sessions add to the runbook above. The commands as run are in
 Qwen/Qwen3-4B-Instruct-2507 @ `cdbee75f`, bf16, vLLM 0.30.0 (`VLLM_USE_FLASHINFER_SAMPLER=0`) on
 one RunPod A40, frozen sampling (T 0.7, top-p 0.8, top-k 20), seeds 0/1/2, adapter off. Harness
 and task set at commit `1e697ba`. All three test runs were `--final` with `manifest_drift` `{}`
-and `protocol_mismatch` `[]`. Measured prompt tokens equalled the server's on **718/718** dev and
-**778/778** test requests; 2 dev and 1 test parse errors; no backend errors. Wall time 7.6 min
-(dev × 3) and 9.3 min (test × 3); the whole GPU session cost **$0.35**. Both aggregates
-(`ctl-dev.json`, `ctl-test.json`: pass counts per task over the three seeds) are committed in
+and `protocol_mismatch` `[]`. Measured prompt tokens equalled the server's on **718/718** val and
+**778/778** test requests; 2 val and 1 test parse errors; no backend errors. Wall time 7.6 min
+(val × 3) and 9.3 min (test × 3); the whole GPU session cost **$0.35**. Both aggregates
+(`ctl-val.json`, `ctl-test.json`: pass counts per task over the three seeds) are committed in
 `docs/baselines/stage8-control/`; the paired comparisons of Stages 9–11 run against those task
 IDs. The raw per-run records and traces are kept outside the repository.
 
 | Split | Tasks | mean pass@1 | pass^k | pass@k | mixed (0 < c < 3) | false completion |
 |---|---:|---:|---:|---:|---:|---:|
 | **Test** | 60 | **0.667** | 0.583 | 0.717 | 8 | 1 / 72 claims |
-| Dev | 64 | 0.542 | 0.469 | 0.641 | 11 | 14 / 87 claims |
+| Val | 64 | 0.542 | 0.469 | 0.641 | 11 | 14 / 87 claims |
 
-| Family | Test pass@1 | Test pass^k | Dev pass@1 | Dev pass^k |
+| Family | Test pass@1 | Test pass^k | Val pass@1 | Val pass^k |
 |---|---:|---:|---:|---:|
 | inspection | 0.667 | 0.556 | 0.479 | 0.375 |
 | updates | 0.889 | 0.722 | 0.708 | 0.625 |
 | recovery | 1.000 | 1.000 | 0.771 | 0.688 |
 | stopping | **0.000** | 0.000 | 0.208 | 0.188 |
 
-| Test skeleton | pass@1 | Dev skeleton | pass@1 |
+| Test skeleton | pass@1 | Val skeleton | pass@1 |
 |---|---:|---|---:|
 | `deep_chain_lookup` | 1.00 | `single_field_edit` | 1.00 |
 | `append_list_item` | 1.00 | `max_timeout_service` | 1.00 |
@@ -385,16 +386,16 @@ IDs. The raw per-run records and traces are kept outside the repository.
 - **Stopping is the gap post-training should close.** On test the model never replies with only
   the required token: `missing_file_report` answers in prose and sometimes reports the backup's
   stale value it was told not to use; `ambiguous_choice_stop` ends its prose with `NEED_INPUT`
-  (answer content passes, exact format fails, by design for reply-token deliverables). Dev shows
+  (answer content passes, exact format fails, by design for reply-token deliverables). Val shows
   the same in `no_op_correct_config` (false `UPDATED`, 0/10).
 - **Test recovery is at the ceiling** (both recovery skeletons 1.00), so a gain cannot show there;
-  dev recovery (0.77) still can. **Mixed-outcome tasks** (8 test, 11 dev) are the ones Stage 10's
+  val recovery (0.77) still can. **Mixed-outcome tasks** (8 test, 11 val) are the ones Stage 10's
   GRPO precondition needs.
-- The local Q8_0 check predicted the dev pattern closely (same perfect, zero and low skeletons).
+- The local Q8_0 check predicted the val pattern closely (same perfect, zero and low skeletons).
 - **Known spec weakness, recorded, not changed:** `ambiguous_choice_stop`'s prompt already states
   "nothing marks either one active", so 16/18 runs answered without any tool call and fail
   `evidence`. It does not change the score (every run also fails the required exact reply), and
   test skeletons are not edited after test results. Revisit only through a new test split.
 - **Known metric gap** (above): `false_completion` does not count a false claim over a correct
-  state (`no_op_correct_config`'s `UPDATED`). The 14 dev false completions are `locked_config_stop`
+  state (`no_op_correct_config`'s `UPDATED`). The 14 val false completions are `locked_config_stop`
   (8: `DONE` with no change) and `delete_key` (6: "removed" when the edit never landed).

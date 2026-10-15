@@ -1,9 +1,10 @@
 # Evaluating the agent
 
-## Stage 9 task data
+## Task data: train, val and test
 
-The general-assistant training pool has 80 tasks from 4 shapes; a separate `holdout` split
-reserves 80 tasks from 4 different shapes. Stage 8's 64 dev / 60 test tasks remain unchanged.
+Tasks are split by shape. Train has 320 tasks from 16 shapes (80 from Item 1's 4 shapes, 240
+from the 12 Item 4 added). Val is Stage 8's 64 tasks. Test has 140 tasks: Stage 8's 60, and 80
+on 4 shapes that Stage 9 reserved before any training data existed.
 Generate initial workspaces and private contracts, optionally running real tool/verifier gates
 with a scripted model (no model weights or API calls):
 
@@ -16,10 +17,10 @@ Each task's `workspace/` contains only its inputs; `task.json` beside it contain
 expectations. Do not send the contract or scripted solution to the actor/teacher. A successful
 scripted gate is not a training demonstration or a real-model capability measurement.
 
-For Item 2, the ordinary model runner accepts `bench --split train`. Reserved `holdout` model
-runs require `--final --manifest outputs/NEW_STAGE9_DATA/manifest.json` and the frozen vLLM
-protocol. They reject drift and limit overrides; use dev for selection and reserve holdout
-results for the formal base/adapter comparison. The generated Stage 9 manifest is separate
+For Item 2, the ordinary model runner accepts `bench --split train`. Test runs require
+`--final --manifest outputs/NEW_STAGE9_DATA/manifest.json` and the frozen vLLM protocol. They
+reject drift and limit overrides; use val for selection and reserve test results for the
+formal base/adapter comparison. The generated manifest is separate
 from the original `evals/bench/manifest.json`. Regeneration creates a new directory/version;
 never overwrite earlier evidence or silently refresh a freeze to hide changes.
 
@@ -47,6 +48,25 @@ and leaves only that turn out; the default `reject` refuses the whole rollout. `
 caps the distinct trajectories kept per task. Design, decisions and results:
 [docs/STAGE9_ITEM2_PLAN.md](../docs/STAGE9_ITEM2_PLAN.md).
 
+## Stage 9 public tool-use data
+
+`public` turns rows of a public dataset into examples in `export`'s format, and `mix` combines
+them with our own examples into one dataset that `train` reads unchanged:
+
+```sh
+# Our system prompt, the row's tools in our template, tool results in our tool-result envelope,
+# one example per assistant turn. A row that cannot be converted exactly is dropped and counted.
+python -m agent_from_scratch.evals public --source when2call-pref --input when2call_train_pref.jsonl \
+  --revision SHA --student-gguf <Qwen3-4B-Instruct-2507 GGUF> --max-examples 2000 --output outputs/NEW_PUBLIC
+# Our examples repeated k times, so that they come closest to a third of the rows.
+python -m agent_from_scratch.evals mix --own outputs/NEW_SFT_TEACHER --public outputs/NEW_PUBLIC ... \
+  --output outputs/NEW_MIX
+```
+
+Sources: `when2call-sft`, `when2call-pref` (the chosen reply) and `toucan`. Rows are visited in a
+`--seed` order, whole rows at a time. Design and decisions:
+[docs/STAGE9_ITEM4_PLAN.md](../docs/STAGE9_ITEM4_PLAN.md).
+
 ## Stage 9 adapter training
 
 `train` turns one exported dataset into LoRA adapters, and `replay` checks a served adapter
@@ -59,7 +79,7 @@ python -m agent_from_scratch.evals train --examples outputs/NEW_SFT_TEACHER --ou
 # Against a vLLM server started with --lora-modules NAME=outputs/NEW_ADAPTERS/epoch-3:
 python -m agent_from_scratch.evals replay --examples outputs/NEW_SFT_TEACHER --adapter NAME \
   --ids outputs/NEW_ADAPTERS/metadata.json --output outputs/NEW_REPLAY.json
-python -m agent_from_scratch.evals bench --backend vllm --split dev --seed 0 --adapter NAME --output outputs/NEW_DEV_RUN
+python -m agent_from_scratch.evals bench --backend vllm --split val --seed 0 --adapter NAME --output outputs/NEW_VAL_RUN
 ```
 
 The loss falls on the assistant's completion only; the prompt, with its tool results and
@@ -129,8 +149,8 @@ python -m agent_from_scratch.evals COMMAND --output outputs/NEW_NAME [options]
 
 | I want to know… | Command | Model | Time (16 GB Mac, 32k window) |
 |---|---|---|---|
-| Did I break anything the agent could already do? | `bench --split dev`: 64 generated tasks (inspection, updates, recovery, stopping) | real | ~12 min with the Qwen3-4B Q8_0 GGUF (`--model-path`, measured) |
-| What is the control checkpoint's baseline? | `bench --backend vllm` per seed in `BENCH_SEEDS`, then `aggregate`; `--split test --final` refuses on manifest drift or a protocol mismatch. Runbook: [docs/benchmark.md](../docs/benchmark.md) | real (GPU) | see runbook |
+| Did I break anything the agent could already do? | `bench --split val`: 64 generated tasks (inspection, updates, recovery, stopping) | real | ~12 min with the Qwen3-4B Q8_0 GGUF (`--model-path`, measured) |
+| What is the control checkpoint's baseline? | `bench --backend vllm` per seed in `BENCH_SEEDS`, then `aggregate`; `--split test --final --manifest FILE` refuses on manifest drift or a protocol mismatch. Runbook: [docs/benchmark.md](../docs/benchmark.md) | real (GPU) | see runbook |
 | How reliable is a split across samples? | `aggregate outputs/s0 outputs/s1 outputs/s2`: per-task pass counts, mean pass@1, pass^k, pass@k, mixed-outcome tasks | none | instant |
 | Does context management hold when evidence outgrows the window? | `pressure`: 4 tasks over 9 files of ~15k characters | real | ~15–25 min |
 | How do two runs differ? | `compare outputs/A outputs/B`: paired outcomes, exact McNemar p, trajectory shape | none | instant |
@@ -153,7 +173,7 @@ different windows are not comparable).
 ## The loop when you change the agent
 
 1. Unit tests. They are the only check that runs without a model.
-2. `bench --split dev` before and after the change with the same `--seed`. Never tune against
+2. `bench --split val` before and after the change with the same `--seed`. Never tune against
    `--split test`: it is reserved for weight comparisons (Stages 9–11).
 3. `pressure` if you touched context, compaction, planning, or a tool that returns bulky output.
    `bench` cannot see these: its tasks stay far below the window's elision and summary triggers.
@@ -175,24 +195,25 @@ Run them one after another: each process holds about 6 GB, and two together slow
 
 | File | Role |
 |---|---|
-| `__main__.py` | the `bench` / `freeze` / `aggregate` / `dataset` / `export` / `train` / `replay` / `pressure` / `compare` dispatcher |
-| `sft/` | Stage 9 Items 2 and 3: `export.py` turns verified train rollouts into SFT examples (eligibility, selection, the `export` command); `teacher.py` is the DeepSeek teacher backend behind `bench --backend teacher`; `tensorize.py` turns an example into a token row with labels on the completion only; `train.py` is the LoRA training loop and the `train` command; `replay.py` is the `replay` command |
-| `bench/` | Stage 8 generated benchmark: 18 skeletons (8 dev = 64 tasks, 10 test = 60 tasks), one content-first verifier (`verify.py`), the trusted fixture check command (`check.py`), freeze manifest and protocol check (`manifest.py`), `aggregate.py` for k-sample runs. Shapes and rationale: [docs/STAGE8_DESIGN.md](../docs/STAGE8_DESIGN.md) |
+| `__main__.py` | the `bench` / `freeze` / `aggregate` / `dataset` / `export` / `public` / `mix` / `train` / `replay` / `pressure` / `compare` dispatcher |
+| `sft/` | Stage 9 Items 2–4: `export.py` turns verified train rollouts into SFT examples (eligibility, selection, the `export` command); `public.py` converts public tool-use rows into the same format; `mix.py` combines our examples with public ones; `teacher.py` is the DeepSeek teacher backend behind `bench --backend teacher`; `tensorize.py` turns an example into a token row with labels on the completion only; `train.py` is the LoRA training loop and the `train` command; `replay.py` is the `replay` command |
+| `bench/` | generated benchmark: 38 skeletons (16 train = 320 tasks, 8 val = 64, 14 test = 140), one content-first verifier (`verify.py`), the trusted fixture check command (`check.py`), freeze manifest and protocol check (`manifest.py`), `aggregate.py` for k-sample runs. Shapes and rationale: [docs/STAGE8_DESIGN.md](../docs/STAGE8_DESIGN.md) |
 | `run.py` | `open_run`, `parse_limits` and `save`, which every suite shares |
 | `verify.py` | shared post-run measurement: `metrics()`, `snapshot()`, `exchanges()`; `pressure`'s answer verifier and `summarize()`. Never fed back to the agent |
 | `trajectory.py` | `profile()` and `compare()`; the `compare` command |
 | `pressure.py` | window-pressure suite; files are generated from `--seed`, nothing large is stored |
 | `core_lines.py` | core-size audit for the review trigger in [context-memory.md](../docs/context-memory.md); not an eval |
 
-The Stage 2B `dev` suite (17 hand-written tasks on frozen byte-offset file tools, 1 KiB reads and
-recorded web replay) was retired after Stage 8: `bench --split dev` covers the same four families
+The Stage 2B suite (17 hand-written tasks on frozen byte-offset file tools, 1 KiB reads and
+recorded web replay) was retired after Stage 8: `bench --split val` covers the same four families
 on the current tools. Its tasks, fixtures and runner are in git history at `ce2111a`, and its
 results are summarized in [docs/STAGE.md](../docs/STAGE.md) (Stage 2B).
 The live-network tool demos are in `examples/tools_smoke.py` and `examples/tools_demo.py`.
 
-`freeze` writes `evals/bench/manifest.json`, hashing everything the test split must not drift
-from (source, prompts, decoding, limits, the task set itself). Run it once, after the last
-skeleton lands; `bench --split test --final` refuses to run if the tree has since drifted.
+`freeze` writes `evals/bench/manifest.json`, the Stage 8 freeze of the val tasks, the 60 Stage 8
+test tasks and the protocol (source, prompts, decoding, limits); a test asserts those tasks have
+not changed. A test run is checked against the versioned manifest that `dataset --check` writes:
+`bench --split test --final --manifest FILE` refuses to run if the tree has since drifted.
 
 ## Reading a run directory
 

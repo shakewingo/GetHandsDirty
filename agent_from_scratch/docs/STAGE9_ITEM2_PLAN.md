@@ -41,7 +41,7 @@ sampling. The teacher adds no dependency.
 | export from schema-5 `input_messages` | prompt is rendered from `ModelRequest.input_messages` and `.tools` with the inference renderer |
 
 **Not in Item 2:** loss masking, tokenization, the overfit smoke test and QLoRA (Item 3); any
-holdout run (see decision D6); public function-calling data; expert-iteration rounds (Stage 10).
+test run (see decision D6); public function-calling data; expert-iteration rounds (Stage 10).
 
 ```
 train tasks ──► bench --backend teacher ──► run dir ─┐
@@ -83,7 +83,7 @@ These are the facts the design rests on. Each was checked, not assumed.
    so it is parsed by the same code as the student with no reshaping.
 8. **Adding any non-test `.py` file drifts both manifests.** `source_sha256` in
    `evals/bench/manifest.py` hashes every `.py`/`.jinja` outside `tests/`. Train runs are not
-   `--final`, so nothing blocks; holdout runs reject drift with no override.
+   `--final`, so nothing blocks; test runs reject drift with no override.
 9. **`.gitignore` will hide some new files.** `agent_from_scratch/docs/` is ignored (this file
    needs `git add -f`), `*result*` matches any filename containing "result", and `**/dataset/`
    matches a directory of that name. The names below avoid all three.
@@ -99,7 +99,7 @@ Read these before coding. Each one changes what the code does; the "to change" c
 | D3 | Teacher's context budget | Count the request as the student would see it: render it with the project template and tokenize it with the student's own vocabulary, read from a GGUF of the student (`--student-gguf`, vocabulary only). Hold it against the student's window and reserve | The runtime needs an exact count and DeepSeek has no count endpoint. This is the student's exact token count, so elision and compaction trigger exactly where the student's would: on the Step 5 traces the vocabulary-only count equals the model-reported `prompt_tokens` on 17 of 17 requests. The teacher's own usage is a different number (6.8% higher on the full pass) and stays in `raw_response.usage` | Count with DeepSeek's offline tokenizer instead. It only matters if the teacher's 1M window could bind, which it cannot here |
 | D4 | Filter beyond `passed` | A passed trajectory can hold two kinds of flawed turn: one with the model's own failed tool call (not the injected fault, not a call skipped after one), and a final answer that is not exactly the requested value. `--flawed-turns reject` (the default) refuses the whole trajectory; `--flawed-turns drop` keeps it and leaves only those turns out. A parse error or a stuck reminder refuses the trajectory in both modes. The teacher dataset uses `drop` | Training on the step that made the mistake teaches the mistake, but the other turns of a verified trajectory are sound. Strict rejection left the teacher with 5 of 20 `points_save_recovery` tasks (Step 9). With `drop`, a dropped failure is still in the prompt of later examples as history, never as a target, and `provenance.dropped_turns` marks those examples. Injected faults stay, because recovering from them is a Stage 9 target | `--flawed-turns reject` |
 | D5 | Deduplication | Per task: collapse identical action sequences, keep at most $K = 2$ distinct trajectories (fewest own-error turns, then fewest dropped turns, then shortest, then lowest seed), count a shared prefix once | Without it, tasks the base model always passes contribute $N$ copies and dominate the RFT set. Fact 5 is why the key is the action history and not the prompt text | `--max-per-task K` |
-| D6 | Holdout in Item 2 | Do not run it | Item 2 and Item 3 both add source files, so a manifest frozen now is stale before the adapter exists. Run base and adapter on holdout in one session, under one freeze, at the end of Item 3 | Run base holdout at `dbe98ad` before changing anything; it will not share a commit with the adapter run |
+| D6 | Test in Item 2 | Do not run it | Item 2 and Item 3 both add source files, so a manifest frozen now is stale before the adapter exists. Run base and adapter on test in one session, under one freeze, at the end of Stage 9 | Run the base on test at `dbe98ad` before changing anything; it will not share a commit with the adapter run |
 | D7 | Teacher model | DeepSeek-V4.1-Flash (API ID `deepseek-flash`), thinking on at `reasoning_effort: "low"`, one pass, then retry passes over the tasks that gave no usable trajectory | Claude Opus 5.5 was the first choice and was dropped for cost. The tasks are short and well specified: the teacher passed 80 of 80 at low effort. `deepseek-flash` is an alias that moves between releases, so the release name from `/models` is recorded in `settings.model_name` | `--teacher-model deepseek-v4-pro`, `--teacher-effort {none,low,high,max}` |
 | D8 | Where the teacher runs | On the Mac with `TMPDIR=/tmp`, and record it | Fact 5: tool descriptions carry the workspace path. On the Mac it is `/private/var/folders/...`; on the pod it is `/tmp/...`. `TMPDIR=/tmp` narrows that to `/private/tmp/...`. It is prompt context, not a loss target, but it is a real difference between the two tracks | Run teacher collection on a Linux host for an identical path shape |
 
@@ -145,7 +145,7 @@ $T_{\text{out}} = 23{,}400$, which is \$0.034. All teacher runs in Item 2 togeth
 The spec does not mention these inputs, and each would silently corrupt the dataset. Each has a
 test in Appendix A or C.
 
-1. **A run directory from dev, test or holdout is passed to `export`.** Expected: abort, write
+1. **A run directory from val or test is passed to `export`.** Expected: abort, write
    nothing. `CollectTests.test_only_the_train_split_can_become_training_data`.
 2. **A passed trajectory contains a parse error.** `messages[input_message_count]` is then
    runtime feedback, not an assistant turn. Expected: never a target.
@@ -531,7 +531,7 @@ they are the parts that are easy to get wrong:
                         help="A GGUF of the student; its tokenizer counts the context budget (--backend teacher)")
 ```
 
-- [X] Directly after `overrides = parse_limits(...)`, before the test and holdout checks:
+- [X] Directly after `overrides = parse_limits(...)`, before the test-split checks:
 
 ```python
     if args.backend == "teacher" and args.split != "train":
@@ -542,7 +542,7 @@ they are the parts that are easy to get wrong:
 
 - [X] Update the usage line in the `bench/run.py` docstring.
 - [X] Run the whole suite. Expected: `Ran 379 tests`, `OK` (366 − 1 + 14).
-- [X] Check both guards by their messages: `bench --backend teacher --split dev --output X`
+- [X] Check both guards by their messages: `bench --backend teacher --split val --output X`
   must end with "The teacher may only see the train split.", and
   `bench --backend teacher --split train --output X` with "--backend teacher needs --student-gguf".
 - [X] Commit: `feat: run a DeepSeek teacher on the train split` (`5bda57e`).
@@ -847,8 +847,8 @@ every example's provenance resolves to a completed request in an existing trace 
   dataset manifest has drifted in `source_sha256` only (`llm.py`, `evals/bench/run.py` and
   `evals/__main__.py` changed; the three `evals/sft/` files added). The Stage 8 manifest also
   shows `splits_sha256` and `tasks`, but those date from Item 1; Item 2 added source drift
-  only. Do not refresh either. The versioned freeze happens once, before the holdout
-  comparison in Item 3.
+  only. Do not refresh either. The versioned freeze happens once, before the test
+  comparison at the end of Stage 9.
 - [X] `git add -f agent_from_scratch/docs/STAGE9_ITEM2_PLAN.md` and commit the rest.
 - [ ] Merge the branch. Left for the owner: it changes `main`.
 
@@ -866,7 +866,7 @@ Item 2 is done when all of these hold.
   `$RUN-sft-rft/examples.jsonl`.)
 - [X] Coverage by skeleton, yield, rejections by reason and cost are written in STAGE.md,
   including tasks neither track covers.
-- [X] No holdout, dev or test task was run through the teacher or exported. (All 14 teacher
+- [X] No val or test task was run through the teacher or exported. (All 14 teacher
   and RFT run directories record `split: train` in their metadata and in every record.)
 
 ## 9. Handoff to Item 3
@@ -876,9 +876,9 @@ Item 2 is done when all of these hold.
   tokenizing the two halves separately can differ at the boundary.
 - Token counts per example are not in Item 2's output. Compute them when the tokenizer is
   loaded for training, and check the total against the 2–8M-token line in the budget.
-- The dev comparison needs base, teacher-SFT and RFT-SFT on one server command. The holdout
+- The val comparison needs base, teacher-SFT and RFT-SFT on one server command. The test
   comparison additionally needs a new dataset manifest generated at the commit that contains
-  the training code (`evals dataset --output ... --check`), because holdout rejects drift.
+  the training code (`evals dataset --output ... --check`), because test rejects drift.
 
 ---
 
@@ -1205,7 +1205,7 @@ class CollectTests(unittest.TestCase):
         self.assertEqual({e["provenance"]["seed"] for e in only}, {1})
 
     def test_only_the_train_split_can_become_training_data(self):
-        for split in ("dev", "test", "holdout"):
+        for split in ("val", "test"):
             with self.subTest(split=split), self.assertRaisesRegex(ValueError, "train"):
                 collect([self.run_dir(split, 0, split=split)], "rft")
 
@@ -1643,7 +1643,7 @@ class HarnessTests(unittest.TestCase):
 class BenchTests(unittest.TestCase):
     def test_the_teacher_may_only_see_the_train_split(self):
         with TemporaryDirectory() as temporary, patch.object(run, "load_model") as model:
-            for split in ("dev", "test", "holdout"):
+            for split in ("val", "test"):
                 args = ["bench", "--backend", "teacher", "--split", split, "--final",
                         "--student-gguf", __file__, "--output", str(Path(temporary) / split)]
                 with self.subTest(split=split), patch.object(sys, "argv", args), patch("sys.stderr"):

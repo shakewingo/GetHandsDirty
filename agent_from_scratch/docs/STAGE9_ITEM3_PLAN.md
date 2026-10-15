@@ -12,7 +12,7 @@ after the work was done, so that it describes Item 3 as decided and as run. Spec
 
 **Goal.** Train one LoRA adapter on the teacher examples and one on the RFT examples, load each
 into the ordinary harness through the Stage 8 server, and compare the base, teacher-SFT and
-RFT-SFT on val (the `dev` split).
+RFT-SFT on val (the `val` split).
 
 **Status: done.** The recipe for later candidates is confirmed in Stage 9 Item 4.
 
@@ -40,7 +40,7 @@ sft-teacher-v3/ ──► train ──► teacher adapters (one per epoch) ─�
 sft-rft/ ─────────► train ──► RFT adapters ─────────────────────┤
                                                                 ├─► vLLM (Stage 8 command + --lora-modules)
                                                                 │      ├─► replay  (does the server apply the adapter?)
-                                                                │      └─► bench --split dev --adapter NAME ──► aggregate, compare
+                                                                │      └─► bench --split val --adapter NAME ──► aggregate, compare
 base checkpoint, adapter off ───────────────────────────────────┘
 ```
 
@@ -102,7 +102,7 @@ has a rate.
 
 - Only train examples train. `train` refuses a pilot dataset without `--pilot`, and an adapter
   trained with `--pilot` or `--limit` is a pipeline check, never a candidate.
-- Item 3 runs neither the test split nor the holdout split.
+- Item 3 does not run the test split.
 - No change to the verifier, the skeletons, `prompts/`, the `AgentLimits` defaults or `BENCH_*`.
 - One renderer and one template: `train` refuses a dataset exported under a different
   `prompts/qwen_chat.jinja`.
@@ -220,7 +220,7 @@ exactly the counts in fact 1, and the trained tokens decoded to the completion o
   `47354fe8dbc677a2…`.
 - [x] The base, teacher-SFT and RFT-SFT ran on val with three seeds each, in one session, on one
   server process.
-- [x] No test or holdout task was run.
+- [x] No test task was run.
 - [x] Results, costs and limits are written in STAGE.md, including the arm that shows no gain.
 
 ## 9. Handoff
@@ -346,23 +346,23 @@ python -m agent_from_scratch.evals replay --examples outputs/sft-smoke-hard8 \
   --ids outputs/sft-smoke3/metadata.json --output outputs/replay-smoke-base.json
 # select.sh: val seed 0 for each teacher epoch
 for e in 1 2 3; do
-  python -m agent_from_scratch.evals bench --backend vllm --split dev --seed 0 --adapter teacher-e$e --output outputs/dev-teacher-e$e-s0
+  python -m agent_from_scratch.evals bench --backend vllm --split val --seed 0 --adapter teacher-e$e --output outputs/val-teacher-e$e-s0
 done
 # compare.sh 2: three seeds per arm, then aggregate and pair
 K=2
 for s in 0 1 2; do
-  python -m agent_from_scratch.evals bench --backend vllm --split dev --seed $s --output outputs/dev-base-s$s
-  python -m agent_from_scratch.evals bench --backend vllm --split dev --seed $s --adapter rft-e$K --output outputs/dev-rft-s$s
+  python -m agent_from_scratch.evals bench --backend vllm --split val --seed $s --output outputs/val-base-s$s
+  python -m agent_from_scratch.evals bench --backend vllm --split val --seed $s --adapter rft-e$K --output outputs/val-rft-s$s
 done
 for s in 1 2; do
-  python -m agent_from_scratch.evals bench --backend vllm --split dev --seed $s --adapter teacher-e$K --output outputs/dev-teacher-e$K-s$s
+  python -m agent_from_scratch.evals bench --backend vllm --split val --seed $s --adapter teacher-e$K --output outputs/val-teacher-e$K-s$s
 done
-python -m agent_from_scratch.evals aggregate outputs/dev-base-s? --output outputs/dev-base.json
-python -m agent_from_scratch.evals aggregate outputs/dev-teacher-e$K-s? --output outputs/dev-teacher.json
-python -m agent_from_scratch.evals aggregate outputs/dev-rft-s? --output outputs/dev-rft.json
+python -m agent_from_scratch.evals aggregate outputs/val-base-s? --output outputs/val-base.json
+python -m agent_from_scratch.evals aggregate outputs/val-teacher-e$K-s? --output outputs/val-teacher.json
+python -m agent_from_scratch.evals aggregate outputs/val-rft-s? --output outputs/val-rft.json
 for s in 0 1 2; do
-  python -m agent_from_scratch.evals compare outputs/dev-base-s$s outputs/dev-teacher-e$K-s$s > outputs/compare-base-teacher-s$s.json
-  python -m agent_from_scratch.evals compare outputs/dev-base-s$s outputs/dev-rft-s$s > outputs/compare-base-rft-s$s.json
+  python -m agent_from_scratch.evals compare outputs/val-base-s$s outputs/val-teacher-e$K-s$s > outputs/compare-base-teacher-s$s.json
+  python -m agent_from_scratch.evals compare outputs/val-base-s$s outputs/val-rft-s$s > outputs/compare-base-rft-s$s.json
 done
 ```
 

@@ -157,7 +157,7 @@ own trajectories that way, so this agent uses rule-based categories from tool na
 
 **Statistics at this scale.** The paper's paired exact McNemar test is the right design for
 comparing two configurations on the same tasks, but Terminal-Bench's 89 tasks often failed to
-reach significance, and the dev suite here has **17**. Report paired outcomes (both pass / only
+reach significance, and the Stage 2B suite here has **17**. Report paired outcomes (both pass / only
 A / only B / both fail) and the exact p-value, and read direction, not significance. The
 suite's `allowed_tools` allowlist and recorded web replay already avoid the paper's search-
 leakage concern. The frozen Stage 2B suite uses legacy file tools, has no `edit_file` and runs
@@ -190,8 +190,8 @@ tables and caveats are in the plan's
   (`answer_found` 4/4 vs 3/4; the one difference was T3's summary losing a code). Overflow did not
   discriminate: no condition reached `context_limit` at 32k.
 - **Finding 4 shows its cost side only.** Planning added 34% requests, 77% tokens and 2.5× wall
-  clock on the dev suite for 8/17 vs 9/17, and gained nothing on the pressure suite.
-- **The 17-task dev suite cannot test any of this at 32k.** It peaks at 8% of the usable window,
+  clock on the Stage 2B suite for 8/17 vs 9/17, and gained nothing on the pressure suite.
+- **The 17-task Stage 2B suite cannot test any of this at 32k.** It peaks at 8% of the usable window,
   so T3 and T4 were the same experiment. Use `evals/pressure.py` for context work.
 - Still unmeasured: Finding 5 (search tools) and any effect size that survives more than one seed.
 

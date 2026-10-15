@@ -45,7 +45,7 @@ as pilots; mark missing required outcomes incomplete instead of silently extendi
 | Completed | **8 — complete: frozen benchmark and protocol, Qwen3-4B control baseline (test mean pass@1 0.667)** | Resettable benchmark, isolated splits, measured baseline, frozen harness |
 | Research | **9 — in progress, required outcome** | LoRA SFT of the 4B student on train tasks and public data, chosen on val, reported once on test and an external benchmark; Items 1–3 done |
 | Later experiment | **10 — draft, conditional** | 2–3 rounds of expert iteration (weak-RSI question); GRPO pilot as a second arm from M1 if M1's samples meet its go conditions |
-| Delivery | **11 — draft, required outcome** | Held-out paired results and reproducible demo; dev-only recipe search optional |
+| Delivery | **11 — draft, required outcome** | Held-out paired results and reproducible demo; val-only recipe search optional |
 | Future branches | **4C / 5 / 6 / 7 — optional** | Dream / skills and MCP / jobs / child agent and planning |
 
 Numbering follows the scratch notes: old Stage 1.1 is now Stage 1; old 1.2 tools move
@@ -221,7 +221,7 @@ Prompt rules describe expected behavior; runtime enforces paths, allowed operati
   targeted `edit_file`. Support general local paths, optional confinement, continuation,
   atomic replacement, mode preservation and optional version checks. Read PDF/Office text
   through `file_documents.py`; images expose metadata only. The original confined byte-based
-  tools (`evals/legacy_files.py`) served the Stage 2B `dev` suite until both were retired after
+  tools (`evals/legacy_files.py`) served the Stage 2B suite until both were retired after
   Stage 8; they remain in git history at `ce2111a`.
 - [x] **`tools/web.py`:** synchronous general HTTP/HTTPS `web_fetch(url, extract_mode?)`
   with compressed responses and main-content or navigation-inclusive HTML text extraction,
@@ -251,7 +251,7 @@ No async runtime, provider catalogue or interactive approval engine is added.
 
 ### 2B — first behavioral baseline · complete
 
-- [x] `evals/run.py` + `verify.py` reuse foundation read-coverage checks. **17 dev tasks**
+- [x] `evals/run.py` + `verify.py` reuse foundation read-coverage checks. **17 Stage 2B tasks**
   cover dependent inspection, constrained changes, matched recovery, stopping and calculator.
   Rows specify prompt, fixture, tools, budget, verifier, evidence/constraints and split.
 - [x] Allocate skeletons before variants; use fresh temporary files and session state per run.
@@ -267,7 +267,7 @@ The full prompt fixes no-op behavior; nested edits, web JSON/recovery and two an
 still fail. Two false claims and one unintended-write task remain. The selected prompt trades
 fewer side effects than shorter candidates for higher generation cost: 78 → 270 seconds.
 Bad arguments/blocked commands and follow-up/reload/reset have scripted regression coverage;
-real dev tasks exercise path denial, fetch failure and timeout. Fake “done” artifacts fail.
+real Stage 2B tasks exercise path denial, fetch failure and timeout. Fake “done” artifacts fail.
 Implementation/baseline are complete; reliable autonomous completion remains a measured goal.
 
 **September 16 handoff review:** all **167 deterministic tests pass** in
@@ -505,7 +505,7 @@ restart demos. No daemon/distributed scheduler. Nanobot reference: [cron service
 Keep synchronous `delegate(task)` using the same loop, fresh context, read-only tools, depth one,
 four child steps, and at most two delegations. Link child/parent traces and charge shared budgets;
 parent owns synthesis and the final answer. Compare direct vs inspect/edit/check plan, then
-parent-only vs child-assisted runs separately on the same six dev tasks. **Gate:** useful evidence
+parent-only vs child-assisted runs separately on the same six val tasks. **Gate:** useful evidence
 returns; prohibited writes/recursive delegation never execute; exhaustion is visible. No teams or
 concurrent writes. Nanobot reference: [restricted subagent][nb-child]; this design stays synchronous.
 
@@ -518,16 +518,16 @@ Design: [docs/STAGE8_DESIGN.md](STAGE8_DESIGN.md); results in `docs/benchmark.md
 - [x] Cover inspection/reporting, constrained updates, recovery/verification, and appropriate
   stopping with roughly 2–6 dependent tool interactions. Vary layout, distractors, values,
   dependency chains, and fault positions; allow multiple valid solutions. 18 generated skeletons
-  (8 dev, 10 test), any valid tool path passes; every skeleton that edits a file offers
+  (8 val, 10 test), any valid tool path passes; every skeleton that edits a file offers
   `edit_file` beside `write_file` (except `flaky_write_retry`, whose fault targets `write_file`).
-- [x] Keep train, dev, and final test isolated by task skeleton before creating variants;
-  reset workspace/session/memory per task. Start from the 12–20 dev cases; target 50–100 reserved
+- [x] Keep train, val, and final test isolated by task skeleton before creating variants;
+  reset workspace/session/memory per task. Start from the 12–20 val cases; target 50–100 reserved
   final cases if affordable, explicitly labelling smaller samples as pilots. A public benchmark
   subset is optional; identify adaptations and never present a local score as its official score.
   60 reserved test tasks, `evals/bench/splits.json` fixed before any test skeleton was
-  implemented. Dev began at 15 tasks and was expanded to 64 (four more skeletons, one per
+  implemented. Val began at 15 tasks and was expanded to 64 (four more skeletons, one per
   family, and more seeds) after the 7B pilot, so checkpoint selection in Stages 9–11 has enough
-  dev tasks. Each task gets a fresh temporary workspace and no memory.
+  val tasks. Each task gets a fresh temporary workspace and no memory.
 - [x] Verify final artifacts/constraints independently. Report counts/denominators, false
   completion, invalid calls, matched-fault recovery, stopping, tokens, requests, latency, and cost.
   Keep long-session/compact/restart and delayed-memory recall in separate harness evaluations.
@@ -549,12 +549,12 @@ Design: [docs/STAGE8_DESIGN.md](STAGE8_DESIGN.md); results in `docs/benchmark.md
   `LLM.parse_response`, so training examples can later be exported token-identically; the GGUF
   path stays for tests and local pipeline checks. `aggregate` combines the k runs.
 - [x] Run the intended trainable checkpoint as the base control: on a rented GPU, validate the
-  template/parser/measurement on the live server, run dev × 3 seeds (fix and re-freeze if that
+  template/parser/measurement on the live server, run val × 3 seeds (fix and re-freeze if that
   surfaces a harness bug), then test × 3 seeds once under the final freeze. Primary weight
   comparisons use short tasks and disabled or identical read-only memory; no cross-task
   accumulation or evaluator coaching. For long-context comparisons, hold the summarizer
   checkpoint/config fixed. Done September 27 on a RunPod A40 ($0.35): measurement exact on all
-  1,496 requests, no dev harness bug, test **mean pass@1 0.667** (pass^k 0.583), dev 0.542;
+  1,496 requests, no val harness bug, test **mean pass@1 0.667** (pass^k 0.583), val 0.542;
   stopping is 0.00 on test. Results and the runbook as run are in `docs/benchmark.md`; per-task
   pass counts are in `docs/baselines/stage8-control/`.
 
@@ -696,9 +696,9 @@ candidate in Stage 9 Item 4, compared on val against the teacher-only candidates
 is dropped, because 20% of 255 own examples is 64 rows; the license check stays.
 
 **Evaluation layers** (revised October 14, 2026; the sets are defined in Stage 9):
-1. **Test**: 140 tasks on 14 shapes that training never sees, the Stage 8 test split together
-   with the Stage 9 holdout. It is run once per final candidate and nothing is chosen on it.
-   **Val**, the Stage 8 dev split, is where every choice is made. It is a small, local
+1. **Test**: 140 tasks on 14 shapes that training never sees: the 10 Stage 8 test shapes and
+   4 shapes reserved in Stage 9. It is run once per final candidate and nothing is chosen on it.
+   **Val**, the 64 Stage 8 val tasks, is where every choice is made. It is a small, local
    benchmark, not a broad generalization claim.
 2. **External test**: the When2Call test set and a locally adapted BFCL multi-turn subset,
    labelled as a local adaptation and never reported as an official score. Nothing derived from
@@ -731,17 +731,23 @@ and the score would measure practice on a known shape rather than a new kind of 
 
 | Set | Contents | `bench` split | Used for |
 |---|---|---|---|
-| train | 4 shapes, 80 tasks (more in Item 4), plus public SFT data | `train` | training data only |
-| val | 8 shapes, 64 tasks: the Stage 8 dev split | `dev` | every choice: epoch, data mix, recipe; run as often as needed |
-| test | 14 shapes, 140 tasks: the Stage 8 test split (10 shapes, 60 tasks) and the Stage 9 holdout (4 shapes, 80 tasks) | `test`, `holdout` | once per final candidate, at the end; nothing is chosen on it |
+| train | 16 shapes, 320 tasks (Item 1 built 4 shapes and 80 tasks, Item 4 added 12 and 240), plus public SFT data | `train` | training data only |
+| val | 8 shapes, 64 tasks, built in Stage 8 | `val` | every choice: epoch, data mix, recipe; run as often as needed |
+| test | 14 shapes, 140 tasks: 10 shapes and 60 tasks built in Stage 8, 4 shapes and 80 tasks reserved in Stage 9 Item 1 | `test` | once per final candidate, at the end; nothing is chosen on it |
 | external test | the When2Call test set and a local BFCL multi-turn subset | separate scorers | performance outside our harness, run with test |
+
+The `bench` splits took these names on October 14, 2026, and the four Stage 9 test shapes joined
+the test split then. Runs written before that date keep the earlier labels in their metadata and
+directory names; commands in the plans are written with the current names.
+The four Stage 9 test shapes, like all train shapes, are scored with three extra checks
+(`Skeleton.strict` in `evals/bench/skeletons.py`); the Stage 8 shapes keep their frozen scoring.
 
 **Headline numbers:** mean pass@1 on test, with pass^3 as its reliability, and the external
 scores. Every other number is diagnosis. All runs use Stage 8's server command and protocol
 (`docs/benchmark.md`), and each candidate is paired with the base by task ID.
 
-- [x] Item 1 — a task generator with fault injection; 80 train and 80 holdout tasks, the
-  holdout shapes reserved first.
+- [x] Item 1 — a task generator with fault injection; 80 train tasks, and 80 test tasks on
+  4 shapes reserved first.
 - [x] Item 2 — teacher and RFT trajectories run inside the harness, verified, and exported as
   SFT examples (255 and 63).
 - [x] Item 3 — the LoRA recipe, and the first adapters compared on val. Guide and record:
@@ -778,7 +784,7 @@ python -m unittest agent_from_scratch.tests.test_train_skeleton -v
 ```
 
 Evidence: `outputs/stage9-train-pilot-20261012/summary.json`, `results.json`, generated fixtures,
-and per-run task/check/trace records. All 64 dev and 60 test task fingerprints, runtime source
+and per-run task/check/trace records. All 64 val and 60 test task fingerprints, runtime source
 hashes relative to the pre-pilot tree, and frozen protocol fields remain unchanged. The original
 Stage 8 manifest is retained: adding train source, split membership and tasks causes expected
 manifest drift. A future formal weight comparison needs an explicit versioned freeze decision;
@@ -802,7 +808,7 @@ Scripted gates exercise real tools and the ordinary agent loop. They reject answ
 wrong answers, clipped observations, unauthorized or unrelated changes, missing readback, and
 observations obtained only after an oracle write. Stage 9 fault variants require an observed
 fault; backup lookup requires failure of the designated primary path, not an unrelated missing
-file. These additional checks are scoped to train/holdout in the evaluation runner; the
+file. These additional checks apply to the Stage 9 shapes only (`Skeleton.strict`); the
 Stage 8 verifier, task fingerprints, runtime, model/template and decoding remain unchanged.
 Alternate read order and targeted edits are allowed, rather than requiring the scripted path.
 
@@ -823,10 +829,10 @@ Evidence: `outputs/stage9-item1-20261012/data/` records **160/160** correct scri
 observed. Additional negative/alternative-path gates are in `tests/test_stage9_tasks.py`;
 command isolation and manifest guards are in `tests/test_stage9_dataset.py`.
 
-`bench --split train` is ready for Item 2. A real `--split holdout` run requires `--final` and an
+`bench --split train` is ready for Item 2. A real `--split test` run requires `--final` and an
 explicit dataset `--manifest`; drift and limit overrides are rejected. The old Stage 8 manifest
 is retained, not overwritten. Formal comparisons use the new versioned snapshot and add a base
-run on the new held-out tasks; old control evidence remains a separate reference. Data-generator
+run on the four new test shapes; old control evidence remains a separate reference. Data-generator
 completion establishes a reliable small-scale environment, not actor capability or SFT gains.
 
 **Next smallest gap:** add the teacher API backend, collect a few verifier-passed train runs,
@@ -929,7 +935,7 @@ line up with weaknesses Stage 8 already recorded, and the teacher set demonstrat
 | Base behaviour on the train pool | Closest weakness recorded in Stage 8 | Teacher demonstrations |
 |---|---|---|
 | Final answer is not the bare token | Test stopping is 0.00: the model "never replies with only the required token" | 76 bare final answers |
-| No read-back after a write | Dev `delete_key`: "removed" when the edit never landed | Every `UPDATED` and `SAVED` trajectory reads back, because the verifier requires it |
+| No read-back after a write | Val `delete_key`: "removed" when the edit never landed | Every `UPDATED` and `SAVED` trajectory reads back, because the verifier requires it |
 | Gives up after its own failed read | No direct counterpart measured | 71 examples continue after a failed read; 5 show the clean first step |
 
 - **The RFT set cannot carry a training round on its own.** It covers 29 of 80 tasks and 40 of
@@ -943,7 +949,7 @@ line up with weaknesses Stage 8 already recorded, and the teacher set demonstrat
   of 160 rollouts, so the injected save fault is almost never met. The task is left as it is
   for now: the teacher data shows the missing step.
 - **Two Stage 8 weaknesses have no counterpart in the train pool:** doing nothing when the
-  requested state already holds (dev `no_op_correct_config`, 0.00) and reporting a missing file
+  requested state already holds (val `no_op_correct_config`, 0.00) and reporting a missing file
   (test `missing_file_report`, 0.00). No gain should be expected there from this data.
 
 These points set the entry conditions of Stage 10, listed in that section.
@@ -952,7 +958,7 @@ These points set the entry conditions of Stage 10, listed in that section.
 drifted in `source_sha256` only (`llm.py`, `evals/bench/run.py`, `evals/__main__.py` changed;
 the three `evals/sft/` files added). The Stage 8 manifest also reports `splits_sha256` and
 `tasks`, which date from Item 1. Neither was refreshed. The versioned freeze happens once,
-before the final test (Item 6). No dev, test or holdout task was run or exported in Item 2.
+before the final test (Item 6). No val or test task was run or exported in Item 2.
 
 Evidence: `outputs/stage9-item2-20261012-teacher-s{0,1,2}/`, `-rft/rft-train-s{0..7}/` and
 `-rft/rft-train-aggregate.json` (runs); `-sft-teacher-v3/` and `-sft-rft/` (datasets, each
@@ -1105,12 +1111,11 @@ better outside it, or has lost something general.
 ### Item 6 — the final test, once
 
 - [ ] All code is final and committed. On the pod, from a clean clone,
-  `dataset --output ... --check` writes the one versioned manifest, covering the test and
-  holdout tasks.
-- [ ] Run the base and the final candidates on `--split test` and `--split holdout`, three
-  seeds each, with `--final --manifest`, on one server process.
-- [ ] `aggregate` each split per arm, combine the two weighted by task count (60 and 80), and
-  pair each candidate with the base by task ID.
+  `dataset --output ... --check` writes the one versioned manifest, covering the 140 test
+  tasks.
+- [ ] Run the base and the final candidates on `--split test`, three seeds each, with
+  `--final --manifest`, on one server process.
+- [ ] `aggregate` the test runs per arm, and pair each candidate with the base by task ID.
 - [ ] Run the external test on the same arms.
 - [ ] Report in this stage the headline table (test mean pass@1 and pass^3, and external
   scores, per arm), the costs and the limits. Nothing is chosen on these results.
@@ -1415,7 +1420,7 @@ examples have different roles. Optional branches are omitted from the required-p
 
 ## Optional autoresearch-style recipe search · draft
 A coding agent proposes one bounded change at a time, drawn from data mix, filter threshold, LoRA rank/lr, epochs, and the
-teacher/RFT ratio. Each change gets a time/cost cap, a dev evaluation, keep/revert, and a
+teacher/RFT ratio. Each change gets a time/cost cap, a val evaluation, keep/revert, and a
 ledger row that includes failed hypotheses. The agent never sees the test set, and the evaluator,
 harness and splits stay frozen. Report it as automated research, not RSI. Missing
 runtime/training evidence stays explicitly incomplete.
@@ -1429,7 +1434,7 @@ Stages 9–11. Its results are reported separately from adapter training and exp
 **Prerequisites:**
 
 - [ ] Build the Stage 9 train-skeleton generator first. Split skeletons before generating variants;
-  use new training shapes for search and dev tasks for candidate selection. Reserve new unseen
+  use new training shapes for search and val tasks for candidate selection. Reserve new unseen
   skeletons for a final generalization check; the existing frozen test split remains reserved
   for the weight-comparison protocol.
 - [ ] Turn failed development runs into diagnostic records: task input, failed verifier checks,
@@ -1447,7 +1452,7 @@ Stages 9–11. Its results are reported separately from adapter training and exp
 - [ ] Wrap the existing fresh-workspace runner and independent verifier as an
   `optimize_anything` evaluator returning `(float(passed), diagnostics)`. Keep task expectations,
   verifier, fault injection and splits outside the candidate's editable surface. Feed training
-  diagnostics to reflection; use full dev validation scores for selection.
+  diagnostics to reflection; use full val validation scores for selection.
 - [ ] Set an explicit rollout/time/cost cap and record it separately from the Stage 9–11 budget
   before running. Compare the original and selected prompts over matched tasks and multiple
   seeds. Report task pass rate, regressions, failed-check categories, requests, tokens and time;
@@ -1455,7 +1460,7 @@ Stages 9–11. Its results are reported separately from adapter training and exp
 
 **Output:** an experiment ledger with every proposed prompt, parent, training/validation scores,
 accept/reject decision and cost; versioned candidate/config records; and a paired baseline versus
-selected-candidate report. Report dev-only gains as exploratory. Claim transfer only after the
+selected-candidate report. Report val-only gains as exploratory. Claim transfer only after the
 reserved new-task check. A null result is valid. Any adopted prompt becomes a new harness version;
 it must not be mixed into the frozen Stage 9–11 weight comparison. Describe this as reflective
 prompt search, not evidence of recursive improvement in the optimizer itself.
