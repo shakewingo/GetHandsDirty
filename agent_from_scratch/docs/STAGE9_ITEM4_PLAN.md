@@ -198,9 +198,9 @@ Each step ends with the full test suite green. Commands write under `outputs/`.
 **Step 0 — branch and baseline.** Branch `feat/stage9-wider-train-data` from `bac2cbe`; 414
 tests pass.
 
-- [ ] **Step 1 — the 12 skeletons, test first.** For each shape: oracle tests for each outcome,
+- [x] **Step 1 — the 12 skeletons, test first.** For each shape: oracle tests for each outcome,
   then the negative gates of section 4, then the builder and the scripted solution.
-- [ ] **Step 2 — the gates and the unchanged sets.**
+- [x] **Step 2 — the gates and the unchanged sets.**
 
   ```sh
   python -m agent_from_scratch.evals dataset --output outputs/stage9-item4-YYYYMMDD/data --check
@@ -210,13 +210,13 @@ tests pass.
   does, and every fault is observed. Then compare the new dataset manifest with Item 1's
   (`outputs/stage9-item1-20261012/data/manifest.json`): every Stage 9 test task and every old
   train task entry is identical, and only the new train tasks are added.
-- [ ] **Step 3 — checkpoint: you read the shapes.** One generated task per outcome per
+- [x] **Step 3 — checkpoint: you read the shapes.** One generated task per outcome per
   skeleton (prompt and workspace), printed in one file. Nothing is spent on the teacher before
   you approve them.
 
 ### Part 2 — teacher-wide (Mac, API)
 
-- [ ] **Step 4 — teacher pass on the 240 new tasks.** A 12-task smoke first (one per
+- [x] **Step 4 — teacher pass on the 240 new tasks.** A 12-task smoke first (one per
   skeleton), whose traces are read; then the full pass at low effort; then retry passes over
   tasks with no usable trajectory (high effort, then thinking off), as Item 2 did.
 
@@ -228,7 +228,7 @@ tests pass.
     --tasks $NEW --student-gguf $GGUF --output outputs/stage9-item4-YYYYMMDD-teacher-s0
   ```
 
-- [ ] **Step 5 — export teacher-wide (D5).**
+- [x] **Step 5 — export teacher-wide (D5).**
 
   ```sh
   python -m agent_from_scratch.evals export --track teacher --flawed-turns drop --max-per-task 1 \
@@ -241,13 +241,13 @@ tests pass.
 
 ### Part 3 — public data and the mix (Mac)
 
-- [ ] **Step 6 — licences and 20 rows each.** Record the licence, card revision (commit SHA)
+- [x] **Step 6 — licences and 20 rows each.** Record the licence, card revision (commit SHA)
   and download date of both datasets. Read 20 rows of each, spread across the file, and
   settle facts 8 and 9: how When2Call writes a tool call, its category shares, whether Toucan
   rows hold thinking text, multiple user turns, or more than 8 calls per turn, and whether its
   judge columns should filter rows. Each finding that changes D6 comes back to you before
   Step 7.
-- [ ] **Step 7 — `public`, test first.** `convert_row(row, source) -> list[example]` turns one
+- [x] **Step 7 — `public`, test first.** `convert_row(row, source) -> list[example]` turns one
   row into `messages` and `tools`, renders them with `render_chat` and the project template,
   and writes one example per assistant turn, with the round-trip check `export` uses
   (`LLM.parse_response` must give back the same calls and content). Provenance: `track`
@@ -255,49 +255,50 @@ tests pass.
   `dataset@revision`, `task_id` the row's ID. Tests: a call row and a no-call row of each
   source; a row with thinking text, an unparseable call, 9 calls in one turn and an over-long
   row are each dropped and counted; tool responses never appear in a completion.
-- [ ] **Step 8 — convert both.** The whole When2Call `train_sft` and a seeded sample of
+- [x] **Step 8 — convert both.** The whole When2Call `train_sft` and a seeded sample of
   Toucan's SFT config large enough to leave 3,000 examples after the filters. The funnel per
   drop reason is in each `metadata.json`.
-- [ ] **Step 9 — `mix`, test first, then `sft-mix-v1`.** Inputs: the datasets, a target count
+- [x] **Step 9 — `mix`, test first, then `sft-mix-v1`.** Inputs: the datasets, a target count
   per public source, the repeat factor rule (D7) and a seed. It samples whole conversations,
   shuffles, and writes `examples.jsonl` and a `metadata.json` that `train` reads unchanged
   (fact 6), with the sources, their hashes, $k$ and the actual shares.
-- [ ] **Step 10 — token counts and the time estimate.** Encode teacher-wide and mix with the
+- [x] **Step 10 — token counts and the time estimate.** Encode teacher-wide and mix with the
   Hugging Face tokenizer on the Mac, as Item 3's Step 5 did: total, trained and longest-row
   tokens, and the trained tokens decode back to the completions. Estimate each training time
   from fact 7 and settle D9.
-- [ ] **Step 11 — commit before renting.** A shallow clone of the branch passes the suite.
+- [x] **Step 11 — commit before renting.** A shallow clone of the branch passes the suite.
 
 ### Part 4 — Session A (GPU)
 
-- [ ] **Step 12 — set up**, as Item 3's appendix: ship the clone, the two new datasets and
+- [x] **Step 12 — set up**, as Item 3's appendix: ship the clone, the two new datasets and
   Item 3's epoch-2 teacher adapter; install; the SFT tests pass with none skipped. Cost guard
   started.
-- [ ] **Step 13 — train.** teacher-wide first, then mix (or mix on the second pod, D9), each
+- [x] **Step 13 — train.** teacher-wide first, then mix (or mix on the second pod, D9), each
   with `train --examples DIR --output DIR` and nothing else.
-- [ ] **Step 14 — serve and check the reload.** The Stage 8 command plus
+- [x] **Step 14 — serve and check the reload.** The Stage 8 command plus
   `--lora-modules teacher-v3=… wide-e1=… wide-e2=… wide-e3=… mix-e1=… mix-e2=… mix-e3=…`.
   `replay` on 20 teacher-wide examples for `wide-e3` and `mix-e3`: each reproduces more
   targets than the base.
-- [ ] **Step 15 — the epochs.** Val seed 0 for each of the six epoch adapters; pick by D8.
-- [ ] **Step 16 — the comparison.** Val seeds 0–2 for the base, teacher-v3, and the chosen
+- [x] **Step 15 — the epochs.** Val seed 0 for each of the six epoch adapters; pick by D8.
+- [x] **Step 16 — the comparison.** Val seeds 0–2 for the base, teacher-v3, and the chosen
   epoch of each candidate (seed 0 reused); `aggregate` per arm; `compare` each candidate with
   the base and with teacher-v3, per seed. Record mean pass@1 and pass^3 by family and
   skeleton, `format_exact`, false completions, completion tokens, and measured against served
   prompt tokens. For mix against teacher-wide, also count the val runs whose final reply
   declines or asks a question instead of doing the task: every val task can be done with the
   tools offered, so each such reply is a cost of the public data.
-- [ ] **Step 17 — optional: M0 on the new shapes (D12).**
-- [ ] **Step 18 — copy back and delete.** Runs, logs and the two chosen adapters into
+- [x] **Step 17 — optional: M0 on the new shapes (D12).**
+- [x] **Step 18 — copy back and delete.** Runs, logs and the two chosen adapters into
   `outputs/stage9-item4-YYYYMMDD-session-a/`; checksums match; pod deleted; cost read.
 
 ### Part 5 — choose and record
 
-- [ ] **Step 19 — at most two mix changes.** Only if mix is worse than teacher-wide on val in a
+- [x] **Step 19 — at most two mix changes.** Not needed: mix beat teacher-wide on every count
+  below (section 13). Only if mix is worse than teacher-wide on val in a
   way its data explains (for example more questions or refusals on our tasks, or lost
   `format_exact`). Each change is written down with its reason before it is trained, and costs
   one more short session.
-- [ ] **Step 20 — name the candidates (section 8)** and record Item 4 in STAGE.md: results,
+- [x] **Step 20 — name the candidates (section 8)** and record Item 4 in STAGE.md: results,
   costs, limits, and the Stage 10 entry conditions it settles.
 
 ## 8. Choosing (D11)

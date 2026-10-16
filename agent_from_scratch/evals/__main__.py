@@ -10,6 +10,8 @@ Commands:
   public    turn rows of a public tool-use dataset into SFT examples           (no model)
   mix       combine our SFT examples with public ones into one training set   (no model)
   compare   profile one run, or pair two runs by task ID          (no model)
+  when2call the When2Call external test: mcq, generate, judge (vLLM server; DeepSeek judge)
+  bfcl      a local adaptation of BFCL multi-turn base (vLLM server)
   train     train a LoRA adapter on an exported SFT dataset (needs torch, transformers, peft)
   replay    continue each SFT prompt greedily on a vLLM server and compare with its target
 
@@ -23,7 +25,8 @@ COMMANDS = {"pressure": "pressure", "bench": "bench.run",
            "freeze": "bench.manifest",
            "aggregate": "bench.aggregate", "compare": "trajectory", "dataset": "bench.dataset",
            "export": "sft.export", "public": "sft.public", "mix": "sft.mix",
-           "train": "sft.train", "replay": "sft.replay"}
+           "train": "sft.train", "replay": "sft.replay",
+           "when2call": "external.when2call", "bfcl": "external.bfcl"}
 
 
 def main():
