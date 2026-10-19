@@ -230,8 +230,12 @@ def read_rows(paths: list[Path]):
 
 
 def collect(rows: list[dict], source: str, *, count, max_examples: int | None = None,
-            seed: int = 0) -> tuple[list[dict], dict]:
-    """(examples, funnel) from `rows` visited in a seeded order, whole rows at a time."""
+            seed: int = 0, caps: dict[str, int] | None = None) -> tuple[list[dict], dict]:
+    """(examples, funnel) from `rows` visited in a seeded order, whole rows at a time.
+
+    `caps` limits the kept rows of a category (e.g. {"question": 200}); rows past it are skipped
+    and counted as "capped".
+    """
     text = CHAT_TEMPLATE_PATH.read_text(encoding="utf-8")
     template = compile_chat_template(text)
     system = (PROMPTS_DIR / "system.md").read_text(encoding="utf-8").strip()
@@ -254,6 +258,9 @@ def collect(rows: list[dict], source: str, *, count, max_examples: int | None = 
             continue
         except (KeyError, TypeError, ValueError, SyntaxError):
             dropped["bad_row"] += 1
+            continue
+        if caps and category in caps and categories[category] >= caps[category]:
+            dropped["capped"] += 1
             continue
         kept_rows += 1
         categories[category] += 1
@@ -283,6 +290,8 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--max-examples", type=int, help="Stop after the row that reaches this many examples")
     parser.add_argument("--seed", type=int, default=0, help="Fixes the order in which rows are visited")
+    parser.add_argument("--cap", action="append", default=[], metavar="CATEGORY=N",
+                        help="Keep at most N rows of a category, e.g. question=200 (repeatable)")
     args = parser.parse_args()
     out = args.output.resolve()
     if out.exists():
@@ -295,7 +304,12 @@ def main():
 
     count, tokenizer = student_token_counter(args.student_gguf)
     rows = list(read_rows(args.input))
-    examples, funnel = collect(rows, args.source, count=count, max_examples=args.max_examples, seed=args.seed)
+    try:
+        caps = {name: int(n) for name, n in (cap.split("=") for cap in args.cap)}
+    except ValueError:
+        parser.error("--cap takes CATEGORY=N.")
+    examples, funnel = collect(rows, args.source, count=count, max_examples=args.max_examples, seed=args.seed,
+                               caps=caps)
     if not examples:
         parser.error(f"No example to write; funnel: {json.dumps(funnel)}")
     repository, license_name = SOURCES[args.source]
@@ -311,7 +325,7 @@ def main():
                    "license": license_name, "files": [path.name for path in args.input],
                    "files_sha256": {path.name: sha256(path.read_bytes()).hexdigest() for path in args.input}},
         "budget_tokenizer": tokenizer, "n_ctx": BENCH_N_CTX,
-        "sampling": {"seed": args.seed, "max_examples": args.max_examples}, "funnel": funnel})
+        "sampling": {"seed": args.seed, "max_examples": args.max_examples, "caps": caps}, "funnel": funnel})
     print(json.dumps(funnel, indent=2))
 
 

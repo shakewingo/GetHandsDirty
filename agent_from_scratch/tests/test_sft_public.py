@@ -172,6 +172,12 @@ class SamplingTests(unittest.TestCase):
         self.assertNotEqual([e["id"] for e in first], [e["id"] for e in other])
         self.assertEqual(funnel["rows_visited"], 4)
 
+    def test_a_cap_limits_one_category_and_counts_the_skipped_rows(self):
+        rows = [w2c_sft(f"Which city, {n}?") for n in range(6)] + [w2c_sft(f"I can't, {n}.") for n in range(6)]
+        examples, funnel = collect(rows, "when2call-sft", count=short, caps={"question": 2})
+        self.assertEqual(funnel["kept_rows_by_category"], {"decline": 6, "question": 2})
+        self.assertEqual(funnel["dropped"], {"capped": 4})
+
     def test_the_output_trains_with_the_unchanged_train_command(self):
         from agent_from_scratch.evals.sft.train import load_dataset
         from agent_from_scratch.evals.sft.tensorize import select_examples

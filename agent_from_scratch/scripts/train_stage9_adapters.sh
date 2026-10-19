@@ -5,7 +5,7 @@
 # Usage, from the repository root on the pod, with the datasets copied into outputs/:
 #   setsid nohup bash agent_from_scratch/scripts/train_stage9_adapters.sh [CANDIDATE ...] \
 #     > train.log 2>&1 < /dev/null &
-# CANDIDATE is teacher-v3, teacher-wide or mix; with none, all three are trained.
+# CANDIDATE is teacher-v3, teacher-wide, mix or mix-v2 (Item 7); with none, the first three are trained.
 #
 # Runs are sequential on purpose: the server cannot share the GPU, and two runs on one GPU take
 # about as long as one after the other. On an A100 80 GB (0.35 ms per token, measured on
@@ -21,6 +21,7 @@ set -euo pipefail
 TEACHER_V3=outputs/stage9-item2-20261012-sft-teacher-v3   # 255 examples, 4 train shapes
 TEACHER_WIDE=outputs/stage9-item4-20261015-sft-teacher-wide # 956 examples, 16 train shapes
 MIX=outputs/stage9-item4-20261015-sft-mix-v1                # teacher-wide x3 + When2Call + Toucan
+MIX_V2=outputs/stage9-item7-20261019-sft-mix-v2             # teacher-wide-v2 x2 + capped When2Call + Toucan
 
 train() {  # train DATASET OUTPUT
     python -m agent_from_scratch.evals train --examples "$1" --output "$2"
@@ -30,13 +31,14 @@ train() {  # train DATASET OUTPUT
 candidates=("$@")
 [ ${#candidates[@]} -eq 0 ] && candidates=(teacher-v3 teacher-wide mix)
 for name in "${candidates[@]}"; do  # check every name before any training starts
-    case "$name" in teacher-v3|teacher-wide|mix) ;; *)
-        echo "Unknown candidate: $name (teacher-v3, teacher-wide or mix)" >&2; exit 2 ;; esac
+    case "$name" in teacher-v3|teacher-wide|mix|mix-v2) ;; *)
+        echo "Unknown candidate: $name (teacher-v3, teacher-wide, mix or mix-v2)" >&2; exit 2 ;; esac
 done
 for name in "${candidates[@]}"; do
     case "$name" in
         teacher-v3) train "$TEACHER_V3" outputs/sft-teacher-r1 ;;
         teacher-wide) train "$TEACHER_WIDE" outputs/sft-wide-r1 ;;
         mix) train "$MIX" outputs/sft-mix-r1 ;;
+        mix-v2) train "$MIX_V2" outputs/sft-mix-v2-r1 ;;
     esac
 done
