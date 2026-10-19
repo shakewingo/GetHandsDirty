@@ -63,15 +63,25 @@ class CombineTests(unittest.TestCase):
         self.assertEqual(first, again)
         self.assertNotEqual([r["id"] for r in first], [r["id"] for r in other])
 
+    def test_self_rows_appear_once_and_leave_k_unchanged(self):
+        own, public, extra = examples("own", 4), [examples("a", 10), examples("b", 14)], examples("self", 5)
+        rows, k = combine(own, public, share=1 / 3, seed=0, extra=extra)
+        self.assertEqual(k, combine(own, public, share=1 / 3, seed=0)[1])
+        counts = Counter(row["id"] for row in rows)
+        self.assertEqual({counts[e["id"]] for e in extra}, {1})
+        self.assertEqual(len(rows), k * 4 + 24 + 5)
+
 
 class MixCommandTests(unittest.TestCase):
     def setUp(self):
         self.root = Path(self.enterContext(TemporaryDirectory()))
 
-    def run_mix(self, own, *public):
+    def run_mix(self, own, *public, self_set=None):
         out = self.root / "mix"
+        extra = ["--self", str(self_set)] if self_set else []
         result = subprocess.run([sys.executable, "-m", "agent_from_scratch.evals", "mix", "--own", str(own),
-                                 "--public", *map(str, public), "--output", str(out)], capture_output=True, text=True)
+                                 "--public", *map(str, public), *extra, "--output", str(out)],
+                                capture_output=True, text=True)
         return result, out
 
     def test_the_output_loads_as_a_training_dataset_with_its_sources(self):
@@ -94,6 +104,25 @@ class MixCommandTests(unittest.TestCase):
                 result, out = self.run_mix(own, public)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertFalse(out.exists())
+
+    def test_a_self_set_is_recorded_with_its_share(self):
+        own = dataset(self.root, "own", examples("own", 4), track="teacher")
+        public = dataset(self.root, "pub", examples("a", 16), track="public")
+        self_set = dataset(self.root, "rft", examples("self", 6), track="rft")
+        result, out = self.run_mix(own, public, self_set=self_set)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows, metadata = load_dataset(out)
+        self.assertEqual((len(rows), metadata["repeat_own"]), (30, 2))
+        self.assertEqual((metadata["self"]["directory"], metadata["self"]["examples"], metadata["self_share"]),
+                         ("rft", 6, 0.2))
+
+    def test_self_must_be_an_rft_export(self):
+        own = dataset(self.root, "own", examples("own", 4), track="teacher")
+        public = dataset(self.root, "pub", examples("a", 16), track="public")
+        teacher = dataset(self.root, "teacher2", examples("t", 6), track="teacher")
+        result, out = self.run_mix(own, public, self_set=teacher)
+        self.assertEqual(result.returncode, 2)
+        self.assertFalse(out.exists())
 
 
 if __name__ == "__main__":
