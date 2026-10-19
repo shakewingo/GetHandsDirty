@@ -110,6 +110,48 @@ def fit(model, rows: list[dict], *, epochs: int, lr: float, accumulate: int = 8,
     return records
 
 
+def policy_step(model, optimizer, rows: list[dict], *, lr: float) -> dict:
+    """One optimizer step on weighted rows: the GRPO pilot's update (docs/STAGE10_PLAN.md, G3-G4).
+
+    The loss is (1/N) * sum_i w_i * (mean negative log-likelihood of row i's completion tokens),
+    so a row with a positive weight is made more likely and one with a negative weight less
+    likely. With every weight 1 this is one `fit` step over all the rows. Gradients are clipped
+    at norm 1.0; `grad_norm` is the norm before clipping.
+
+    Args:
+        model: a causal LM whose only trainable parameters are the adapter's.
+        optimizer: built by the caller, so its state can carry over from one step to the next.
+        rows: `encode_example` outputs, each with a "weight".
+        lr: the rate of this step.
+
+    Returns:
+        {"loss", "grad_norm", "rows", "tokens", "mean_weight"}.
+    """
+    import torch
+
+    if not rows:
+        raise ValueError("A policy step needs at least one row.")
+    model.train()
+    device = next(model.parameters()).device
+    parameters = [p for p in model.parameters() if p.requires_grad]
+    total = 0.0
+    for row in rows:
+        input_ids = torch.tensor(row["input_ids"], device=device).unsqueeze(0)
+        labels = torch.tensor(row["labels"], device=device).unsqueeze(0)
+        # Gradients add up over the rows, so dividing by N makes the step their weighted mean.
+        loss = model(input_ids=input_ids, labels=labels).loss * row["weight"] / len(rows)
+        loss.backward()
+        total += loss.item()
+    for group in optimizer.param_groups:
+        group["lr"] = lr
+    grad_norm = torch.nn.utils.clip_grad_norm_(parameters, 1.0).item()
+    optimizer.step()
+    optimizer.zero_grad(set_to_none=True)
+    return {"loss": total, "grad_norm": grad_norm, "rows": len(rows),
+            "tokens": sum(label != IGNORE for row in rows for label in row["labels"]),
+            "mean_weight": sum(row["weight"] for row in rows) / len(rows)}
+
+
 
 def hf_tokenize(tokenizer):
     """text -> (ids, offsets) from a fast Hugging Face tokenizer, with no added special tokens."""

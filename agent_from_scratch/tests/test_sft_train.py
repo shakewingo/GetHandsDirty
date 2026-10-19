@@ -14,7 +14,7 @@ from agent_from_scratch.config import CHAT_TEMPLATE_PATH
 from agent_from_scratch.evals.run import save
 from agent_from_scratch.evals.sft import train
 from agent_from_scratch.evals.sft.tensorize import IGNORE
-from agent_from_scratch.evals.sft.train import add_lora, fit, load_dataset
+from agent_from_scratch.evals.sft.train import add_lora, fit, load_dataset, policy_step
 
 TEMPLATE_SHA256 = sha256(CHAT_TEMPLATE_PATH.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
 
@@ -158,6 +158,46 @@ class FitTests(unittest.TestCase):
         model = self.adapted()
         before = {name: value.clone() for name, value in model.named_parameters()}
         fit(model, toy_rows(), epochs=3, lr=1e-2, accumulate=2, seed=0)
+        moved = {name for name, value in model.named_parameters() if not self.torch.equal(value, before[name])}
+        self.assertTrue(moved)
+        self.assertTrue(all("lora_" in name for name in moved), sorted(moved)[:3])
+
+    def optimizer(self, model, lr):
+        return self.torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr,
+                                      weight_decay=0.0)
+
+    def test_unit_weights_match_one_fit_step(self):
+        rows = toy_rows()
+        fitted = self.adapted()
+        fit(fitted, rows, epochs=1, lr=1e-2, accumulate=len(rows), seed=0)  # one step at the full rate
+        stepped = self.adapted()
+        result = policy_step(stepped, self.optimizer(stepped, 1e-2), [{**row, "weight": 1.0} for row in rows],
+                             lr=1e-2)
+        for (name, a), (_, b) in zip(fitted.named_parameters(), stepped.named_parameters()):
+            self.assertTrue(self.torch.allclose(a, b, atol=1e-6), name)
+        self.assertEqual((result["rows"], result["tokens"], result["mean_weight"]), (4, 12, 1.0))
+
+    def test_a_negative_weight_lowers_that_rows_likelihood(self):
+        model, rows = self.adapted(), toy_rows()[:2]
+
+        def losses():
+            with self.torch.no_grad():
+                return [model(input_ids=self.torch.tensor([row["input_ids"]]),
+                              labels=self.torch.tensor([row["labels"]])).loss.item() for row in rows]
+        before = losses()
+        optimizer = self.optimizer(model, 1e-2)
+        weighted = [{**rows[0], "weight": 1.0}, {**rows[1], "weight": -1.0}]
+        for _ in range(5):
+            policy_step(model, optimizer, weighted, lr=1e-2)
+        after = losses()
+        self.assertLess(after[0], before[0])
+        self.assertGreater(after[1], before[1])
+
+    def test_only_the_adapter_moves_in_a_policy_step(self):
+        model = self.adapted()
+        before = {name: value.clone() for name, value in model.named_parameters()}
+        rows = [{**row, "weight": weight} for row, weight in zip(toy_rows(), (1.0, -1.0, 0.5, -0.5))]
+        policy_step(model, self.optimizer(model, 1e-2), rows, lr=1e-2)
         moved = {name for name, value in model.named_parameters() if not self.torch.equal(value, before[name])}
         self.assertTrue(moved)
         self.assertTrue(all("lora_" in name for name in moved), sorted(moved)[:3])
