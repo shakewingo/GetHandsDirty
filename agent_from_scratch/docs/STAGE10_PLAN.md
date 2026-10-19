@@ -166,7 +166,8 @@ including "Conditional: a GRPO pilot". Earlier guides: [STAGE9_ITEM4_PLAN.md](ST
 
 **Files:**
 - Modify: `evals/sft/grpo.py` (CLI subcommand `step`)
-- Test: `tests/test_sft_grpo.py`
+- Modify: `evals/sft/tensorize.py`: `encode_example(..., require_end=True)`. GRPO passes `False`, because a sample cut off at the length limit has no stop token (found while writing this task: without it, one truncated rollout would crash the step)
+- Test: `tests/test_sft_grpo.py` (also `test_saved_moments_land_on_the_same_parameters_after_a_reload`), `tests/test_sft_tensorize.py`
 
 **Interfaces:**
 - Consumes: `collect_groups` (Task 2), `policy_step` (Task 4), `encode_example`, `hf_tokenize`.

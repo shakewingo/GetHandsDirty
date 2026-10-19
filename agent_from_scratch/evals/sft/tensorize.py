@@ -5,13 +5,15 @@ from ...llm import QWEN_END
 IGNORE = -100  # The label a causal LM's loss skips.
 
 
-def encode_example(example: dict, tokenize, *, max_tokens: int | None = None) -> dict:
+def encode_example(example: dict, tokenize, *, max_tokens: int | None = None, require_end: bool = True) -> dict:
     """One training row: the whole text as tokens, with labels on the completion only.
 
     Args:
         example: one line of examples.jsonl, with `id`, `prompt` and `completion`.
         tokenize: text -> (ids, offsets); offsets[i] is the (start, end) character span of token i.
         max_tokens: refuse a longer row. Nothing is ever truncated.
+        require_end: refuse a completion that does not end with the stop token. GRPO turns it
+            off: a sample cut off at the length limit has no stop token, and must not gain one.
 
     Returns:
         {"id", "input_ids", "labels"}; labels[i] is IGNORE for a prompt token, else input_ids[i].
@@ -34,7 +36,7 @@ def encode_example(example: dict, tokenize, *, max_tokens: int | None = None) ->
         labels.append(IGNORE if start < boundary else token)
     # The stop token must be a target, or the adapter never learns to stop.
     start, end = offsets[-1]
-    if start < boundary or text[start:end] != QWEN_END:
+    if start < boundary or (require_end and text[start:end] != QWEN_END):
         raise ValueError(f"Example {name}: the completion must end with one {QWEN_END} token.")
     return {"id": name, "input_ids": list(ids), "labels": labels}
 

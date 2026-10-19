@@ -4,11 +4,14 @@ from collections import Counter
 from hashlib import sha256
 import json
 from pathlib import Path
+import sys
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from agent_from_scratch.config import CHAT_TEMPLATE_PATH
 from agent_from_scratch.evals.run import save
+from agent_from_scratch.evals.sft import grpo
 from agent_from_scratch.evals.sft.grpo import (advantages, collect_groups, iteration_tasks, reward,
                                                sampled_rows, train_pool)
 from agent_from_scratch.llm import compile_chat_template, render_chat
@@ -159,6 +162,84 @@ class CollectGroupsTests(unittest.TestCase):
         runs = [fake_run(self.root, name, 0, {"shape_a-0": (True, True)}) for name in ("a", "b")]
         with self.assertRaisesRegex(ValueError, "Duplicate"):
             collect_groups(runs)
+
+
+class StepCommandTests(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(self.enterContext(TemporaryDirectory()))
+        self.adapter = self.root / "adapter"
+        self.adapter.mkdir()
+        (self.adapter / "adapter_model.safetensors").write_bytes(b"weights")
+        (self.adapter / "adapter_config.json").write_text("{}")
+        (self.adapter / "optimizer.pt").write_bytes(b"moments")
+
+    def step(self, runs, output, adapter=None):
+        argv = ["grpo", "step", "--runs", *map(str, runs), "--adapter-in", str(adapter or self.adapter),
+                "--output", str(output)]
+        with patch.object(sys, "argv", argv), patch("sys.stdout"), patch("sys.stderr"):
+            grpo.main()
+
+    def test_step_refuses_before_loading_a_model(self):
+        runs = [fake_run(self.root, "s0", 0, {"shape_a-0": (True, True)})]
+        taken = self.root / "taken"
+        taken.mkdir()
+        empty = self.root / "empty"
+        empty.mkdir()
+        for output, adapter in ((taken, None), (self.root / "out", empty)):
+            with self.subTest(output=output.name), self.assertRaises(SystemExit) as error:
+                self.step(runs, output, adapter)
+            self.assertEqual(error.exception.code, 2)
+        self.assertEqual(list(taken.iterdir()), [])
+        self.assertFalse((self.root / "out").exists())
+
+    def test_no_mixed_group_copies_the_adapter_and_marks_the_step_skipped(self):
+        runs = [fake_run(self.root, f"s{seed}", seed, {"shape_a-0": (True, True)}) for seed in range(8)]
+        out = self.root / "next"
+        self.step(runs, out)
+        record = json.loads((out / "step.json").read_text())
+        self.assertEqual((record["skipped"], record["groups"]["all_pass"], record["resumed_optimizer"]),
+                         (True, 1, True))
+        for name in ("adapter_model.safetensors", "optimizer.pt"):
+            self.assertEqual((out / name).read_bytes(), (self.adapter / name).read_bytes())
+
+
+class OptimizerResumeTests(unittest.TestCase):
+    """`step` saves AdamW's state beside the adapter and the next step loads it onto a reloaded adapter."""
+
+    def setUp(self):
+        try:
+            import peft  # noqa: F401
+            import torch
+        except ImportError:
+            self.skipTest("torch and peft are not installed (requirements-train.txt)")
+        torch.set_num_threads(min(torch.get_num_threads(), 4))
+        self.torch = torch
+
+    def test_saved_moments_land_on_the_same_parameters_after_a_reload(self):
+        from peft import PeftModel
+
+        from agent_from_scratch.evals.sft.train import add_lora, policy_step
+        from agent_from_scratch.tests.test_sft_train import tiny_model, toy_rows
+
+        def adam(model):
+            return self.torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=1e-2,
+                                          weight_decay=0.0)
+        model = add_lora(tiny_model(), rank=8, alpha=16, dropout=0.0)
+        optimizer = adam(model)
+        policy_step(model, optimizer, [{**row, "weight": 1.0} for row in toy_rows()], lr=1e-2)
+        names = [name for name, p in model.named_parameters() if p.requires_grad]
+        moments = {name: optimizer.state[p]["exp_avg"].clone()
+                   for name, p in model.named_parameters() if p.requires_grad}
+        with TemporaryDirectory() as temporary:
+            model.save_pretrained(temporary)
+            self.torch.save(optimizer.state_dict(), Path(temporary) / "optimizer.pt")
+            reloaded = PeftModel.from_pretrained(tiny_model(), temporary, is_trainable=True)
+            resumed = adam(reloaded)
+            resumed.load_state_dict(self.torch.load(Path(temporary) / "optimizer.pt", weights_only=True))
+        self.assertEqual([name for name, p in reloaded.named_parameters() if p.requires_grad], names)
+        for name, p in reloaded.named_parameters():
+            if p.requires_grad:
+                self.assertTrue(self.torch.equal(resumed.state[p]["exp_avg"], moments[name]), name)
 
 
 if __name__ == "__main__":

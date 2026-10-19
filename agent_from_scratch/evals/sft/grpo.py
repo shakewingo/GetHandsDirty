@@ -2,13 +2,20 @@
 
 Usage: python -m agent_from_scratch.evals grpo tasks (--pool | --pass P --iteration I)
            [--per-iteration 42]
+       python -m agent_from_scratch.evals grpo step --runs RUN_DIR ... --adapter-in DIR
+           --output DIR [--lr 1e-5]
 
 A group is one train task sampled at several seeds by the same adapter. Each rollout earns the
 strict reward (the verifier passed it and the answer is exactly the requested value) and an
 advantage A_i = (r_i - mean r) / std r within its group; a group whose rewards are all equal
 teaches nothing and is skipped. Every agent request of a kept rollout becomes one row: the
 prompt the model saw and the text it sampled, weighted by its rollout's advantage.
-Design: docs/STAGE10_PLAN.md (G1-G6) and docs/STAGE.md ("Conditional: a GRPO pilot").
+
+`step` takes one iteration's runs and the adapter that sampled them, takes one optimizer step
+(`train.policy_step`), and writes the next adapter with the optimizer state beside it
+(`optimizer.pt`), so the next step continues the same AdamW. Torch, transformers and peft are
+imported only when a step trains. Design: docs/STAGE10_PLAN.md (G1-G6) and docs/STAGE.md
+("Conditional: a GRPO pilot").
 """
 
 import argparse
@@ -17,9 +24,16 @@ import json
 import math
 from pathlib import Path
 import random
+import shutil
+import subprocess
+import time
 
-from ...config import CHAT_TEMPLATE_PATH
+from ..run import save
+from ...config import BENCH_MODEL, BENCH_N_CTX, CHAT_TEMPLATE_PATH
 from ...llm import QWEN_END, compile_chat_template, render_chat
+
+ADAPTER_FILE = "adapter_model.safetensors"
+OPTIMIZER_FILE = "optimizer.pt"
 
 # Requests whose reply the model sampled: a parse error is still the model's own text.
 SAMPLED_STATUSES = ("completed", "parse_error")
@@ -186,6 +200,59 @@ def collect_groups(run_dirs: list[Path]) -> tuple[list[dict], dict]:
                   "by_skeleton": dict(sorted(by_skeleton.items()))}
 
 
+def step(runs: list[Path], adapter_in: Path, out: Path, *, lr: float, base: str, revision: str) -> dict:
+    """One GRPO iteration's update; writes `out` and returns what `out/step.json` holds.
+
+    With no mixed group there is nothing to learn from: the input adapter and optimizer state
+    are copied unchanged and the step is marked skipped, so the next iteration can go on.
+    """
+    started = time.time()
+    rows, groups = collect_groups(runs)
+    record = {"runs": [run.name for run in runs], "adapter_in": str(adapter_in),
+              "adapter_in_sha256": sha256((adapter_in / ADAPTER_FILE).read_bytes()).hexdigest(),
+              "resumed_optimizer": (adapter_in / OPTIMIZER_FILE).exists(), "lr": lr, "groups": groups}
+    if not rows:
+        shutil.copytree(adapter_in, out)
+        return {**record, "skipped": True, "elapsed_seconds": round(time.time() - started, 1)}
+
+    import peft
+    from peft import PeftModel
+    import torch
+    import transformers
+
+    from .tensorize import encode_example
+    from .train import hf_tokenize, policy_step
+
+    tokenizer = transformers.AutoTokenizer.from_pretrained(base, revision=revision)
+    # `sampled_text` already decided whether a row ends with the stop token (only if the model stopped).
+    encoded = [{**encode_example(row, hf_tokenize(tokenizer), max_tokens=BENCH_N_CTX, require_end=False),
+                "weight": row["weight"]} for row in rows]
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = transformers.AutoModelForCausalLM.from_pretrained(
+        base, revision=revision, dtype=torch.bfloat16 if device == "cuda" else torch.float32)
+    # As in `train`: recompute activations in the backward pass, or the longest rows do not fit.
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+    model = PeftModel.from_pretrained(model, adapter_in, is_trainable=True).to(device)
+    optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr, weight_decay=0.0)
+    if record["resumed_optimizer"]:
+        # A fresh AdamW taking one step moves every weight by about the rate (a sign update);
+        # carrying its moments over makes consecutive iterations one optimizer run.
+        optimizer.load_state_dict(torch.load(adapter_in / OPTIMIZER_FILE, map_location=device, weights_only=True))
+    result = policy_step(model, optimizer, encoded, lr=lr)
+    out.mkdir(parents=True)
+    model.save_pretrained(out)
+    torch.save(optimizer.state_dict(), out / OPTIMIZER_FILE)
+    package = Path(__file__).resolve().parents[2]
+    revision_hash = subprocess.run(["git", "rev-parse", "HEAD"], cwd=package, text=True, capture_output=True,
+                                   check=True).stdout.strip()
+    return {**record, "skipped": False, "step": result,
+            "adapter_sha256": sha256((out / ADAPTER_FILE).read_bytes()).hexdigest(),
+            "base": base, "revision": revision, "device": device, "git_revision": revision_hash,
+            "elapsed_seconds": round(time.time() - started, 1),
+            "versions": {"torch": torch.__version__, "transformers": transformers.__version__,
+                         "peft": peft.__version__}}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -195,7 +262,33 @@ def main():
     which.add_argument("--pass", dest="pass_index", type=int, help="The pass (1-based), with --iteration")
     tasks.add_argument("--iteration", type=int, help="The iteration within the pass (0-based)")
     tasks.add_argument("--per-iteration", type=int, default=42)
+    update = commands.add_parser("step", help="One optimizer step on one iteration's runs")
+    update.add_argument("--runs", type=Path, nargs="+", required=True, help="bench --split train runs, one per seed")
+    update.add_argument("--adapter-in", type=Path, required=True, help="The adapter that sampled the runs")
+    update.add_argument("--output", type=Path, required=True, help="New directory for the next adapter")
+    update.add_argument("--lr", type=float, default=1e-5)
+    update.add_argument("--base", default=BENCH_MODEL["id"], help="Hugging Face model ID or local path")
+    update.add_argument("--revision", default=BENCH_MODEL["revision"])
     args = parser.parse_args()
+    if args.command == "step":
+        out = args.output.resolve()
+        if out.exists():
+            parser.error(f"{out} already exists; evidence is never overwritten.")
+        if out.is_relative_to(Path(__file__).resolve().parents[2]):
+            parser.error("Evidence must be outside the source package.")
+        if not (args.adapter_in / ADAPTER_FILE).is_file():
+            parser.error(f"{args.adapter_in} holds no {ADAPTER_FILE}.")
+        try:
+            record = step(args.runs, args.adapter_in, out, lr=args.lr, base=args.base, revision=args.revision)
+        except (ValueError, OSError, KeyError) as error:
+            parser.error(f"{type(error).__name__}: {error}")
+        save(out / "step.json", record)
+        summary = {"skipped": record["skipped"],
+                   **{key: record["groups"][key] for key in ("mixed", "all_pass", "all_fail", "mean_reward", "rows")}}
+        if not record["skipped"]:
+            summary |= {key: round(record["step"][key], 4) for key in ("loss", "grad_norm")}
+        print(json.dumps(summary))
+        return
     pool = train_pool()
     if args.pool:
         ids = [task_id for task_ids in pool.values() for task_id in task_ids]

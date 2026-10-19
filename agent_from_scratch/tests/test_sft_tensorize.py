@@ -47,6 +47,13 @@ class EncodeExampleTests(unittest.TestCase):
             with self.subTest(completion=broken), self.assertRaisesRegex(ValueError, "end"):
                 encode_example(example(broken), WORDS)
 
+    def test_a_cut_off_sample_is_accepted_only_when_the_end_is_not_required(self):
+        row = encode_example(example("half a rep"), WORDS, require_end=False)
+        prompt_tokens = len(WORDS(PROMPT)[0])
+        self.assertEqual(row["labels"][prompt_tokens:], WORDS(PROMPT + "half a rep")[0][prompt_tokens:])
+        with self.assertRaisesRegex(ValueError, "end"):
+            encode_example(example("half a rep"), WORDS)
+
     def test_a_token_across_the_boundary_is_an_error(self):
         self.assertEqual(encode_example(example("NONE<|im_end|>"), WORDS)["labels"][-2:],
                          WORDS("NONE<|im_end|>")[0])
