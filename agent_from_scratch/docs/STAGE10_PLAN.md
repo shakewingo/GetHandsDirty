@@ -33,7 +33,7 @@ including "Conditional: a GRPO pilot". Earlier guides: [STAGE9_ITEM4_PLAN.md](ST
 | M1 | mix, `outputs/sft-mix-r1/epoch-2` (hash `1388d076…`) | Stage 9 Item 4, kept by Item 7 |
 | M1 on val (104 tasks, 3 seeds) | pass@1 0.833; old 64: 0.943; F5's 40: 0.658; asked instead 8 of 312 | Item 7 |
 | M1's training data | `sft-mix-v1`: teacher-wide (956 examples, 320 tasks, `max_per_task` 1, `flawed_turns` drop) × 3, When2Call 2,000, Toucan 3,002; 7,870 rows | Item 4 |
-| Train pool | 420 tasks in 21 skeletons (320 from Item 4, 100 from Item 7) | `specs("train")` |
+| Train pool | 420 tasks in 21 skeletons (320 from Item 4, 100 from Item 7); 20 tasks per skeleton | `specs("train")` |
 | M0 on the pool | mean pass@1 0.298 on the first 80 and on Item 4's 240 | STAGE.md |
 | Spent | about \$31 of the \$200 ceiling (\$17.7 before Item 7, about \$13 in Item 7) | records |
 
@@ -41,15 +41,16 @@ including "Conditional: a GRPO pilot". Earlier guides: [STAGE9_ITEM4_PLAN.md](ST
 
 | # | Decision | Why |
 |---|---|---|
-| S1 | **Pool: the 320 tasks of Stage 9 Item 4** (16 skeletons). Item 7's 100 tasks stay out of both arms: three act/ask contrast shapes (`followup_same_record`, `followup_file_from_listing`, `lookup_then_act`) and two JSON-edit shapes (`json_remove_array_item`, `json_nested_key_add`). Asking is still measured on val's 40 multi-turn tasks, but neither arm trains on it | STAGE.md fixes "the train pool as Stage 9 Item 4 leaves it". M1 never had demonstrations of Item 7's shapes, so including them adds a second change. **Alternative:** all 420, which would let self-training reach the act/ask shapes |
+| S1 | **Pool: the whole train split, 420 tasks in 21 skeletons**, held fixed across rounds and passes. Item 7's 100 tasks (two multi-turn act/ask shapes, `followup_same_record` and `followup_file_from_listing`; one single-turn act/ask shape, `lookup_then_act`; two JSON-edit shapes) are reported as their own rows | decided with the user October 19, departing from STAGE.md's "as Stage 9 Item 4 leaves it". Val's 40 multi-turn tasks test act versus ask; without these shapes our own pool has no practice for it. M1's teacher demonstrations never covered them, so any gain on them comes from self-generated data alone. M1's data keeps When2Call's original share; Item 7's cut does not enter Stage 10 |
 | S2 | **Sampling protocol: Stage 9 Item 2's.** Seeds 0–7, the Stage 8 server command with only `--lora-modules` changed, frozen decoding | the same protocol M0 was measured under |
 | S3 | **Val: Item 7's 104 tasks, three seeds**, reporting the old 64 and F5's 40 separately, `asked_instead` and false completions | the set M1 was kept on |
 | S4 | **Strict reward / verified:** GRPO's $r=1$ only when `passed` and `checks.format_exact` is not false (a task without an expected answer has no `format_exact`). Expert iteration uses `export --track rft`'s filter with teacher-wide's settings | as decided October 12; the export filter already drops loose answers and own errors |
 | E1 | **Each round retrains from the base** with Item 3's recipe on `sft-mix-v1`'s rows **plus M_k's verified set once** (`export --track rft --max-per-task 1 --flawed-turns drop`, teacher-wide's settings). Sets do not accumulate across rounds | the only thing that changes between rounds is who generated the self data; retraining from the base avoids compounding drift (STaR). The teacher set stays, because self data alone collapsed to "read once, answer" (Item 3: 0.375) |
 | E2 | **Epoch chosen on val seed 0**, the earlier on a tie (Item 3's D8) | unchanged recipe |
 | E3 | **Three rounds** (M2, M3, M4), and M4 is also sampled on train, so each round's generator question has an answer. **Stop early** when a round's model is below M1 on val pass@1 by 0.05 or more (about 5 tasks per seed) | "2–3 rounds"; a collapse is a result and needs no further spending |
-| G1 | **Go / no-go as STAGE.md, scaled to 320:** go when at least 120 tasks (3 in 8) have mixed outcomes under the strict reward, in at least two skeletons; the exploit review passes; the measured iteration cost fits | the pre-written threshold, at the same share |
-| G2 | **Batch: 40 tasks × 8 seeds = 320 rollouts per iteration**, stratified 2–3 per skeleton, rotating so **8 iterations = one pass = 2,560 rollouts**, one expert-iteration round of sampling. **At most 3 passes** (24 steps, 7,680 rollouts) | STAGE.md: "keeping one pass equal to one expert-iteration round"; three passes pair with three rounds |
+| G1 | **Go / no-go as STAGE.md, scaled to 420:** go when at least 158 tasks (3 in 8) have mixed outcomes under the strict reward, in at least two skeletons; the exploit review passes; the measured iteration cost fits | the pre-written threshold, at the same share |
+| G2 | **Batch: 42 tasks × 8 seeds = 336 rollouts per iteration**, 2 per skeleton, rotating so **10 iterations = one pass = 3,360 rollouts**, one expert-iteration round of sampling. **At most 3 passes** (30 steps, 10,080 rollouts) | STAGE.md: "keeping one pass equal to one expert-iteration round"; three passes pair with three rounds |
+| A1 | **Ask-side check before B and C:** in Session A, count M1's successes on the ask variants of the three Item 7 act/ask train shapes. If they are under 5% of those attempts, stop and review with the user | with no ask-side successes, self-SFT collects only act-side data and pushes toward acting, and GRPO's ask-side groups all fail and give no signal |
 | G3 | **Update:** one AdamW step per iteration, **lr $1\times10^{-5}$ constant**, no warmup, no weight decay, clip 1.0, optimizer state carried in `optimizer.pt`; LoRA continues from M1's adapter (rank 16, alpha 32) | below the SFT rate of $10^{-4}$ (negative weights make the loss unbounded); carried state avoids sign-only steps |
 | G4 | **Rows:** every agent request of every rollout in a mixed group, including requests that ended in a parse error. Prompt: the rendered `input_messages`. Target: **the text as sampled**, plus `<|im_end|>` when `finish_reason` is `stop`. Weight: the rollout's advantage. Loss normalized by the number of rows $N$ | the gradient must be on the tokens the model produced |
 | G5 | **Server and trainer take turns on one A100:** stop vLLM, run `grpo step` (a fresh process that loads the base, the adapter and the optimizer state), restart vLLM with the new adapter. No runtime LoRA loading | the Stage 8 command stays as it is; every iteration is resumable from disk |
@@ -96,7 +97,7 @@ including "Conditional: a GRPO pilot". Earlier guides: [STAGE9_ITEM4_PLAN.md](ST
 - [ ] **Step 4: Run** the same command. Expected: PASS.
 - [ ] **Step 5: Commit** `feat: let mix add a self-generated set once`.
 
-### Task 2: `evals/sft/grpo.py` — reward, advantages, pool, rotation, rows
+### Task 2: `evals/sft/grpo.py` — reward, advantages, rotation, rows
 
 **Files:**
 - Create: `evals/sft/grpo.py` (no torch import at module level)
@@ -104,9 +105,8 @@ including "Conditional: a GRPO pilot". Earlier guides: [STAGE9_ITEM4_PLAN.md](ST
 
 **Interfaces:**
 - Produces:
-  - `ITEM7_SKELETONS: tuple[str, ...]`: the five Item 7 train skeletons, kept out of the pool.
-  - `train_pool() -> dict[str, list[str]]`: skeleton → task IDs, from `bench.run.specs("train")` minus `ITEM7_SKELETONS` (320 IDs, 16 skeletons).
-  - `iteration_tasks(pool, pass_index: int, iteration: int, per_iteration: int = 40) -> list[str]`: within a pass, each skeleton's IDs are shuffled with `random.Random(f"grpo:{pass_index}:{skeleton}")`, then interleaved round robin across skeletons in sorted order and cut into consecutive chunks of `per_iteration`; iteration is 0-based.
+  - `train_pool() -> dict[str, list[str]]`: skeleton → task IDs, every task of `bench.run.specs("train")` (420 IDs, 21 skeletons).
+  - `iteration_tasks(pool, pass_index: int, iteration: int, per_iteration: int = 42) -> list[str]`: within a pass, each skeleton's IDs are shuffled with `random.Random(f"grpo:{pass_index}:{skeleton}")`, then interleaved round robin across skeletons in sorted order and cut into consecutive chunks of `per_iteration`; iteration is 0-based.
   - `reward(record: dict) -> int`: `1` if `record["passed"]` and `record["checks"].get("format_exact") is not False`, else `0`.
   - `advantages(rewards: list[int]) -> list[float] | None`: $(r_i-\bar r)/\sigma_r$ with the population $\sigma$; `None` when all rewards are equal or there are fewer than 2.
   - `sampled_rows(trace: dict, template) -> list[dict]`: one `{"request_index", "prompt", "completion"}` per agent request with a sampled text.
@@ -114,8 +114,8 @@ including "Conditional: a GRPO pilot". Earlier guides: [STAGE9_ITEM4_PLAN.md](ST
   - CLI `python -m agent_from_scratch.evals grpo tasks (--pool | --pass P --iteration I)` prints comma-separated IDs (register `"grpo": "sft.grpo"` in `evals/__main__.py`).
 
 - [ ] **Step 1: Write the failing tests** in `tests/test_sft_grpo.py`:
-  - `test_pool_has_320_tasks_in_16_skeletons`: `sum(map(len, train_pool().values())) == 320` and no key in `ITEM7_SKELETONS`.
-  - `test_one_pass_covers_the_pool_once`: the union of `iteration_tasks(pool, 1, i)` for `i` in 0–7 equals the pool, with no repeats, and every chunk has 40 IDs.
+  - `test_pool_is_the_whole_train_split`: 420 IDs in 21 skeletons, 20 each.
+  - `test_one_pass_covers_the_pool_once`: the union of `iteration_tasks(pool, 1, i)` for `i` in 0–9 equals the pool, with no repeats; every chunk has 42 IDs, 2 from each skeleton.
   - `test_rotation_differs_between_passes`: pass 1 iteration 0 differs from pass 2 iteration 0.
   - `test_strict_reward`: `passed` with `format_exact` false → 0; `passed` without the key → 1; not `passed` → 0.
   - `test_advantages_match_the_closed_form`: `advantages([1]+[0]*7)` gives `2.6458` (to 4 places) for the pass and `-0.3780` for each failure; `advantages([1]*8) is None`; `advantages([1]) is None`.
@@ -188,7 +188,7 @@ including "Conditional: a GRPO pilot". Earlier guides: [STAGE9_ITEM4_PLAN.md](ST
 **Interfaces:**
 - Consumes: `bench.run.specs`, `bench.verify.check`, `grpo.reward`; scripted results built as the existing `tests/test_bench_verify.py` builds them.
 
-- [ ] **Step 1: Write the tests.** For seed 0 of each of the 16 pool skeletons, each cheap cheat must earn `reward == 0`:
+- [ ] **Step 1: Write the tests.** For seed 0 of each of the 21 pool skeletons, each cheap cheat must earn `reward == 0`:
   - `test_answer_only_earns_nothing`: no tool call; reply the expected answer token.
   - `test_read_everything_then_claim_earns_nothing_where_files_must_change`: list and read every workspace file, write nothing, reply the expected token. Asserted only on tasks whose expected files differ from the start.
   - `test_wrapped_answer_earns_nothing`: the scripted correct trajectory with the final reply `f"Done: {token}."`. `passed` may hold on advisory tasks, but `reward` is 0.
@@ -204,13 +204,13 @@ including "Conditional: a GRPO pilot". Earlier guides: [STAGE9_ITEM4_PLAN.md](ST
 - Modify: `evals/README.md` (one paragraph each for `grpo tasks`, `grpo step`, `mix --self`, `aggregate --strict`)
 
 **Interfaces:**
-- `stage10_sample.sh NAME ADAPTER_NAME`: eight `bench --split train --tasks $(grpo tasks --pool) --seed s --adapter ADAPTER_NAME --output outputs/NAME-s$s` processes in parallel against the running server, then `aggregate` and `aggregate --strict`.
+- `stage10_sample.sh NAME ADAPTER_NAME`: eight `bench --split train --seed s --adapter ADAPTER_NAME --output outputs/NAME-s$s` processes in parallel against the running server, then `aggregate` and `aggregate --strict`.
 - `stage10_ei_round.sh K`: from M_K's samples: `export --track rft --max-per-task 1 --flawed-turns drop`, `mix --own teacher-wide --public when2call toucan --self rft-K --own-share 0.3333 --seed 0`, `train`, start the server with the three epochs, choose the epoch on val seed 0, run val seeds 1–2, sample M_{K+1} with `stage10_sample.sh`, pack the results.
-- `stage10_grpo.sh PASSES`: first, val seed 0 for M1 on this server (G6's reference). Then for each pass and iteration 0–7: start the server with `grpo=CURRENT`, run 8 seeds on `grpo tasks --pass P --iteration I`, stop the server, `grpo step`, and make CURRENT the new adapter. After each pass: copy to `passes/pass-P` and run val seed 0. Applies G6's stop.
+- `stage10_grpo.sh PASSES`: first, val seed 0 for M1 on this server (G6's reference). Then for each pass and iteration 0–9: start the server with `grpo=CURRENT`, run 8 seeds on `grpo tasks --pass P --iteration I`, stop the server, `grpo step`, and make CURRENT the new adapter. After each pass: copy to `passes/pass-P` and run val seed 0. Applies G6's stop.
 - Every script `set -euo pipefail`; a failed background process fails the script (wait on each PID separately, unlike Item 7's `session.sh`).
 
 - [ ] **Step 1:** `bash -n` on each script. Expected: no output.
-- [ ] **Step 2:** a dry run with `STAGE10_DRY=1`, which echoes each command instead of running it. Expected: for `stage10_grpo.sh 1`, eight iterations each listing 40 task IDs and the expected output paths.
+- [ ] **Step 2:** a dry run with `STAGE10_DRY=1`, which echoes each command instead of running it. Expected: for `stage10_grpo.sh 1`, ten iterations each listing 42 task IDs and the expected output paths.
 - [ ] **Step 3: Commit** `feat: Stage 10 pod drivers`.
 
 ## 4. Steps — GPU sessions
@@ -220,19 +220,20 @@ start + 1.5 × the projection, a local watcher that copies `item.tgz` back, and 
 at the end.
 
 - [ ] **Session A — Item 1 and the GRPO smoke** (projected 2 hours, about \$4).
-  1. Serve M1. Run `stage10_sample.sh m1-train M1`: 2,560 rollouts.
+  1. Serve M1. Run `stage10_sample.sh m1-train M1`: 3,360 rollouts.
   2. Read beside M0, per skeleton: mean pass@1 (`passed` and strict), tasks with a verified
      trajectory, mixed tasks under the strict reward, and the `points_save_recovery` rollouts
-     that reach `write_file` (M0: 5 of 160).
+     that reach `write_file` (M0: 5 of 160); for A1, M1's successes on the ask variants of the
+     three Item 7 act/ask shapes.
   3. One GRPO iteration on pass 1, iteration 0 as a smoke (`outputs/stage10-grpo-smoke`,
      never used again): measure sampling, step and restart minutes, and the rows and tokens per
      step.
-  4. **Stop and report to the user**: the entry conditions (STAGE.md), G1's go/no-go, and the
+  4. **Stop and report to the user**: the entry conditions (STAGE.md), G1's go/no-go, A1, and the
      measured cost of a round and of a pass. Sessions B and C start only after that review.
-- [ ] **Session B1–B3 — expert iteration rounds 1–3** (projected 7.5 hours each, about \$13.5
-  each). Round K: `stage10_ei_round.sh K`. After each round, read the round table (below) and
+- [ ] **Session B1–B3 — expert iteration rounds 1–3** (projected 8 hours each, about \$14.5
+  each). Round K: `stage10_ei_round.sh K`. After each round, fill Tables 1 and 2 (below) and
   apply E3's stop.
-- [ ] **Session C — GRPO pilot** (projected 3 hours per pass, about \$16 for three; runs in
+- [ ] **Session C — GRPO pilot** (projected 3.7 hours per pass, about \$20 for three; runs in
   parallel with B on a second pod). `stage10_grpo.sh 3`. After each pass, read 10 reward-1
   rollouts for loopholes.
 - [ ] **Session D — comparison (C1)** (projected 1 hour, about \$2). One server: M1, M2–M4 and
@@ -246,16 +247,17 @@ generator* (how much usable training data it produces); they are never a capabil
 because these tasks are trained on. **Val numbers** say how good a model is, and they are the
 only numbers the two arms are compared on.
 
-**Table 1 — Self-SFT: each model as a data generator.** Source: 320 train tasks × 8 attempts
-(seeds 0–7), sampled at the start of the next round.
+**Table 1 — Self-SFT: each model as a data generator.** Source: 420 train tasks × 8 attempts
+(seeds 0–7), sampled at the start of the next round. Each model gets three rows: all 420 tasks,
+the 320 of Stage 9 Item 4, and the 100 of Item 7.
 
-| Model | Attempt success rate | Tasks solved at least once (of 320) | Hard tasks solved at least once (of 60) | Tasks solved sometimes, not always (of 320) |
-|---|---|---|---|---|
-| M0 (base, reference) | | | | |
-| M1 | | | | |
-| M2 … M4 | | | | |
+| Model | Tasks | Attempt success rate | Tasks solved at least once | Hard tasks solved at least once (of 60) | Tasks solved sometimes, not always |
+|---|---|---|---|---|---|
+| M0 (base, reference) | 320 (Item 7's not sampled) | | | | |
+| M1 | 420 / 320 / 100 | | | | |
+| M2 … M4 | 420 / 320 / 100 | | | | |
 
-- *Attempt success rate*: the share of the 2,560 attempts that earn reward 1 (passed, with the
+- *Attempt success rate*: the share of the 3,360 attempts that earn reward 1 (passed, with the
   answer in the exact requested form).
 - *Tasks solved at least once*: tasks with at least one successful attempt, so the next round
   has a training example for them.
@@ -275,16 +277,16 @@ one server in Session D.
   action.
 
 **Table 3 — The comparison: GRPO against self-SFT at equal sampling.** Source: Table 2's runs.
-After pass $r$, GRPO has used $2{,}560\,r$ rollouts, as has self-SFT's $M_{1+r}$.
+After pass $r$, GRPO has used $3{,}360\,r$ rollouts, as has self-SFT's $M_{1+r}$.
 
 | Rollouts used | Self-SFT model | Its val success rate | GRPO adapter | Its val success rate | Tasks GRPO wins / loses, per seed |
 |---|---|---|---|---|---|
-| 2,560 | M2 | | pass 1 | | |
-| 5,120 | M3 | | pass 2 | | |
-| 7,680 | M4 | | pass 3 | | |
+| 3,360 | M2 | | pass 1 | | |
+| 6,720 | M3 | | pass 2 | | |
+| 10,080 | M4 | | pass 3 | | |
 
 **Table 4 — GRPO training log, one row per iteration** (a diagnostic, not a result): share of
-the 320 attempts that earned reward 1; groups that were mixed, all success, all failure; rows
+the 336 attempts that earned reward 1; groups that were mixed, all success, all failure; rows
 and tokens trained; loss; gradient norm; minutes.
 
 ## 5. Cost
@@ -292,9 +294,9 @@ and tokens trained; loss; gradient norm; minutes.
 | Session | Projection | Cost |
 |---|---|---|
 | A | 2 h | \$4 |
-| B1–B3 | 3 × 7.5 h (training 5.7 h on about 19M tokens, sampling 1 h, val 0.5 h) | \$40 |
-| C | 3 passes × 3 h (8 iterations of about 21 minutes: sampling 6, restart 3, step 12) | \$16 |
+| B1–B3 | 3 × 8 h (training 6 h on about 20M tokens, sampling 1.3 h, val 0.5 h) | \$43 |
+| C | 3 passes × 3.7 h (10 iterations of about 22 minutes: sampling 6, restart 3, step 13) | \$20 |
 | D | 1 h | \$2 |
-| **Stage 10** | | **about \$62**, bringing the total to about \$93 of \$200 |
+| **Stage 10** | | **about \$69**, bringing the total to about \$100 of \$200 |
 
 Session A replaces these projections with measured ones before B and C start.
