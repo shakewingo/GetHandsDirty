@@ -189,14 +189,14 @@ including "Conditional: a GRPO pilot". Earlier guides: [STAGE9_ITEM4_PLAN.md](ST
 **Interfaces:**
 - Consumes: `bench.run.specs`, `bench.verify.check`, `grpo.reward`; scripted results built as the existing `tests/test_bench_verify.py` builds them.
 
-- [ ] **Step 1: Write the tests.** For seed 0 of each of the 21 pool skeletons, each cheap cheat must earn `reward == 0`:
-  - `test_answer_only_earns_nothing`: no tool call; reply the expected answer token.
-  - `test_read_everything_then_claim_earns_nothing_where_files_must_change`: list and read every workspace file, write nothing, reply the expected token. Asserted only on tasks whose expected files differ from the start.
-  - `test_wrapped_answer_earns_nothing`: the scripted correct trajectory with the final reply `f"Done: {token}."`. `passed` may hold on advisory tasks, but `reward` is 0.
-  - `test_no_change_claim_without_reading_earns_nothing`: on no-op variants, reply `NO_CHANGE` with no reads.
-  - `test_fault_variant_without_meeting_the_fault_earns_nothing`: on fault variants, the clean variant's correct trajectory replayed so the injected fault is never observed (when the skeleton's fault fires on the first attempt, this cheat cannot be built; the test records it as skipped with that reason).
+- [ ] **Step 1: Write the tests.** On seeds 0 and 1 of each of the 21 pool skeletons (seed 1 is the other side of each act/ask and no-op pair), each cheat runs through `run_case` with a `ScriptedModel` and must earn `reward == 0`:
+  - `test_the_correct_solution_earns_the_reward`: the baseline; every scripted correct run earns 1, so a cheat's 0 means something.
+  - `test_answer_only_earns_nothing`: no tool call; reply the expected answer in every turn. On no-op and ask variants this is "reply NO_CHANGE (or the ask token) without reading".
+  - `test_doing_everything_but_the_change_earns_nothing`: the correct run with every `write_file` and `edit_file` call removed, on tasks whose correct run changes a file.
+  - `test_a_wrapped_answer_earns_nothing`: the correct run with the final reply `f"Done: {token}."`. `passed` may hold on advisory tasks, but `reward` is 0.
+  - `test_a_fault_left_unhandled_earns_nothing`: on fault variants, the correct run without each repeat of an earlier identical call (the retry). A skeleton that recovers another way (searching, not retrying) has no such repeat and is left out.
 - [ ] **Step 2: Run** `python -m unittest agent_from_scratch.tests.test_grpo_exploits -v`. Expected: PASS. **A failure is a verifier loophole: stop and report it before any GPU work.**
-- [ ] **Step 3: Commit** `test: the strict reward resists five cheap cheats`.
+- [ ] **Step 3: Commit** `test: the strict reward resists four cheap cheats`.
 
 ### Task 7: Pod drivers
 
