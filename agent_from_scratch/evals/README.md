@@ -161,6 +161,34 @@ The server command, the reasons for each setting and the traps that cost a retry
 The exact commands of each Stage 9 session are in its plan (Item 3: Step 8 and Appendix F of
 [docs/STAGE9_ITEM3_PLAN.md](../docs/STAGE9_ITEM3_PLAN.md)).
 
+## Stage 10 expert iteration and the GRPO pilot
+
+Both arms start from M1 (mix) and sample the whole train split at 8 seeds; they are compared on
+val only. Design and decisions: [docs/STAGE10_PLAN.md](../docs/STAGE10_PLAN.md).
+
+```sh
+# How good a data generator is a model? Both counts: `passed`, and GRPO's strict reward
+# (passed, with the answer exactly as requested; a wrapped advisory answer counts as a failure).
+python -m agent_from_scratch.evals aggregate outputs/RUN-s0 ... outputs/RUN-s7 --strict
+# Self-SFT round: M1's data plus M_k's own verified rollouts, added once (the teacher set's
+# repeat factor is unchanged).
+python -m agent_from_scratch.evals mix --own TEACHER --public WHEN2CALL TOUCAN --self RFT_EXPORT --output DIR
+# GRPO: the 42 task IDs of one iteration (2 per skeleton; 10 iterations cover the split once),
+# then one optimizer step on that iteration's runs. The step writes the next adapter with the
+# AdamW state beside it (optimizer.pt); with no mixed group it copies the adapter and says skipped.
+python -m agent_from_scratch.evals grpo tasks --pass 1 --iteration 0
+python -m agent_from_scratch.evals grpo step --runs outputs/IT-s0 ... outputs/IT-s7 \
+  --adapter-in ADAPTER_DIR --output outputs/NEXT_STEP [--lr 1e-5]
+```
+
+A GRPO row is one model request of a rollout whose task had mixed outcomes: the prompt as sent
+and the text as sampled (not the canonical rendering), weighted by the rollout's advantage
+$A_i = (r_i - \bar r)/\sigma_r$ within the task's group. On a pod, the drivers in `scripts/` run
+whole sessions: `stage10_sample.sh` (one model on the train split), `stage10_ei_round.sh K` (one
+self-SFT round) and `stage10_grpo.sh PASSES` (the pilot, resumable); `STAGE10_DRY=1` prints their
+commands without running them. `tests/test_grpo_exploits.py` checks that cheap cheats earn no
+reward.
+
 Start here. Everything runs from the **repository root** in the project environment through one
 entry point:
 
@@ -216,8 +244,8 @@ Run them one after another: each process holds about 6 GB, and two together slow
 
 | File | Role |
 |---|---|
-| `__main__.py` | the `bench` / `freeze` / `aggregate` / `dataset` / `export` / `public` / `mix` / `train` / `replay` / `pressure` / `compare` dispatcher |
-| `sft/` | Stage 9 Items 2–4: `export.py` turns verified train rollouts into SFT examples (eligibility, selection, the `export` command); `public.py` converts public tool-use rows into the same format; `mix.py` combines our examples with public ones; `teacher.py` is the DeepSeek teacher backend behind `bench --backend teacher`; `tensorize.py` turns an example into a token row with labels on the completion only; `train.py` is the LoRA training loop and the `train` command; `replay.py` is the `replay` command |
+| `__main__.py` | the `bench` / `freeze` / `aggregate` / `dataset` / `export` / `public` / `mix` / `train` / `replay` / `grpo` / `pressure` / `compare` dispatcher |
+| `sft/` | Stage 9 Items 2–4: `export.py` turns verified train rollouts into SFT examples (eligibility, selection, the `export` command); `public.py` converts public tool-use rows into the same format; `mix.py` combines our examples with public ones; `teacher.py` is the DeepSeek teacher backend behind `bench --backend teacher`; `tensorize.py` turns an example into a token row with labels on the completion only; `train.py` is the LoRA training loop (`fit`, and `policy_step` for GRPO) and the `train` command; `replay.py` is the `replay` command; `grpo.py` is Stage 10's GRPO pilot (strict reward, advantages, task rotation, rollout rows, the `grpo` command) |
 | `bench/` | generated benchmark: 38 skeletons (16 train = 320 tasks, 8 val = 64, 14 test = 140), one content-first verifier (`verify.py`), the trusted fixture check command (`check.py`), freeze manifest and protocol check (`manifest.py`), `aggregate.py` for k-sample runs. Shapes and rationale: [docs/STAGE8_DESIGN.md](../docs/STAGE8_DESIGN.md) |
 | `run.py` | `open_run`, `parse_limits` and `save`, which every suite shares |
 | `verify.py` | shared post-run measurement: `metrics()`, `snapshot()`, `exchanges()`; `pressure`'s answer verifier and `summarize()`. Never fed back to the agent |

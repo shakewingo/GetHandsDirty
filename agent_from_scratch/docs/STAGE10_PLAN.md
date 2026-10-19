@@ -89,13 +89,13 @@ including "Conditional: a GRPO pilot". Earlier guides: [STAGE9_ITEM4_PLAN.md](ST
 **Interfaces:**
 - Produces: `combine(own, public, *, share, seed, extra=()) -> tuple[list[dict], int]`; `extra` rows are appended once and are not counted when choosing `k`. CLI `--self DIR` (an `rft`-track export). Metadata gains `"self": source(...)` and `"self_share"`.
 
-- [ ] **Step 1: Write the failing tests** in `tests/test_sft_mix.py`:
+- [x] **Step 1: Write the failing tests** in `tests/test_sft_mix.py`:
   `test_self_rows_appear_once_and_leave_k_unchanged` (`combine(own=3 rows, public=[6 rows], share=1/3, seed=0, extra=4 rows)` returns the same `k` as without `extra`, and each extra id appears exactly once);
   `test_self_must_be_an_rft_export` (the CLI exits 2 when `--self` points at a `teacher` export).
-- [ ] **Step 2: Run** `python -m unittest agent_from_scratch.tests.test_sft_mix -v`. Expected: the two new tests FAIL.
-- [ ] **Step 3: Implement** `extra` in `combine` and `--self` in `main`; `self_share = len(extra) / len(rows)`.
-- [ ] **Step 4: Run** the same command. Expected: PASS.
-- [ ] **Step 5: Commit** `feat: let mix add a self-generated set once`.
+- [x] **Step 2: Run** `python -m unittest agent_from_scratch.tests.test_sft_mix -v`. Expected: the two new tests FAIL.
+- [x] **Step 3: Implement** `extra` in `combine` and `--self` in `main`; `self_share = len(extra) / len(rows)`.
+- [x] **Step 4: Run** the same command. Expected: PASS.
+- [x] **Step 5: Commit** `feat: let mix add a self-generated set once`.
 
 ### Task 2: `evals/sft/grpo.py` — reward, advantages, rotation, rows
 
@@ -113,7 +113,7 @@ including "Conditional: a GRPO pilot". Earlier guides: [STAGE9_ITEM4_PLAN.md](ST
   - `collect_groups(run_dirs: list[Path]) -> tuple[list[dict], dict]`: rows `{"id", "prompt", "completion", "weight", "provenance"}` for every rollout of every mixed group, and metadata `{"rollouts", "tasks", "mixed", "all_pass", "all_fail", "mean_reward", "rows", "by_skeleton"}`. Refuses non-train runs, non-vLLM runs and duplicate (task, seed) pairs, as `export.collect` does.
   - CLI `python -m agent_from_scratch.evals grpo tasks (--pool | --pass P --iteration I)` prints comma-separated IDs (register `"grpo": "sft.grpo"` in `evals/__main__.py`).
 
-- [ ] **Step 1: Write the failing tests** in `tests/test_sft_grpo.py`:
+- [x] **Step 1: Write the failing tests** in `tests/test_sft_grpo.py`:
   - `test_pool_is_the_whole_train_split`: 420 IDs in 21 skeletons, 20 each.
   - `test_one_pass_covers_the_pool_once`: the union of `iteration_tasks(pool, 1, i)` for `i` in 0–9 equals the pool, with no repeats; every chunk has 42 IDs, 2 from each skeleton.
   - `test_rotation_differs_between_passes`: pass 1 iteration 0 differs from pass 2 iteration 0.
@@ -123,10 +123,10 @@ including "Conditional: a GRPO pilot". Earlier guides: [STAGE9_ITEM4_PLAN.md](ST
   - `test_truncated_sample_gets_no_end_token`: `finish_reason` `length` → the completion is the text alone.
   - `test_group_of_seven_still_counts`: 7 seed runs of one task, one request per rollout, rewards `[1,0,0,0,0,0,0]` → 7 rows, weights summing to 0 (within 1e-9).
   - `test_all_pass_group_is_skipped`: metadata `all_pass == 1`, no rows.
-- [ ] **Step 2: Run** `python -m unittest agent_from_scratch.tests.test_sft_grpo -v`. Expected: FAIL (no module).
-- [ ] **Step 3: Implement** the functions above. `sampled_rows` renders `request["input_messages"]` with `request["tools"]` through `render_chat` (as `export.examples_from_trace`), reads `choices[0]["text"]`, falling back to `choices[0]["message"]["content"]`, and appends `QWEN_END` only when `finish_reason == "stop"`. Multi-turn traces (`run_ids`) are read as `export.collect` reads them.
-- [ ] **Step 4: Run** the GRPO tests. Expected: PASS.
-- [ ] **Step 5: Commit** `feat: GRPO reward, advantages, task rotation and rollout rows`.
+- [x] **Step 2: Run** `python -m unittest agent_from_scratch.tests.test_sft_grpo -v`. Expected: FAIL (no module).
+- [x] **Step 3: Implement** the functions above. `sampled_rows` renders `request["input_messages"]` with `request["tools"]` through `render_chat` (as `export.examples_from_trace`), reads `choices[0]["text"]`, falling back to `choices[0]["message"]["content"]`, and appends `QWEN_END` only when `finish_reason == "stop"`. Multi-turn traces (`run_ids`) are read as `export.collect` reads them.
+- [x] **Step 4: Run** the GRPO tests. Expected: PASS.
+- [x] **Step 5: Commit** `feat: GRPO reward, advantages, task rotation and rollout rows`.
 
 ### Task 3: `aggregate --strict` — the GRPO reward's pass count
 
@@ -138,11 +138,11 @@ including "Conditional: a GRPO pilot". Earlier guides: [STAGE9_ITEM4_PLAN.md](ST
 - Consumes: `grpo.reward(record) -> int` (Task 2). Import it inside `aggregate`, so `aggregate` stays torch-free.
 - Produces: `aggregate(runs, seeds, *, strict=False)`; with `strict`, a task's `passes` counts `reward(record)`, not `passed`. The report records `"strict": true`.
 
-- [ ] **Step 1: Write the failing test** `test_strict_counts_only_exact_answers`: two seeds of one task, both `passed`, one with `checks.format_exact` false. Expected `passes == 2` without `strict`, `1` with it, and `overall.mixed == 1` only under `strict`.
-- [ ] **Step 2: Run** `python -m unittest agent_from_scratch.tests.test_bench_aggregate -v`. Expected: FAIL.
-- [ ] **Step 3: Implement** the flag (`--strict` on the CLI).
-- [ ] **Step 4: Run.** Expected: PASS.
-- [ ] **Step 5: Commit** `feat: aggregate can count the strict reward`.
+- [x] **Step 1: Write the failing test** `test_strict_counts_only_exact_answers`: two seeds of one task, both `passed`, one with `checks.format_exact` false. Expected `passes == 2` without `strict`, `1` with it, and `overall.mixed == 1` only under `strict`.
+- [x] **Step 2: Run** `python -m unittest agent_from_scratch.tests.test_bench_aggregate -v`. Expected: FAIL.
+- [x] **Step 3: Implement** the flag (`--strict` on the CLI).
+- [x] **Step 4: Run.** Expected: PASS.
+- [x] **Step 5: Commit** `feat: aggregate can count the strict reward`.
 
 ### Task 4: `policy_step` — one weighted optimizer step
 
@@ -153,14 +153,14 @@ including "Conditional: a GRPO pilot". Earlier guides: [STAGE9_ITEM4_PLAN.md](ST
 **Interfaces:**
 - Produces: `policy_step(model, optimizer, rows: list[dict], *, lr: float) -> dict`. Each row is an `encode_example` output plus `"weight"`. Loss $= \frac{1}{N}\sum_i w_i \cdot \text{mean NLL}_i$, accumulated row by row (one forward per row, as `fit`), clipped at 1.0, one `optimizer.step()`. Returns `{"loss", "grad_norm", "rows", "tokens", "mean_weight"}`, with `grad_norm` before clipping.
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `test_unit_weights_match_one_fit_step`: same tiny adapted model and rows, weights all 1, `accumulate=len(rows)`. The adapter weights after `policy_step` equal those after one `fit` step at a constant rate (`warmup` irrelevant at one step; set `lr` equal), to `1e-6`.
   - `test_a_negative_weight_lowers_that_rows_likelihood`: two rows, weights `+1` and `-1`; after 5 steps at `lr=1e-2`, the second row's loss rose and the first row's fell.
   - `test_only_the_adapter_moves_in_a_policy_step`: base parameters unchanged.
-- [ ] **Step 2: Run** `python -m unittest agent_from_scratch.tests.test_sft_train -v`. Expected: the three new tests FAIL.
-- [ ] **Step 3: Implement** `policy_step` beside `fit`; `fit` is unchanged.
-- [ ] **Step 4: Run.** Expected: PASS (all 17).
-- [ ] **Step 5: Commit** `feat: a weighted policy-gradient step`.
+- [x] **Step 2: Run** `python -m unittest agent_from_scratch.tests.test_sft_train -v`. Expected: the three new tests FAIL.
+- [x] **Step 3: Implement** `policy_step` beside `fit`; `fit` is unchanged.
+- [x] **Step 4: Run.** Expected: PASS (all 17).
+- [x] **Step 5: Commit** `feat: a weighted policy-gradient step`.
 
 ### Task 5: `grpo step` — the per-iteration command
 
@@ -173,13 +173,13 @@ including "Conditional: a GRPO pilot". Earlier guides: [STAGE9_ITEM4_PLAN.md](ST
 - Consumes: `collect_groups` (Task 2), `policy_step` (Task 4), `encode_example`, `hf_tokenize`.
 - Produces: `python -m agent_from_scratch.evals grpo step --runs RUN... --adapter-in DIR --output DIR [--lr 1e-5]`. Loads the base at `BENCH_MODEL`'s revision in bf16 with gradient checkpointing, then `PeftModel.from_pretrained(base, adapter_in, is_trainable=True)`. Loads `adapter_in/optimizer.pt` if present (absent for M1). Writes `output/adapter_model.safetensors` + config, `output/optimizer.pt` and `output/step.json` (`collect_groups` metadata, `policy_step` result, lr, elapsed, git revision, the input adapter's hash).
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `test_step_refuses_an_existing_output_before_loading_a_model` (exit 2, torch never imported, the same check as `train`'s).
   - `test_no_mixed_group_copies_the_adapter_and_marks_the_step_skipped`: patch `collect_groups` to return no rows. `output/step.json` has `"skipped": true`, and the adapter file's bytes equal the input's.
-- [ ] **Step 2: Run** the GRPO tests. Expected: FAIL.
-- [ ] **Step 3: Implement** `step`.
-- [ ] **Step 4: Run** all SFT tests: `python -m unittest agent_from_scratch.tests.test_sft_grpo agent_from_scratch.tests.test_sft_train agent_from_scratch.tests.test_sft_mix agent_from_scratch.tests.test_bench_aggregate -v`. Expected: PASS.
-- [ ] **Step 5: Commit** `feat: grpo step reloads, steps and saves the adapter and optimizer`.
+- [x] **Step 2: Run** the GRPO tests. Expected: FAIL.
+- [x] **Step 3: Implement** `step`.
+- [x] **Step 4: Run** all SFT tests: `python -m unittest agent_from_scratch.tests.test_sft_grpo agent_from_scratch.tests.test_sft_train agent_from_scratch.tests.test_sft_mix agent_from_scratch.tests.test_bench_aggregate -v`. Expected: PASS.
+- [x] **Step 5: Commit** `feat: grpo step reloads, steps and saves the adapter and optimizer`.
 
 ### Task 6: Exploit review of the strict reward
 
@@ -189,30 +189,31 @@ including "Conditional: a GRPO pilot". Earlier guides: [STAGE9_ITEM4_PLAN.md](ST
 **Interfaces:**
 - Consumes: `bench.run.specs`, `bench.verify.check`, `grpo.reward`; scripted results built as the existing `tests/test_bench_verify.py` builds them.
 
-- [ ] **Step 1: Write the tests.** On seeds 0 and 1 of each of the 21 pool skeletons (seed 1 is the other side of each act/ask and no-op pair), each cheat runs through `run_case` with a `ScriptedModel` and must earn `reward == 0`:
+- [x] **Step 1: Write the tests.** On seeds 0 and 1 of each of the 21 pool skeletons (seed 1 is the other side of each act/ask and no-op pair), each cheat runs through `run_case` with a `ScriptedModel` and must earn `reward == 0`:
   - `test_the_correct_solution_earns_the_reward`: the baseline; every scripted correct run earns 1, so a cheat's 0 means something.
   - `test_answer_only_earns_nothing`: no tool call; reply the expected answer in every turn. On no-op and ask variants this is "reply NO_CHANGE (or the ask token) without reading".
   - `test_doing_everything_but_the_change_earns_nothing`: the correct run with every `write_file` and `edit_file` call removed, on tasks whose correct run changes a file.
   - `test_a_wrapped_answer_earns_nothing`: the correct run with the final reply `f"Done: {token}."`. `passed` may hold on advisory tasks, but `reward` is 0.
   - `test_a_fault_left_unhandled_earns_nothing`: on fault variants, the correct run without each repeat of an earlier identical call (the retry). A skeleton that recovers another way (searching, not retrying) has no such repeat and is left out.
-- [ ] **Step 2: Run** `python -m unittest agent_from_scratch.tests.test_grpo_exploits -v`. Expected: PASS. **A failure is a verifier loophole: stop and report it before any GPU work.**
-- [ ] **Step 3: Commit** `test: the strict reward resists four cheap cheats`.
+- [x] **Step 2: Run** `python -m unittest agent_from_scratch.tests.test_grpo_exploits -v`. Expected: PASS. **A failure is a verifier loophole: stop and report it before any GPU work.**
+- [x] **Step 3: Commit** `test: the strict reward resists four cheap cheats`.
 
 ### Task 7: Pod drivers
 
 **Files:**
+- Create: `scripts/stage10_lib.sh` (sourced: the Stage 8 server command, `serve`/`stop_server`, parallel `bench` that fails if any process fails, `sample_train`, `choose_epoch`, `STAGE10_DRY=1`)
 - Create: `scripts/stage10_sample.sh`, `scripts/stage10_ei_round.sh`, `scripts/stage10_grpo.sh`
-- Modify: `evals/README.md` (one paragraph each for `grpo tasks`, `grpo step`, `mix --self`, `aggregate --strict`)
+- Modify: `evals/README.md` (a Stage 10 section: `aggregate --strict`, `mix --self`, `grpo tasks`, `grpo step`, the drivers)
 
-**Interfaces:**
-- `stage10_sample.sh NAME ADAPTER_NAME`: eight `bench --split train --seed s --adapter ADAPTER_NAME --output outputs/NAME-s$s` processes in parallel against the running server, then `aggregate` and `aggregate --strict`.
-- `stage10_ei_round.sh K`: from M_K's samples: `export --track rft --max-per-task 1 --flawed-turns drop`, `mix --own teacher-wide --public when2call toucan --self rft-K --own-share 0.3333 --seed 0`, `train`, start the server with the three epochs, choose the epoch on val seed 0, run val seeds 1–2, sample M_{K+1} with `stage10_sample.sh`, pack the results.
-- `stage10_grpo.sh PASSES`: first, val seed 0 for M1 on this server (G6's reference). Then for each pass and iteration 0–9: start the server with `grpo=CURRENT`, run 8 seeds on `grpo tasks --pass P --iteration I`, stop the server, `grpo step`, and make CURRENT the new adapter. After each pass: copy to `passes/pass-P` and run val seed 0. Applies G6's stop.
-- Every script `set -euo pipefail`; a failed background process fails the script (wait on each PID separately, unlike Item 7's `session.sh`).
+**Interfaces** (all run from the repository root with the venv active and no server running; outputs under `outputs/`, logs under `/root/logs`):
+- `stage10_sample.sh NAME ADAPTER_DIR`: serves the adapter, runs 8 seeds of the train split in parallel (`NAME-train-s0..7`), then `aggregate` and `aggregate --strict` (`NAME-train-aggregate.json`, `NAME-train-strict.json`). Session A: `stage10_sample.sh s10-m1 outputs/sft-mix-r1/epoch-2`.
+- `stage10_ei_round.sh K`: from `s10-mK-train-s0..7`: `export --track rft --max-per-task 1 --flawed-turns drop` → `s10-rft-mK`; `mix --own teacher-wide --public when2call toucan --self s10-rft-mK` (default share, as mix-v1) → `s10-sft-eiK`; `train` → `s10-m{K+1}-r1`; serve the three epochs, choose on val seed 0, val seeds 1–2 for that epoch; sample M_{K+1} (`s10-m{K+1}-train-*`); copy the chosen epoch to `s10-m{K+1}`.
+- `stage10_grpo.sh PASSES`: M1's val seed 0 on this server first (G6's reference). Then for each pass and iteration 0–9: serve `grpo=CURRENT`, 8 seeds on `grpo tasks --pass P --iteration I`, stop the server, `grpo step` → `s10-grpo-pP-iI-step`, which becomes CURRENT. After each pass: copy to `s10-grpo-pass-P`, val seed 0, apply G6. Resumable: an iteration whose step directory exists is skipped. Session A's smoke: `STAGE10_PREFIX=s10-grpo-smoke STAGE10_ITERATIONS=1 STAGE10_VAL=0 stage10_grpo.sh 1`.
+- Every script `set -euo pipefail`; a failed background process fails the script (each PID is waited on, unlike Item 7's `session.sh`). Setup, the self-delete guard and packing the results stay in each session's own wrapper, as in Stage 9.
 
-- [ ] **Step 1:** `bash -n` on each script. Expected: no output.
-- [ ] **Step 2:** a dry run with `STAGE10_DRY=1`, which echoes each command instead of running it. Expected: for `stage10_grpo.sh 1`, ten iterations each listing 42 task IDs and the expected output paths.
-- [ ] **Step 3: Commit** `feat: Stage 10 pod drivers`.
+- [x] **Step 1:** `bash -n` on each script. Expected: no output.
+- [x] **Step 2:** dry runs with `STAGE10_DRY=1`. Expected: `stage10_grpo.sh 1` prints ten iterations, each a `serve`, eight `bench` commands with the same 42 task IDs, `stop_server` and a `grpo step` whose `--adapter-in` is the previous step's output; `stage10_ei_round.sh 1` prints export, mix, train, serve with three epochs, three val runs, two more, eight train runs and both aggregates.
+- [x] **Step 3: Commit** `feat: Stage 10 pod drivers`.
 
 ## 4. Steps — GPU sessions
 
