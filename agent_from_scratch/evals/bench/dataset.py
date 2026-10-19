@@ -68,7 +68,8 @@ def generate(out: Path, split: str = "all", check: bool = False) -> dict:
         save(directory / "task.json", asdict(task))
         if check:
             scripts = {"correct": skeleton.solution(task),
-                       "answer_only": [answer(task.expect.answer.value)],
+                       # One reply per turn: a follow-up turn needs a response of its own.
+                       "answer_only": [answer(task.expect.answer.value)] * (1 + len(task.followups)),
                        "wrong_answer": skeleton.solution(task)[:-1] + [answer("WRONG")]}
             for label, script in scripts.items():
                 result = run_case(ScriptedModel(script), skeleton, ctx, out / "runs" / f"{ctx.id}-{label}")

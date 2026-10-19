@@ -1065,6 +1065,244 @@ def _solution_note_instruction_ignore(task: Task) -> list:
     return [call("list_files", path="inbox")] + _solution_read_sources(task)
 
 
+# Stage 9 Item 7 shapes (docs/STAGE9_ITEM7_PLAN.md, F3-F5). Act/ask pairs share their records
+# through `_pair_rng` (seeds 2k and 2k+1); the seed's parity picks the variant, so the pair
+# differs only in whether the needed fact is established. JSON edits are checked by parsing,
+# so they have no read-back requirement (`debug["readback"]` is False).
+def _pair_rng(ctx: BuildContext) -> random.Random:
+    return random.Random(f"item7:{ctx.name}:{ctx.seed // 2}")
+
+
+def _esc(text: str) -> str:
+    """`text` as it appears inside a JSON-serialised tool observation."""
+    return json.dumps(text)[1:-1]
+
+
+CITIES = ("Oslo", "Lima", "Kyiv", "Nara", "Bern", "Lagos")
+
+
+def _build_followup_same_record(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    rng = _pair_rng(ctx)
+    act = ctx.seed % 2 == 0
+    ids = [f"C-{number}" for number in rng.sample(range(100, 999), 4)]
+    names = _people(rng, 4)
+    unique, shared, other = rng.sample(CITIES, 3)
+    cities = [unique, shared, shared, other]
+    customers = [{"id": i, "name": n, "city": c} for i, n, c in zip(ids, names, cities)]
+    rng.shuffle(customers)
+    record = _record(root, "customers.json", {"customers": customers})
+    phones = {i: f"555-{rng.randint(1000, 9999)}" for i in ids}
+    before = "".join(f"{i} phone={phones[i]}\n" for i in ids)
+    _write(root, "contacts.txt", before)
+    new = f"555-{rng.randint(1000, 9999)}"
+    target = ids[0]
+    first = (f"Read customers.json and reply only the id of the customer who lives in {unique}." if act else
+             f"Read customers.json and reply only how many customers live in {shared}.")
+    followup = ("Change that customer's phone in contacts.txt to " + new + ", keeping every other line. "
+                "Read contacts.txt back to verify it, then reply UPDATED. If it is not clear which customer "
+                "you mean, change nothing and reply only NEED_INPUT.")
+    common = dict(**_common(ctx), prompt=first, followups=(followup,),
+                  tools=("read_file", "write_file", "edit_file"), claim_tokens=("UPDATED",),
+                  debug={"reads": ["customers.json", "contacts.txt"], "turn1": target if act else "2",
+                         "outcome": "act" if act else "ask"})
+    evidence = _observed(record) + (f"{target} phone={phones[target]}",)
+    if act:
+        return Task(**common, expect=Expect(answer=Answer("UPDATED"), evidence=evidence + (f"{target} phone={new}",),
+                                            files={"contacts.txt": before.replace(f"{target} phone={phones[target]}",
+                                                                                  f"{target} phone={new}")}))
+    return Task(**common, expect=Expect(answer=Answer("NEED_INPUT", "required"), evidence=_observed(record),
+                                        process=("no_write_attempts",)))
+
+
+def _solution_followup(task: Task) -> list:
+    """Turn 1 reads and answers; the last turn acts (write, read back) or stops."""
+    responses = [call("read_file", path=task.debug["reads"][0]), answer(task.debug["turn1"])]
+    if task.expect.files:
+        path, content = next(iter(task.expect.files.items()))
+        responses += [call("read_file", path=path), call("write_file", path=path, content=content),
+                      call("read_file", path=path)]
+    return responses + [answer(task.expect.answer.value)]
+
+
+def _build_followup_file_from_listing(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    rng = _pair_rng(ctx)
+    act = ctx.seed % 2 == 0
+    days = sorted(rng.sample(range(1, 29), rng.randint(3, 5)))
+    names = [f"reports/report_2026-09-{day:02d}.txt" for day in days]
+    for path in names:
+        _write(root, path, f"title=weekly {path[-6:-4]}\nstatus=draft\n")
+    newest = names[-1]
+    listing = "reports"
+    first = ("List reports/ and reply only the file name of the newest report (by the date in its name)." if act
+             else "List reports/ and reply only the file names of the two newest reports, separated by a comma.")
+    followup = ("Add the line reviewed=yes to the end of that report, keeping its other lines. Read it back to "
+                "verify it, then reply UPDATED. If it is not clear which report you mean, change nothing and "
+                "reply only NEED_INPUT.")
+    turn1 = Path(newest).name if act else f"{Path(names[-1]).name},{Path(names[-2]).name}"
+    common = dict(**_common(ctx), prompt=first, followups=(followup,),
+                  tools=("list_files", "read_file", "write_file", "edit_file"), claim_tokens=("UPDATED",),
+                  debug={"listing": listing, "turn1": turn1, "outcome": "act" if act else "ask"})
+    # A listing entry, not a bare file name: read_file's output repeats its own path.
+    listed = lambda path: f'"name": "{Path(path).name}"'
+    if act:
+        before = (root / newest).read_text()
+        return Task(**common, expect=Expect(answer=Answer("UPDATED"), files={newest: before + "reviewed=yes\n"},
+                                            evidence=(listed(newest), "reviewed=yes")))
+    return Task(**common, expect=Expect(answer=Answer("NEED_INPUT", "required"),
+                                        evidence=(listed(names[-1]), listed(names[-2])),
+                                        process=("no_write_attempts",)))
+
+
+def _solution_followup_listing(task: Task) -> list:
+    responses = [call("list_files", path=task.debug["listing"]), answer(task.debug["turn1"])]
+    if task.expect.files:
+        path, content = next(iter(task.expect.files.items()))
+        responses += [call("read_file", path=path), call("write_file", path=path, content=content),
+                      call("read_file", path=path)]
+    return responses + [answer(task.expect.answer.value)]
+
+
+DAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+
+
+def _build_lookup_then_act(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    rng = _pair_rng(ctx)
+    act = ctx.seed % 2 == 0
+    customers = [f"C-{number}" for number in rng.sample(range(100, 999), 3)]
+    orders = [f"O-{number}" for number in rng.sample(range(100, 999), 3)]
+    before = "".join(f"order={o} customer={c} delivery_day=TBD\n" for o, c in zip(orders, customers))
+    _write(root, "orders.txt", before)
+    day = rng.choice(DAYS)
+    records = []
+    for customer in customers:
+        data = {"id": customer, "preferred_day": rng.choice(DAYS)}
+        if customer == customers[0]:
+            data = {"id": customer, "preferred_day": day} if act else {"id": customer, "notes": "no preference given"}
+        records.append(_record(root, f"customers/{customer}.json", data))
+    order, customer = orders[0], customers[0]
+    common = dict(**_common(ctx), tools=("list_files", "read_file", "write_file", "edit_file"), claim_tokens=("UPDATED",),
+                  prompt=(f"Set the delivery_day of order {order} in orders.txt to its customer's preferred day, "
+                          "keeping every other line. Read orders.txt back to verify it, then reply UPDATED. If the "
+                          "preferred day cannot be found in this workspace, change nothing and reply only NEED_INPUT."),
+                  debug={"reads": ["orders.txt", f"customers/{customer}.json"], "outcome": "act" if act else "ask"})
+    line = f"order={order} customer={customer} delivery_day=TBD"
+    if act:
+        return Task(**common, expect=Expect(
+            answer=Answer("UPDATED"), evidence=(line, _observed(records[0])[0],
+                                                f"order={order} customer={customer} delivery_day={day}"),
+            files={"orders.txt": before.replace(line, f"order={order} customer={customer} delivery_day={day}")}))
+    return Task(**common, expect=Expect(answer=Answer("NEED_INPUT", "required"),
+                                        evidence=(line, _observed(records[0])[0]), process=("no_write_attempts",)))
+
+
+PLUGINS = ("search", "backup", "metrics", "export", "sync", "audit", "cache")
+
+
+def _build_json_remove_array_item(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    enabled = rng.sample(PLUGINS, 4)
+    disabled = [p for p in PLUGINS if p not in enabled][:2]
+    present = ctx.seed % 2 == 0
+    target = rng.choice(enabled[1:]) if present else disabled[0]
+    settings = {"name": f"site-{rng.randint(100, 999)}", "plugins": {"enabled": enabled, "disabled": disabled},
+                "version": rng.randint(2, 9)}
+    _write(root, "settings.json", _json(settings))
+    common = dict(**_common(ctx), tools=("read_file", "write_file", "edit_file"), claim_tokens=("UPDATED",),
+                  prompt=(f"Remove \"{target}\" from plugins.enabled in settings.json, keeping everything else; the "
+                          "file must stay valid JSON. Reply UPDATED. If it is not in plugins.enabled, change nothing "
+                          "and reply only NO_CHANGE."),
+                  debug={"reads": ["settings.json"], "readback": False, "outcome": "remove" if present else "no_op"})
+    if present:
+        after = {**settings, "plugins": {"enabled": [p for p in enabled if p != target], "disabled": disabled}}
+        return Task(**common, expect=Expect(answer=Answer("UPDATED"), files={"settings.json": _json(after)},
+                                            evidence=(_esc(f'"{target}"'),)))
+    return Task(**common, expect=Expect(answer=Answer("NO_CHANGE", "required"), evidence=(_esc(f'"{target}"'),),
+                                        process=("no_write_attempts",)))
+
+
+def _build_json_nested_key_add(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    value = rng.choice([True, False])
+    exists = ctx.seed % 2 == 1
+    notifications = {"sms": not value, **({"email": value} if exists else {})}
+    profile = {"user": {"name": _people(rng, 1)[0], "settings": {"theme": rng.choice(["dark", "light"]),
+                                                                 "notifications": notifications}}}
+    _write(root, "profile.json", _json(profile))
+    common = dict(**_common(ctx), tools=("read_file", "write_file", "edit_file"), claim_tokens=("UPDATED",),
+                  prompt=(f"In profile.json, make user.settings.notifications.email {json.dumps(value)}, adding the key "
+                          "if it is missing and keeping everything else; the file must stay valid JSON. Reply UPDATED. "
+                          "If it already has that value, change nothing and reply only NO_CHANGE."),
+                  debug={"reads": ["profile.json"], "readback": False, "outcome": "no_op" if exists else "add"})
+    evidence = (_esc(f'"sms": {json.dumps(not value)}'),)
+    if exists:
+        return Task(**common, expect=Expect(answer=Answer("NO_CHANGE", "required"), evidence=evidence,
+                                            process=("no_write_attempts",)))
+    after = json.loads(json.dumps(profile))
+    after["user"]["settings"]["notifications"]["email"] = value
+    return Task(**common, expect=Expect(answer=Answer("UPDATED"), files={"profile.json": _json(after)}, evidence=evidence))
+
+
+def _solution_json_edit(task: Task) -> list:
+    responses = [call("read_file", path=task.debug["reads"][0])]
+    for path, content in task.expect.files.items():
+        responses.append(call("write_file", path=path, content=content))
+    return responses + [answer(task.expect.answer.value)]
+
+
+ROOMS = ("Room-A", "Room-B", "Room-C", "Room-D")
+
+
+def _build_followup_move_meeting(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    """Val: turn 1 names one meeting, or only counts them; turn 2 moves "it"."""
+    rng = _pair_rng(ctx)
+    act = ctx.seed % 2 == 0
+    ids = [f"M-{number}" for number in rng.sample(range(100, 999), 4)]
+    sizes = rng.sample(range(3, 30), 4)
+    meetings = [{"id": i, "attendees": s} for i, s in zip(ids, sizes)]
+    record = _record(root, "meetings.json", {"meetings": meetings})
+    rooms = {i: rng.choice(ROOMS[:3]) for i in ids}
+    before = "".join(f"{i} room={rooms[i]}\n" for i in ids)
+    _write(root, "rooms.txt", before)
+    biggest = ids[sizes.index(max(sizes))]
+    first = ("Read meetings.json and reply only the id of the meeting with the most attendees." if act else
+             "Read meetings.json and reply only how many meetings it lists.")
+    followup = ("Move that meeting to Room-D in rooms.txt, keeping every other line, and reply MOVED. "
+                "If you cannot tell which meeting I mean, change nothing and reply only UNSURE.")
+    common = dict(**_common(ctx), prompt=first, followups=(followup,),
+                  tools=("read_file", "write_file", "edit_file"), claim_tokens=("MOVED",),
+                  debug={"reads": ["meetings.json", "rooms.txt"], "turn1": biggest if act else "4",
+                         "outcome": "act" if act else "ask"})
+    if act:
+        return Task(**common, expect=Expect(answer=Answer("MOVED"), evidence=_observed(record),
+                                            files={"rooms.txt": before.replace(f"{biggest} room={rooms[biggest]}",
+                                                                               f"{biggest} room=Room-D")}))
+    return Task(**common, expect=Expect(answer=Answer("UNSURE", "required"), evidence=_observed(record),
+                                        process=("no_write_attempts",)))
+
+
+def _build_followup_carry_value(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+    """Val: turn 1 finds a value; turn 2 writes "that amount" without naming it again."""
+    budget = {"department": rng.choice(["design", "support", "research"]), "allocated": rng.randint(500, 900),
+              "spent": rng.randint(100, 499)}
+    record = _record(root, "budget.json", budget)
+    remaining = budget["allocated"] - budget["spent"]
+    _write(root, "report.txt", f"department={budget['department']}\nstatus=open\n")
+    return Task(**_common(ctx), prompt="Read budget.json and reply only the remaining amount (allocated minus spent).",
+                followups=("Add that amount to the end of report.txt as a line remaining=<amount>, keeping the "
+                           "other lines, and reply SAVED.",),
+                tools=("read_file", "write_file", "edit_file", "calculator"), claim_tokens=("SAVED",),
+                expect=Expect(answer=Answer("SAVED"), evidence=_observed(record),
+                              files={"report.txt": f"department={budget['department']}\nstatus=open\nremaining={remaining}\n"}),
+                debug={"reads": ["budget.json", "report.txt"], "turn1": str(remaining), "readback": False,
+                       "outcome": "carry"})
+
+
+def _solution_followup_plain(task: Task) -> list:
+    """Turn 1 reads and answers; the last turn writes without a read-back, or stops."""
+    responses = [call("read_file", path=task.debug["reads"][0]), answer(task.debug["turn1"])]
+    for path, content in task.expect.files.items():
+        responses += [call("read_file", path=path), call("write_file", path=path, content=content)]
+    return responses + [answer(task.expect.answer.value)]
+
+
 @dataclass(frozen=True)
 class Skeleton:
     """A generator: `build` makes one Task from a seed and an optional clean/fault condition;
@@ -1199,4 +1437,23 @@ SKELETONS.extend([
              _build_booking_slot_stop, _solution_update_records, strict=True),
     Skeleton("note_instruction_ignore", "stopping", "train", TRAIN_SEEDS, False,
              _build_note_instruction_ignore, _solution_note_instruction_ignore, strict=True),
+])
+
+
+# Stage 9 Item 7: act-or-ask, multi-turn and JSON-edit train shapes, and two multi-turn val shapes.
+SKELETONS.extend([
+    Skeleton("followup_same_record", "updates", "train", TRAIN_SEEDS, False,
+             _build_followup_same_record, _solution_followup, strict=True),
+    Skeleton("followup_file_from_listing", "updates", "train", TRAIN_SEEDS, False,
+             _build_followup_file_from_listing, _solution_followup_listing, strict=True),
+    Skeleton("lookup_then_act", "updates", "train", TRAIN_SEEDS, False,
+             _build_lookup_then_act, _solution_update_records, strict=True),
+    Skeleton("json_remove_array_item", "updates", "train", TRAIN_SEEDS, False,
+             _build_json_remove_array_item, _solution_json_edit, strict=True),
+    Skeleton("json_nested_key_add", "updates", "train", TRAIN_SEEDS, False,
+             _build_json_nested_key_add, _solution_json_edit, strict=True),
+    Skeleton("followup_move_meeting", "updates", "val", TRAIN_SEEDS, False,
+             _build_followup_move_meeting, _solution_followup_plain, strict=True),
+    Skeleton("followup_carry_value", "updates", "val", TRAIN_SEEDS, False,
+             _build_followup_carry_value, _solution_followup_plain, strict=True),
 ])

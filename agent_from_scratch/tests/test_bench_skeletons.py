@@ -46,7 +46,7 @@ class SkeletonGateTests(unittest.TestCase):
                 claim = (task.claim_tokens[0] if task.claim_tokens else
                         task.expect.answer.value if task.expect.answer else "done")
                 output = Path(self.enterContext(TemporaryDirectory())) / f"fake-{index}"
-                record = run_case(_model([answer(claim)]), skeleton, ctx, output)
+                record = run_case(_model([answer(claim)] * (1 + len(task.followups))), skeleton, ctx, output)
                 self.assertFalse(record["passed"], record["checks"])
 
     def test_the_same_seed_rebuilds_an_identical_workspace(self):
@@ -115,11 +115,11 @@ class SkeletonGateTests(unittest.TestCase):
         self.assertEqual(set(names), listed)
         for skeleton in SKELETONS:
             self.assertIn(skeleton.name, splits[skeleton.split])
-        self.assertEqual(len([s for s in SKELETONS if s.split == "val"]), 8)
+        self.assertEqual(len([s for s in SKELETONS if s.split == "val"]), 10)
         self.assertEqual(len([s for s in SKELETONS if s.split == "test"]), 14)
         val_total = sum(len(s.seeds) * (2 if s.recovery else 1) for s in SKELETONS if s.split == "val")
         test_total = sum(len(s.seeds) * (2 if s.recovery else 1) for s in SKELETONS if s.split == "test")
-        self.assertEqual((val_total, test_total), (64, 140))
+        self.assertEqual((val_total, test_total), (104, 140))
 
 
 if __name__ == "__main__":

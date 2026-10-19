@@ -47,7 +47,8 @@ class Stage9TestTaskTests(unittest.TestCase):
         for skeleton, ctx in self.entries:
             with self.subTest(id=ctx.id):
                 _, task = self.build(skeleton, ctx)
-                record = self.run_script(skeleton, ctx, [answer(task.expect.answer.value)])
+                turns = 1 + len(task.followups)
+                record = self.run_script(skeleton, ctx, [answer(task.expect.answer.value)] * turns)
                 self.assertFalse(record["passed"])
 
     def test_wrong_answer_after_correct_actions_is_rejected(self):
@@ -97,7 +98,8 @@ class Stage9TestTaskTests(unittest.TestCase):
                 lines = path.read_text().splitlines()
                 responses.append(call("read_file", path=path.relative_to(root).as_posix(), offset=len(lines),
                                       column=max(len(lines[-1]) - 1, 0), limit=1))
-            record = self.run_script(skeleton, ctx, responses + [answer(task.expect.answer.value)])
+            replies = [answer(task.expect.answer.value)] * (1 + len(task.followups))
+            record = self.run_script(skeleton, ctx, responses + replies)
             self.assertFalse(record["checks"]["evidence"])
             self.assertFalse(record["passed"])
 
@@ -110,18 +112,23 @@ class TrainingTaskTests(Stage9TestTaskTests):
                       "booking_count_by_day", "latest_visit_lookup", "vendor_price_compare",
                       "member_plan_set", "roster_add_member", "close_project_tasks",
                       "moved_record_search", "batch_read_retry", "log_append_retry",
-                      "missing_attachment_report", "booking_slot_stop", "note_instruction_ignore"}
-    expected_count = 320
+                      "missing_attachment_report", "booking_slot_stop", "note_instruction_ignore",
+                      # Stage 9 Item 7.
+                      "followup_same_record", "followup_file_from_listing", "lookup_then_act",
+                      "json_remove_array_item", "json_nested_key_add"}
+    expected_count = 420
 
     def test_write_tasks_require_the_actual_change_and_a_readback(self):
         for skeleton, ctx in self.entries:
             root, task = self.build(skeleton, ctx)
-            if not task.expect.files:
+            # JSON edits are checked by parsing the file, so no single line proves a read-back.
+            if not task.expect.files or task.debug.get("readback") is False:
                 continue
             with self.subTest(id=ctx.id):
                 reads = [call("read_file", path=p.relative_to(root).as_posix())
                          for p in sorted(root.rglob("*")) if p.is_file()]
-                missing_write = self.run_script(skeleton, ctx, reads + [answer(task.expect.answer.value)])
+                replies = [answer(task.expect.answer.value)] * (1 + len(task.followups))
+                missing_write = self.run_script(skeleton, ctx, reads + replies)
                 self.assertFalse(missing_write["passed"])
                 self.assertFalse(missing_write["checks"]["files"])
                 script = skeleton.solution(task)

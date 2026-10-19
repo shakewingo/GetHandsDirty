@@ -26,9 +26,9 @@ class DatasetCommandTests(unittest.TestCase):
             result = self.command("--split", "train", "--output", out)
             self.assertEqual(result.returncode, 0, result.stderr)
             metadata = json.loads((out / "metadata.json").read_text())
-            self.assertEqual(metadata["task_counts"], {"train": 320})
+            self.assertEqual(metadata["task_counts"], {"train": 420})
             tasks = list((out / "tasks").glob("*/task.json"))
-            self.assertEqual(len(tasks), 320)
+            self.assertEqual(len(tasks), 420)
             for path in tasks:
                 task = json.loads(path.read_text())
                 self.assertEqual(task["split"], "train")
@@ -40,10 +40,10 @@ class DatasetCommandTests(unittest.TestCase):
             result = self.command("--output", out, "--check")
             self.assertEqual(result.returncode, 0, result.stderr)
             summary = json.loads((out / "summary.json").read_text())
-            # 320 train and 140 test tasks.
-            self.assertEqual(summary["correct"], {"passed": 460, "attempts": 460})
-            self.assertEqual(summary["answer_only"], {"passed": 0, "attempts": 460})
-            self.assertEqual(summary["wrong_answer"], {"passed": 0, "attempts": 460})
+            # 420 train and 140 test tasks.
+            self.assertEqual(summary["correct"], {"passed": 560, "attempts": 560})
+            self.assertEqual(summary["answer_only"], {"passed": 0, "attempts": 560})
+            self.assertEqual(summary["wrong_answer"], {"passed": 0, "attempts": 560})
             self.assertTrue(summary["gates_passed"])
 
     def test_existing_output_is_never_overwritten(self):

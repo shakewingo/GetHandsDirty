@@ -13,6 +13,7 @@ made; test is run once per final candidate, with --final and a versioned dataset
 import argparse
 from dataclasses import asdict, replace
 import json
+import re
 from pathlib import Path
 import random
 import sys
@@ -25,6 +26,47 @@ from .verify import EVIDENCE_TOOLS, bench_summary, check
 from ..run import open_run, parse_limits, save, seed_every_request
 from ..trajectory import profile
 from ..verify import exchanges, metrics, snapshot
+
+
+# Replies that stop to ask or to decline; a task that expects one of these tokens asks correctly.
+ASK_TOKENS = {"NEED_INPUT", "NEED_UNIT", "UNSURE", "MISSING", "NOT_FOUND", "LOCKED", "CONFLICT", "BLOCKED"}
+ASKING = re.compile(r"\?\s*$|(?i:\b(unable|cannot|can't|could you|please (provide|specify|clarify))\b)")
+
+
+def asked_instead(task: Task, record: dict) -> bool:
+    """The run failed with a final reply that asks or declines, where acting was expected."""
+    expected = task.expect.answer.value if task.expect.answer else ""
+    reply = (record.get("final_answer") or "").strip()
+    return not record["passed"] and expected.split(" ")[0] not in ASK_TOKENS and bool(ASKING.search(reply))
+
+
+REQUEST_COUNTS = ("model_requests", "actor_requests", "compact_requests", "compactions_applied",
+                  "parse_errors", "requests_without_usage", "elapsed_seconds", "stuck_reminders")
+INVALID_REQUEST_CODES = {"invalid_tool_call", "multiple_tool_calls", "too_many_tool_calls"}
+
+
+def turn_metrics(results: list) -> dict:
+    """`metrics` of a task played over several turns, one TurnResult per turn.
+
+    Each turn's messages hold every earlier turn, so the last result alone gives the tool rows;
+    request counts, usage and time add up over the turns.
+    """
+    merged = metrics(results[-1])
+    for earlier in results[:-1]:
+        part = metrics(earlier)
+        for key in REQUEST_COUNTS:
+            merged[key] = round(merged[key] + part[key], 2) if key == "elapsed_seconds" else merged[key] + part[key]
+        merged["invalid_calls"] += sum(q.status != "blocked" and q.error_code in INVALID_REQUEST_CODES
+                                       for q in earlier.model_requests)
+        merged["max_actor_prompt_tokens"] = max(merged["max_actor_prompt_tokens"], part["max_actor_prompt_tokens"])
+        merged["usage"] = {key: None if merged["usage"][key] is None or part["usage"][key] is None
+                           else merged["usage"][key] + part["usage"][key] for key in merged["usage"]}
+        merged["actions"] = part["actions"] + merged["actions"]
+    # A turn that did not end normally ends the task; report the first such reason.
+    merged["stop_reason"] = next((r.stop_reason for r in results if r.stop_reason != "final_response"),
+                                 results[-1].stop_reason)
+    merged["run_ids"] = [r.run_id for r in results]
+    return merged
 from ...agent import Agent
 from ...config import BENCH_DECODING, BENCH_MODEL, BENCH_N_CTX, MODEL_PATH, VLLM_BASE_URL
 from ...llm import LLM, VLLMClient
@@ -74,7 +116,11 @@ def registry_for(task: Task, workspace: Path, private: Path) -> ToolRegistry:
 
 def run_case(model, skeleton: Skeleton, ctx: BuildContext, output: Path, *,
             overrides: dict | None = None) -> dict:
-    """Build the workspace from `ctx`'s seed, run one turn, then score it. No history is carried."""
+    """Build the workspace from `ctx`'s seed, play the task's turns, then score it.
+
+    A single-turn task carries no history. A task with `followups` plays them in the same
+    session, each with the conversation so far as history.
+    """
     output.mkdir(parents=True, exist_ok=False)
     with TemporaryDirectory(prefix="tiny-agent-bench-") as temporary:
         private = Path(temporary).resolve()
@@ -94,7 +140,18 @@ def run_case(model, skeleton: Skeleton, ctx: BuildContext, output: Path, *,
         agent = Agent(model, str(output / "state"), registry=registry)
         agent.limits = replace(agent.limits, **{**(overrides or {}), "max_iterations": task.max_iterations})
         result = agent.run_turn(task.prompt, session_id=task.id)
+        results = [result]
+        for followup in task.followups:
+            if result.stop_reason != "final_response":
+                break
+            result = agent.run_turn(followup, history=result.messages[1:], session_id=task.id)
+            results.append(result)
         score = check(task, result, workspace, before)
+        if task.followups:
+            finished = (len(results) == 1 + len(task.followups)
+                        and all(r.stop_reason == "final_response" for r in results))
+            score["checks"]["normal_finish"] = finished
+            score["passed"] = score["passed"] and finished
         if initial_evidence:
             rows = exchanges(result)
             first_write = next((i for i, r in enumerate(rows) if r["tool_name"] in ("write_file", "edit_file")), len(rows))
@@ -121,7 +178,8 @@ def run_case(model, skeleton: Skeleton, ctx: BuildContext, output: Path, *,
                 claimed and score["checks"]["normal_finish"] and failed_extra)
         record = {"id": task.id, "skeleton": task.skeleton, "family": task.family,
                  "split": task.split, "pair_id": task.pair_id, "condition": task.condition,
-                 **metrics(result), **score}
+                 **(turn_metrics(results) if task.followups else metrics(result)), **score}
+        record["asked_instead"] = asked_instead(task, record)
         save(output / "result.json", record)
         return record
 
@@ -212,7 +270,9 @@ def main():
         record = run_case(model, skeleton, ctx, out / ctx.id, overrides=overrides)
         records.append(record)
         save(out / "results.json", records)
-        save(out / "summary.json", bench_summary(records))
+        # The asked-instead count is added here: bench/verify.py is part of the Stage 8 freeze.
+        save(out / "summary.json", {**bench_summary(records),
+                                    "asked_instead": sum(bool(r.get("asked_instead")) for r in records)})
         print("RESULT", ctx.id, "PASS" if record["passed"] else "FAIL", record["stop_reason"],
               "requests", record["model_requests"], flush=True)
         if record["stop_reason"] == "interrupted":

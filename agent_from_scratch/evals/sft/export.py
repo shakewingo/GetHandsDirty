@@ -84,7 +84,7 @@ def examples_from_trace(trace: dict, template) -> list[dict]:
     return examples
 
 
-def flawed_turns(record: dict, task: dict, trace: dict) -> dict[int, str]:
+def flawed_turns(record: dict, task: dict, trace: dict, *, final: bool = True) -> dict[int, str]:
     """Request index -> why that turn must not be a target, in a rollout the verifier passed.
 
     `own_error`: the turn holds a failed tool call of the model's own making, which is one that
@@ -96,6 +96,7 @@ def flawed_turns(record: dict, task: dict, trace: dict) -> dict[int, str]:
         record: the task's entry in results.json; `checks.format_exact` is read from it.
         task: the task's task.json, read for `fault_signal` only.
         trace: the run trace.
+        final: whether the trace is the task's last turn; only its answer is the scored reply.
     """
     signal = task.get("fault_signal")
     failed = set()
@@ -111,12 +112,12 @@ def flawed_turns(record: dict, task: dict, trace: dict) -> dict[int, str]:
     requests = trace["model_requests"]
     flawed = {index: "own_error" for index, request in enumerate(requests)
               if failed.intersection(request["call_ids"])}
-    if record["checks"].get("format_exact") is False and requests and not requests[-1]["call_ids"]:
+    if final and record["checks"].get("format_exact") is False and requests and not requests[-1]["call_ids"]:
         flawed.setdefault(len(requests) - 1, "loose_answer")
     return flawed
 
 
-def rejection(record: dict, task: dict, trace: dict, *, flawed: str = "reject") -> str | None:
+def rejection(record: dict, task: dict, trace: dict, *, flawed: str = "reject", final: bool = True) -> str | None:
     """Rejection sampling - Why a rollout may not become training data; None when it may.
 
     Args:
@@ -128,7 +129,7 @@ def rejection(record: dict, task: dict, trace: dict, *, flawed: str = "reject") 
     """
     if not record["passed"]:
         return "failed"
-    reasons = set(flawed_turns(record, task, trace).values()) if flawed == "reject" else set()
+    reasons = set(flawed_turns(record, task, trace, final=final).values()) if flawed == "reject" else set()
     # A parse error or a stuck reminder puts runtime feedback into the history, so neither
     # mode keeps such a rollout.
     if record["parse_errors"] or record["stuck_reminders"] or "own_error" in reasons:
@@ -200,20 +201,26 @@ def collect(run_dirs: list[Path], track: str, *, max_per_task: int = 2, pilot: b
             rollouts.add((record["id"], seed))
             case = run / record["id"]
             task = json.loads((case / "task.json").read_text(encoding="utf-8"))
-            trace = json.loads((case / "state" / "runs" / f"{record['run_id']}.jsonl")
-                               .read_text(encoding="utf-8"))
-            if trace["schema_version"] != 5:
-                raise ValueError(f"{run.name}/{record['id']}: trace schema {trace['schema_version']}, not 5.")
-            reason = rejection(record, task, trace, flawed=flawed)
+            # A multi-turn task has one trace per turn, in order (`run_ids`).
+            traces = [json.loads((case / "state" / "runs" / f"{run_id}.jsonl").read_text(encoding="utf-8"))
+                      for run_id in record.get("run_ids", [record["run_id"]])]
+            if any(trace["schema_version"] != 5 for trace in traces):
+                raise ValueError(f"{run.name}/{record['id']}: a trace is not schema 5.")
+            last = len(traces) - 1
+            reason = next((r for turn, trace in enumerate(traces)
+                           if (r := rejection(record, task, trace, flawed=flawed, final=turn == last))), None)
             if reason is not None:
                 rejected[reason] += 1
                 continue
-            drop = flawed_turns(record, task, trace) if flawed == "drop" else {}
+            examples = []
+            for turn, trace in enumerate(traces):
+                drop = flawed_turns(record, task, trace, final=turn == last) if flawed == "drop" else {}
+                examples += [{**example, "turn": turn, "dropped": drop.get(example["request_index"])}
+                             for example in examples_from_trace(trace, template)]
             trajectories.append({"task_id": record["id"], "skeleton": record["skeleton"],
                                  "family": record["family"], "condition": record["condition"],
                                  "seed": seed, "run_dir": run.name, "run_id": record["run_id"],
-                                 "examples": [{**example, "dropped": drop.get(example["request_index"])}
-                                              for example in examples_from_trace(trace, template)]})
+                                 "examples": examples})
     kept = select(trajectories, max_per_task)
     examples, before, histories, by_skeleton = [], 0, set(), {}
     for trajectory in kept:
@@ -244,6 +251,7 @@ def collect(run_dirs: list[Path], track: str, *, max_per_task: int = 2, pilot: b
             examples.append({"id": sha256(pair.encode("utf-8")).hexdigest()[:16],
                              "prompt": example["prompt"], "completion": example["completion"],
                              "provenance": {**provenance, "request_index": example["request_index"],
+                                            "turn": example["turn"],
                                             "raw_matches_canonical": example["raw_matches_canonical"]}})
     funnel = {"rollouts": len(rollouts), "rejected": rejected, "eligible": len(trajectories),
               "kept_trajectories": len(kept), "tasks_covered": len({t["task_id"] for t in kept}),
