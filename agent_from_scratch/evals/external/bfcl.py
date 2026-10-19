@@ -1,7 +1,7 @@
 """BFCL multi-turn base, run locally (Stage 9 Item 5). A local adaptation, never an official score.
 
 Usage: python -m agent_from_scratch.evals bfcl --bfcl-root DIR --output DIR [--adapter NAME]
-           [--limit N] [--workers 8]
+           [--limit N] [--workers 8] [--system-prompt {qwen-default,ours}]
 
 DIR is `berkeley-function-call-leaderboard` from ShishirPatil/gorilla. Each entry's user turns are
 given to the model in a plain chat loop with the entry's own tools (not our agent harness),
@@ -21,7 +21,7 @@ import sys
 from .when2call import Server
 from ..run import save
 from ..sft.public import Dropped, json_schema
-from ...config import BENCH_MODEL, CHAT_TEMPLATE_PATH, VLLM_BASE_URL
+from ...config import BENCH_MODEL, CHAT_TEMPLATE_PATH, PROMPTS_DIR, VLLM_BASE_URL
 from ...llm import LLM, ResponseError, compile_chat_template, render_chat
 from ...tools.base import ToolCall
 from ...utils import write_jsonl
@@ -63,14 +63,17 @@ def call_string(call: ToolCall) -> str:
     return f"{call.name}({', '.join(f'{key}={value!r}' for key, value in call.arguments.items())})"
 
 
-def run_entry(entry: dict, tools: dict, generate, execute) -> tuple[list[list[list[str]]], list[dict], str | None]:
+def run_entry(entry: dict, tools: dict, generate, execute, system: str | None = None
+              ) -> tuple[list[list[list[str]]], list[dict], str | None]:
     """Play every user turn of one entry; returns (calls by turn and step, messages, stop reason).
 
     Args:
         generate: messages -> the model's raw text for the next assistant turn.
         execute: call strings -> their result strings, on this entry's live backends.
     """
-    messages, decoded, stop = [], [], None
+    # Without a system message our template writes Qwen's default line, as BFCL's Qwen handler does.
+    messages = [{"role": "system", "content": system}] if system else []
+    decoded, stop = [], None
     for turn in entry["question"]:
         messages += copy.deepcopy(turn)
         steps = []
@@ -121,6 +124,8 @@ def main():
     parser.add_argument("--served-model", default=BENCH_MODEL["id"])
     parser.add_argument("--limit", type=int, help="First N entries only (a pipeline check)")
     parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--system-prompt", choices=("qwen-default", "ours"), default="qwen-default",
+                        help="ours: prompts/system.md as the system message (a diagnostic, Stage 9 Item 7)")
     args = parser.parse_args()
     out = args.output.resolve()
     if out.exists():
@@ -141,6 +146,8 @@ def main():
     entries, truth, docs = load(args.bfcl_root)
     entries = entries[:args.limit]
     template = compile_chat_template(CHAT_TEMPLATE_PATH.read_text(encoding="utf-8"))
+    system = ((PROMPTS_DIR / "system.md").read_text(encoding="utf-8").strip()
+              if args.system_prompt == "ours" else None)
     # Backend instances live in a module dictionary keyed by this name and the entry ID.
     run_name = f"local_{server.model}_{out.name}".replace("-", "_")
 
@@ -156,7 +163,7 @@ def main():
         def execute(strings):
             return execute_multi_turn_func_call(strings, entry["initial_config"], entry["involved_classes"],
                                                 run_name, entry["id"])[0]
-        decoded, messages, stop = run_entry(entry, tools, generate, execute)
+        decoded, messages, stop = run_entry(entry, tools, generate, execute, system)
         verdict = multi_turn_checker(decoded, truth[entry["id"]], entry, CATEGORY, run_name)
         return {"id": entry["id"], "valid": verdict["valid"], "error_type": verdict.get("error_type"),
                 "stop": stop, "decoded": decoded, "turns": len(entry["question"]),
@@ -171,7 +178,7 @@ def main():
               "stopped": dict(Counter(r.get("stop") for r in results if r.get("stop")))}
     save(out / "scores.json", scores)
     save(out / "metadata.json", {"category": CATEGORY, "model": server.model, "decoding": "greedy",
-                                 "max_steps_per_turn": MAX_STEPS, "template": "prompts/qwen_chat.jinja",
+                                 "max_steps_per_turn": MAX_STEPS, "template": "prompts/qwen_chat.jinja", "system_prompt": args.system_prompt,
                                  "label": "local adaptation of BFCL multi-turn base; not an official score"})
     print(json.dumps(scores, indent=2))
 

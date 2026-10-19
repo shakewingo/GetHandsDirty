@@ -116,6 +116,14 @@ class BFCLTests(unittest.TestCase):
         self.assertIsNone(stop)
         self.assertEqual([m["role"] for m in messages], ["user", "assistant", "tool", "assistant", "user", "assistant"])
 
+    def test_our_system_prompt_is_the_first_message_when_asked_for(self):
+        replies = iter(["ok", "ok"])
+        _, messages, _ = bfcl.run_entry(ENTRY, bfcl.tools_for(ENTRY, DOCS), lambda m: next(replies),
+                                        lambda s: [], system="Be useful.")
+        self.assertEqual(messages[0], {"role": "system", "content": "Be useful."})
+        _, messages, _ = bfcl.run_entry(ENTRY, bfcl.tools_for(ENTRY, DOCS), lambda m: "ok", lambda s: [])
+        self.assertEqual(messages[0]["role"], "user")
+
     def test_a_function_that_was_not_offered_is_never_executed(self):
         replies = iter([reply(("sqrt", {"x": 4}), ("add", {"a": 1, "b": 1})), "done", "ok"])
         executed = []
