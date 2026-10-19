@@ -67,6 +67,24 @@ Sources: `when2call-sft`, `when2call-pref` (the chosen reply) and `toucan`. Rows
 `--seed` order, whole rows at a time. Design and decisions:
 [docs/STAGE9_ITEM4_PLAN.md](../docs/STAGE9_ITEM4_PLAN.md).
 
+## Stage 9 external test
+
+Two scorers outside our harness, run against the vLLM server like `bench` (`--adapter NAME`, or
+none for the base). Nothing derived from either set is ever trained on.
+
+```sh
+# When2Call (dataset nvidia/When2Call, test/): the repository's own MCQ scoring for Qwen, and its
+# LLM-as-a-judge path (answers on the server, then DeepSeek classifies them; needs DEEPSEEK_API_KEY).
+python -m agent_from_scratch.evals when2call mcq --data when2call_test_mcq.jsonl --output outputs/NEW_MCQ
+python -m agent_from_scratch.evals when2call generate --data when2call_test_llm_judge.jsonl --output outputs/NEW_GEN
+python -m agent_from_scratch.evals when2call judge --responses outputs/NEW_GEN --output outputs/NEW_JUDGE
+# BFCL multi-turn base, a local adaptation (never an official score): BFCL's backends and checker,
+# from a checkout of ShishirPatil/gorilla.
+python -m agent_from_scratch.evals bfcl --bfcl-root gorilla/berkeley-function-call-leaderboard --output outputs/NEW_BFCL
+```
+
+Design, decisions and the Stage 9 results: [docs/STAGE9_ITEM5_6_PLAN.md](../docs/STAGE9_ITEM5_6_PLAN.md).
+
 ## Stage 9 adapter training
 
 `train` turns one exported dataset into LoRA adapters, and `replay` checks a served adapter

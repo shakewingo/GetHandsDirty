@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
+import time
 
 import httpx
 
@@ -236,9 +237,17 @@ def run_judge(responses: list[dict], model: str, workers: int) -> list[dict]:
 
     def ask(messages):
         body = {"model": model, "messages": messages, "thinking": {"type": "disabled"}}
-        reply = client.post("https://api.deepseek.com/chat/completions", json=body)
-        reply.raise_for_status()
-        return reply.json()["choices"][0]["message"]["content"].strip()
+        # A dropped connection or a server error is retried; a run of 300 calls should not
+        # fail on one of them.
+        for attempt in range(5):
+            try:
+                reply = client.post("https://api.deepseek.com/chat/completions", json=body)
+                reply.raise_for_status()
+                return reply.json()["choices"][0]["message"]["content"].strip()
+            except httpx.HTTPError:
+                if attempt == 4:
+                    raise
+                time.sleep(2 ** attempt)
 
     def one(item):
         tools = [json.loads(t) for t in item["tools"]]

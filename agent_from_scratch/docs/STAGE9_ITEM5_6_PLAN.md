@@ -4,6 +4,9 @@ Written October 16, 2026 on branch `feat/stage9-wider-train-data` at `fd4fb1e`, 
 same day at the user's request, without a review pause. Spec: [STAGE.md](STAGE.md), Stage 9
 ("Item 5" and "Item 6"). The code was delegated to AI at the user's explicit request.
 
+**Status: done (October 16, 2026).** Results and reading in [STAGE.md](STAGE.md), Stage 9 ("Item 5
+complete", "Item 6 complete", "Stage 9 complete"); the session record is section 4 below.
+
 **Goal.** Build the two external scorers, check them on the base model (Item 5), then freeze the
 tree once and run the base and the final candidates, teacher-v3 and mix, on test and on the
 external test (Item 6). Nothing is chosen on these numbers.
@@ -45,13 +48,46 @@ external test (Item 6). Nothing is chosen on these numbers.
 
 ## 3. Steps
 
-- [ ] **1.** `evals/external/when2call.py` and `evals/external/bfcl.py`, the commands `when2call`
+- [x] **1.** `evals/external/when2call.py` and `evals/external/bfcl.py`, the commands `when2call`
   and `bfcl`, with tests that need no model.
-- [ ] **2.** Commit; a shallow clone passes the suite.
-- [ ] **3.** Rent; start the adapter upload; set up; fetch the two repositories at the pinned
+- [x] **2.** Commit; a shallow clone passes the suite.
+- [x] **3.** Rent; start the adapter upload; set up; fetch the two repositories at the pinned
   commits.
-- [ ] **4.** Item 5: base-only server; run each scorer on the base; read the outputs.
-- [ ] **5.** Item 6: `dataset --check` writes the manifest; restart the server with both
+- [x] **4.** Item 5: base-only server; run each scorer on the base; read the outputs.
+- [x] **5.** Item 6: `dataset --check` writes the manifest; restart the server with both
   adapters; test with three seeds per arm; the external test per arm.
-- [ ] **6.** Copy back, delete the pod, judge the When2Call replies on the Mac, record in
+- [x] **6.** Copy back, delete the pod, judge the When2Call replies on the Mac, record in
   STAGE.md.
+
+## 4. Record (October 16)
+
+**Step 1–2.** `evals/external/when2call.py` and `bfcl.py`, 13 tests; commit `e2e9fc8`; a clean
+sparse clone passes 462 tests.
+
+**Step 3.** Pod `ohqyh51by0em9q`, one A40 in EU-SE-1, \$0.59 per hour, from about 05:20 to 08:10
+UTC: \$1.69. The pod fetched When2Call's test files (dataset revision `0582f77`) and BFCL (commit
+`6ea5797`) itself. The installer resolved transformers 5.20.0; it was pinned back to 5.19.0, the
+version Items 3–4 trained and served with. The two adapters (245 MB) uploaded in about ten
+minutes this time, and their hashes match their training records (teacher-v3 `7a7357fd…`, mix
+`1388d076…`).
+
+**Step 4 — Item 5.** BFCL's ground-truth calls, fed through our tool conversion and its checker,
+pass 200 of 200 (17 to 39 tools per entry). On a base-only server: When2Call MCQ accuracy 0.456,
+acc_norm 0.500, macro F1 0.300, hallucination rate 0.225; the base answered 205 of the 300
+judge questions with a call; BFCL 0.37. A bug cost twenty minutes: `item5.sh` ended with a bare
+`wait`, which also waits for the background vLLM server and so never returns. `item6.sh` waits
+for its own jobs only.
+
+**Step 5 — Item 6.** `dataset --check` at `e2e9fc8`: 460 of 460, gates passed. One server
+process with `teacher-v3` and `mix`. Test: 9 runs of 140 tasks, `--final --manifest`, no drift,
+no protocol mismatch; measured and served prompt tokens agree on all 4,291 requests. External
+test on the same three arms.
+
+**Step 6.** Results copied back and checked (`item6.tgz`, sha256 `5d3ef4d4…`) by a job on the
+Mac, which then deleted the pod; a guard on the pod would have removed it 30 minutes after the
+work ended. The When2Call answers were judged on the Mac with DeepSeek; one run failed on a
+dropped connection, so the judge now retries an API call up to five times.
+
+**Diagnoses** (detail in STAGE.md): mix's BFCL drop is follow-up questions (136 of its 147
+turns without a call) about information the conversation already holds, and the drop of both
+adapters on `append_list_item` is a targeted `edit_file` habit that fails on multi-line JSON.

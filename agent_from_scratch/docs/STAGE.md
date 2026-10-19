@@ -43,7 +43,7 @@ as pilots; mark missing required outcomes incomplete instead of silently extendi
 | Completed | **3 — implementation complete** | Context budgeting, automatic/manual compact, rule reload at the boundary, versioned checkpoints and restart replay; real-model evidence for 3B items 2-4 and 3C still outstanding |
 | Deferred past 11 | **4A–4B — deferred (decided September 22, 2026)** | Bounded durable memory, search/read, correction/forget, fresh-session recall |
 | Completed | **8 — complete: frozen benchmark and protocol, Qwen3-4B control baseline (test mean pass@1 0.667)** | Resettable benchmark, isolated splits, measured baseline, frozen harness |
-| Research | **9 — in progress, required outcome** | LoRA SFT of the 4B student on train tasks and public data, chosen on val, reported once on test and an external benchmark; Items 1–4 done |
+| Completed | **9 — complete: test mean pass@1 0.419 (base) → 0.724 (teacher-v3), 0.774 (mix)** | LoRA SFT of the 4B student on train tasks and public data, chosen on val, reported once on test and an external benchmark |
 | Later experiment | **10 — draft, conditional** | 2–3 rounds of expert iteration (weak-RSI question); GRPO pilot as a second arm from M1 if M1's samples meet its go conditions |
 | Delivery | **11 — draft, required outcome** | Held-out paired results and reproducible demo; val-only recipe search optional |
 | Future branches | **4C / 5 / 6 / 7 — optional** | Dream / skills and MCP / jobs / child agent and planning |
@@ -669,9 +669,9 @@ allowed only after the comparison, and it gets its own spot check.
 
 **Budget:** US$100 in total, including teacher API calls, GPU hours, storage and failed runs.
 Revised October 13, 2026: the ceiling is US$200. The rows below are the original US$100 plan
-plus one row for Stage 9 Items 4–6. Spent so far: about \$16.0 (Stage 8 baseline \$0.35, teacher
+plus one row for Stage 9 Items 4–6. Spent so far: about \$17.7 (Stage 8 baseline \$0.35, teacher
 \$0.07, RFT sampling \$0.34, Item 3 Session A \$1.69, Item 4 teacher \$0.18–0.37 and Session A
-\$13.21). These are rough allocations to recheck against live prices before renting:
+\$13.21, Items 5–6 session \$1.69 and judging a few cents). These are rough allocations to recheck against live prices before renting:
 
 | Item | Assumed scale | Estimate |
 |---|---|---:|
@@ -719,7 +719,7 @@ keep/revert, and a full ledger. Harness self-modification (STOP, Gödel Agent, D
 Machine) is out of scope: a 3–4B actor cannot do it, so a teacher API would do the real work and
 the attribution would be muddled.
 
-## Stage 9 — adapter SFT, chosen on val and reported once on test · in progress
+## Stage 9 — adapter SFT, chosen on val and reported once on test · complete
 
 **Direction (decided October 14, 2026).** Train LoRA adapters for the student on our train
 tasks and on public tool-use data, make every choice on val, and report the agent's
@@ -756,8 +756,9 @@ scores. Every other number is diagnosis. All runs use Stage 8's server command a
 - [x] Item 4 — more training data (more train shapes, public tool-use data) and the
   candidates trained on it, chosen on val: mix. Guide and record:
   [STAGE9_ITEM4_PLAN.md](STAGE9_ITEM4_PLAN.md).
-- [ ] Item 5 — the external test, checked on the base.
-- [ ] Item 6 — the final test, run once for the base and the final candidates.
+- [x] Item 5 — the external test, checked on the base.
+- [x] Item 6 — the final test, run once for the base and the final candidates. Guide and
+  record for both: [STAGE9_ITEM5_6_PLAN.md](STAGE9_ITEM5_6_PLAN.md).
 
 **Output:** adapters that reload into the ordinary loop, with dataset, config and cost
 records; the val comparisons behind every choice; and one table of test and external scores
@@ -1118,34 +1119,114 @@ chosen adapters), `-sft-teacher-wide/`, `-sft-mix-v1/`, `-public-when2call/`, `-
 trained by [`scripts/train_stage9_adapters.sh`](../scripts/train_stage9_adapters.sh). 449 unit
 tests pass.
 
-### Item 5 — the external test
+### Item 5 complete — the external test (October 16, 2026)
 
-Val and test both live inside our harness. The external test asks whether a candidate is
-better outside it, or has lost something general.
+Val and test both live inside our harness. The external test asks whether a candidate is better
+outside it, or has lost something general. Guide and record:
+[STAGE9_ITEM5_6_PLAN.md](STAGE9_ITEM5_6_PLAN.md). The code was delegated to AI at the user's
+explicit request.
 
-- [ ] Score the When2Call test set (`mcq` 3,652 rows, `llm_judge` 300) the way the dataset's
-  own evaluation does; read its script first.
-- [ ] Build a local BFCL multi-turn subset, always labelled a local adaptation and never an
-  official score.
-- [ ] Run each scorer on the base only, to check that it works.
-- [ ] Never train on anything derived from either set. When2Call's train and test sets come
-  from one generator, so mix's When2Call score is in-distribution and is labelled so.
-- [ ] Optional: a small IFEval or general-QA subset, to catch damage outside tool use.
+- **When2Call MCQ** (3,652 rows), as the repository's lm-eval-harness task for Qwen scores it:
+  each of four candidate replies (direct, tool call, request for info, cannot answer) by its
+  log-likelihood after the repository's Qwen tool prompt; accuracy, length-normalised accuracy,
+  macro F1, and the hallucination rate (a tool call chosen on a row with no tools whose answer
+  is "cannot answer"). Command `when2call mcq`.
+- **When2Call LLM-as-a-judge** (300 rows): the model answers with the tools offered (greedy,
+  our template, which writes Qwen's default system line); DeepSeek, thinking off, classifies
+  each answer with the repository's judge prompt. The repository does not name its judge model.
+  Commands `when2call generate` and `when2call judge`.
+- **BFCL multi-turn base** (200 entries), a local adaptation, never an official score: the
+  model plays each entry's user turns in a plain chat loop with the entry's tools (not our
+  harness), greedy, at most 20 steps per turn; its calls run on BFCL's own simulated backends,
+  and BFCL's own checker scores the backend state and results. Fed through the same path, BFCL's
+  ground-truth calls pass 200 of 200. Command `bfcl`.
+- **On the base**, the scorers ran cleanly (MCQ accuracy 0.456, BFCL 0.37) and were then run
+  again for Item 6 on its server (0.456, 0.36; greedy decoding on a batched server is not
+  exactly repeatable). The optional IFEval subset was not built. Nothing from either set was
+  trained on; mix's When2Call score is in-distribution, because its training rows come from
+  When2Call's own generator.
 
-### Item 6 — the final test, once
+### Item 6 complete — the final test, once (October 16, 2026)
 
-- [ ] All code is final and committed. On the pod, from a clean clone,
-  `dataset --output ... --check` writes the one versioned manifest, covering the 140 test
-  tasks.
-- [ ] Run the base and the final candidates on `--split test`, three seeds each, with
-  `--final --manifest`, on one server process.
-- [ ] `aggregate` the test runs per arm, and pair each candidate with the base by task ID.
-- [ ] Run the external test on the same arms.
-- [ ] Report in this stage the headline table (test mean pass@1 and pass^3, and external
-  scores, per arm), the costs and the limits. Nothing is chosen on these results.
+At commit `e2e9fc8`, on one A40, from a clean clone: `dataset --check` wrote the versioned
+manifest (460 of 460 scripted passes, 0 answer-only, 0 wrong-answer, 76 of 76 faults observed),
+and one server process served the base, teacher-v3 and mix. Every test run used `--final
+--manifest` with no drift and no protocol mismatch, and measured and served prompt tokens agree
+on all 4,291 requests. Nothing is chosen on these results.
 
-**Cost.** Projected, not measured: the teacher pass on 80 tasks cost \$0.07 and Item 3's GPU
-session \$1.69. Items 4–6 should fit the \$5–20 line in the budget table.
+**Headline.** Test: 140 tasks on 14 shapes training never saw, three seeds per arm.
+
+| | base | teacher-v3 | mix |
+|---|---|---|---|
+| **test mean pass@1 / pass^3** | 0.419 / 0.36 | 0.724 / 0.64 | **0.774 / 0.71** |
+| passed per seed (of 140) | 57, 58, 61 | 101, 106, 97 | 105, 111, 109 |
+| Stage 8's 60 test tasks | 0.683 | 0.700 | 0.728 |
+| Stage 9's 80 test tasks | 0.221 | 0.742 | 0.808 |
+| false completions | 31 of 132 | 5 of 132 | 1 of 132 |
+| When2Call MCQ accuracy (normalised) | 0.456 (0.500) | 0.486 (0.535) | 0.694 (0.675)* |
+| When2Call hallucination rate | 0.225 | 0.233 | 0.027* |
+| When2Call judge, mean of three kinds | 0.533 | 0.500 | 0.697* |
+| BFCL multi-turn base (local adaptation) | 0.360 | **0.445** | 0.285 |
+
+\* In-distribution: mix trained on When2Call's `train_pref`, from the same generator.
+
+By family, test mean pass@1 / pass^3:
+
+| | base | teacher-v3 | mix |
+|---|---|---|---|
+| inspection | 0.439 / 0.26 | 0.851 / 0.76 | 0.833 / 0.74 |
+| recovery | 0.688 / 0.69 | 1.000 / 1.00 | 1.000 / 1.00 |
+| stopping | 0.094 / 0.09 | 0.208 / 0.12 | 0.438 / 0.31 |
+| updates | 0.447 / 0.42 | 0.798 / 0.66 | 0.807 / 0.76 |
+
+**What the evidence shows.**
+
+- **Both candidates are large gains on unseen task shapes.** Paired with the base per seed,
+  teacher-v3 gains 46 to 53 tasks and loses 5 to 10; mix gains 60 to 62 and loses 9 to 12. Most
+  of the gain is on Stage 9's four test shapes (0.221 to 0.742 and 0.808); on Stage 8's ten it
+  is small (0.683 to 0.700 and 0.728). Mix over teacher-v3: 10 to 17 gains against 5 to 9
+  losses per seed. Recovery reaches 1.00 for both.
+- **Stopping improves but stays weak.** Mix 0.438: `ambiguous_choice_stop` 0.00 → 1.00,
+  `missing_file_report` 0.00 → 0.56 (the missing-file shape added in Item 4 is the likely
+  cause), `unit_complete_total` 0.15 → 0.23.
+- **A regression inside our harness: edits of JSON lists.** `append_list_item` falls from 1.00
+  (base) to 0.11 (teacher-v3) and 0.33 (mix); mix also drops on `pointer_nested_edit` (0.94 →
+  0.44) and `sum_across_files` (0.44 → 0.22). Both adapters learned to prefer targeted
+  `edit_file` calls, as the teacher's demonstrations do, where the base rewrites the file with
+  `write_file`. On a multi-line JSON list the targeted edit fails: teacher-v3 copies
+  `read_file`'s line-number prefixes into `old_text` and loops until the 6-request limit; mix
+  writes invalid JSON and still claims `DONE`. It is the same edit loop that sank teacher-wide
+  on val (Item 4).
+- **A regression outside it: mix asks instead of acting.** On BFCL mix scores 0.285, below the
+  base (0.360), while teacher-v3 is above it (0.445). Mix makes no call in 147 of 734 user turns
+  (base 26, teacher-v3 0); 136 of those are follow-up questions about information the
+  conversation already holds (asked to grep "the file" from the previous turn, it asks which
+  file), and 11 copy When2Call's refusal wording. That is When2Call's "ask when information is
+  missing" behaviour (646 of its 2,000 rows) carried into multi-turn context. Inside our
+  harness, where every task is self-contained, it did not show (no failed val run asked or
+  declined). On When2Call's own judge set the same shift shows as fewer calls where a call is
+  right (0.56, against the base's 0.93).
+
+**Limits.** One training seed per candidate, and the epochs were chosen on val. The test is a
+small local benchmark (140 tasks, 14 shapes), not a claim about general agent ability. The
+BFCL numbers come from a local adaptation (our template and decoding, one category) and are not
+comparable with the leaderboard. When2Call's judge is DeepSeek, not the repository's (unnamed)
+judge. Mix's When2Call scores are in-distribution.
+
+**Cost.** Items 5–6 GPU session \$1.69 (one A40, about 2.9 hours); the When2Call judging, about
+900 DeepSeek calls without thinking, a few cents. Stage 9 in all: about \$17.7 of the \$200.
+
+Evidence: `outputs/stage9-item6-20261016-session/` (the manifest and gate summary, the test runs
+and comparisons, the external runs `ext-*` and Item 5's `item5-*`, logs and scripts).
+
+### Stage 9 complete (October 16, 2026)
+
+LoRA SFT on the teacher's verified trajectories raises the 4B student from 0.419 to 0.724 on
+test shapes it never saw; adding wider task shapes and public tool-use data raises it to 0.774,
+with fewer false completions. Two costs came with it, both measured: the adapters lost the base
+model's whole-file rewrite on JSON-list edits, and the public When2Call rows taught mix to ask
+for information it already had, which costs it 0.16 on BFCL against teacher-v3. M1 for
+Stage 10 is mix, chosen on val before these results.
 
 ## Stage 10 — expert iteration and outcome learning · draft, conditional
 
@@ -1375,10 +1456,9 @@ The capped memory index remains planned Stage 4 work.
 on a host that can hold the 7B weights, and record the retained/lost facts in
 [context-memory.md](context-memory.md); that is Stage 3's one outstanding gap. Stage 8 is
 complete: the benchmark and protocol are frozen and the Qwen3-4B control baseline is recorded
-(`docs/benchmark.md`). Stage 9 Items 1–4 are complete: the task pool, the teacher and RFT
-examples, the LoRA recipe, and the wider data. The final candidates are teacher-v3 (0.932 on val)
-and mix (0.943); mix is M1. Item 5 is next: the When2Call and BFCL external test, checked on the
-base. For each session record: what I built, what I broke,
+(`docs/benchmark.md`). Stage 9 is complete: on test, base 0.419, teacher-v3 0.724, mix 0.774;
+mix is M1 but asks instead of acting outside our harness (BFCL 0.285). Stage 10 is next: Item 1
+samples M1 on the 320 train tasks to measure its yield. For each session record: what I built, what I broke,
 what the evidence shows, what I can explain unaided, and the next smallest gap.
 
 [ch1]: ../../../harness-books/book1-claude-code/chapter-01-why-harness-engineering.md
