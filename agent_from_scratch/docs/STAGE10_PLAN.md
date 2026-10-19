@@ -346,3 +346,32 @@ included, against the 22 projected. The pipeline works end to end on the GPU.
 
 **Decision pending with the user.** Both pre-registered stop conditions fired, so Sessions B and
 C did not start.
+
+## 7. Demonstrations first: mix-v3 (decided with the user, October 19)
+
+Session A showed that M1 cannot be a data generator for what Stage 10 wants to improve: it
+solves Item 4's 320 tasks every time, and on Item 7's shapes it lacks the skill (looking before
+deciding) that either arm would select. STAGE.md's answer to "the weak skeletons are still
+nearly all-fail" is to add demonstrations, then iterate. The teacher's demonstrations of Item 7's
+100 tasks already exist (teacher-wide-v2); mix never saw them.
+
+| # | Decision | Why |
+|---|---|---|
+| H1 | **mix-v3 = mix's data with teacher-wide replaced by teacher-wide-v2** (379 more examples, covering Item 7's train tasks), repeated 3 times as teacher-wide was in mix (`--own-share 0.445` gives $k = 3$), and When2Call and Toucan exactly as in mix: the original When2Call, not Item 7's capped one. 9,007 rows | one change from mix: the demonstrations. Unlike mix-v2, the When2Call ask rows stay, so mix-v3 against mix-v2 also separates Item 7's two changes |
+| H2 | **Item 3's recipe**; the epoch chosen on val seed 0, the earlier on a tie | unchanged |
+| H3 | **M1 choice, F8's rule:** mix-v3 replaces mix as M1 if its val pass@1 (three seeds) is not lower than mix's, both on one server. Otherwise M1 stays mix, and Stage 10 closes as a no-go (mix failed G1 and A1) | as Item 7 chose |
+| H4 | **Gates on the new M1's Item 1:** STAGE.md's entry conditions and A1 (at least 5% ask-side success) gate both arms; **G1 is re-based to the 100 tasks that can move:** at least 38 mixed tasks (3 in 8 of 100), in at least two skeletons. It gates GRPO only. If A1 or an entry condition fails, Stage 10 closes as a no-go | Item 4's 320 tasks are saturated (M1: 0.999), so 158 of 420 cannot be met by a model that keeps them solved. Fixed here, before mix-v3 is sampled |
+| H5 | **If the gates pass, Sessions B and C run as planned from the new M1.** Each self-SFT round's data is mix-v3's (teacher-wide-v2 ×3, When2Call, Toucan) plus M_k's verified set once; GRPO starts from mix-v3's adapter | the arms are unchanged; only M1 and its data change |
+
+**Code.** `stage10_ei_round.sh` passes `--own-share` from `OWN_SHARE` (default 1/3, as before),
+so a round built on teacher-wide-v2 keeps $k = 3$ (`TEACHER_WIDE=…-teacher-wide-v2 OWN_SHARE=0.445`).
+
+**Steps.**
+
+- [x] Build `sft-mix-v3` locally: `mix --own teacher-wide-v2 --public when2call toucan --own-share 0.445 --seed 0`; check $k = 3$ and 9,007 rows. Built as `outputs/stage10-sft-mix-v3`: 9,007 rows, $k = 3$, own share 0.4447.
+- [ ] **Session E** (one A100): train mix-v3; serve mix and mix-v3's three epochs; choose the epoch on val seed 0; val seeds 1–2 for that epoch and seeds 0–2 for mix; apply H3. If mix-v3 becomes M1: Item 1 on it (420 tasks × 8 seeds), then wait at the gate for H4's reading. On go, the self-SFT rounds run on the same pod and the GRPO pilot on a second pod. Projected: 6.5 hours to the gate, about \$12.
+- [ ] Record H3 and H4 here and in STAGE.md.
+
+**Cost, revised with Session A's measurements** (an iteration took 4.3 minutes, not 22): Session
+E to the gate about \$12; Sessions B about \$43; C about \$6 (three passes of about 50 minutes);
+D about \$2. Stage 10 about \$64, bringing the total to about \$95 of \$200.

@@ -11,6 +11,9 @@ M1_ADAPTER=${M1_ADAPTER:-outputs/sft-mix-r1/epoch-2}
 TEACHER_WIDE=${TEACHER_WIDE:-outputs/stage9-item4-20261015-sft-teacher-wide}
 WHEN2CALL=${WHEN2CALL:-outputs/stage9-item4-20261015-public-when2call}
 TOUCAN=${TOUCAN:-outputs/stage9-item4-20261015-public-toucan}
+# The teacher set's share of a round's rows, from which `mix` picks its repeat factor: 1/3 gives
+# teacher-wide x3 as in mix; with teacher-wide-v2 (mix-v3, section 7 of the plan) 0.445 gives x3.
+OWN_SHARE=${OWN_SHARE:-0.3333333333333333}
 LOGS=${LOGS:-/root/logs}
 SEEDS="0 1 2 3 4 5 6 7"  # Stage 9 Item 2's sampling protocol (S2)
 # Mix's long and short rows fragment the CUDA allocator (see train_stage9_adapters.sh).

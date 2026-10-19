@@ -20,7 +20,8 @@ for s in $SEEDS; do runs+=("outputs/s10-m$K-train-s$s"); done
 run_logged "$LOGS/s10-rft-m$K.log" python -m agent_from_scratch.evals export --track rft \
     --max-per-task 1 --flawed-turns drop --output "outputs/s10-rft-m$K" "${runs[@]}"
 run_logged "$LOGS/s10-sft-ei$K.log" python -m agent_from_scratch.evals mix --own "$TEACHER_WIDE" \
-    --public "$WHEN2CALL" "$TOUCAN" --self "outputs/s10-rft-m$K" --seed 0 --output "outputs/s10-sft-ei$K"
+    --public "$WHEN2CALL" "$TOUCAN" --self "outputs/s10-rft-m$K" --own-share "$OWN_SHARE" --seed 0 \
+    --output "outputs/s10-sft-ei$K"
 run_logged "$LOGS/s10-m$NEXT-train.log" python -m agent_from_scratch.evals train \
     --examples "outputs/s10-sft-ei$K" --output "outputs/s10-m$NEXT-r1"
 
