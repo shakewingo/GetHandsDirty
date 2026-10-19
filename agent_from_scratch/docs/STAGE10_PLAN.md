@@ -221,7 +221,7 @@ Each session: A100 80 GB at \$1.79 per hour, a pod-side self-delete guard with a
 start + 1.5 × the projection, a local watcher that copies `item.tgz` back, and the pod deleted
 at the end.
 
-- [ ] **Session A — Item 1 and the GRPO smoke** (projected 2 hours, about \$4).
+- [x] **Session A — Item 1 and the GRPO smoke** (projected 2 hours, about \$4; ran 30 minutes, about \$0.90; record in section 6).
   1. Serve M1. Run `stage10_sample.sh m1-train M1`: 3,360 rollouts.
   2. Read beside M0, per skeleton: mean pass@1 (`passed` and strict), tasks with a verified
      trajectory, mixed tasks under the strict reward, and the `points_save_recovery` rollouts
@@ -302,3 +302,47 @@ and tokens trained; loss; gradient norm; minutes.
 | **Stage 10** | | **about \$69**, bringing the total to about \$100 of \$200 |
 
 Session A replaces these projections with measured ones before B and C start.
+
+## 6. Record (October 19)
+
+**Code.** Tasks 1–7 committed on `feat/stage10-ei-grpo` (`b466aff` … `f910f74`). The dry runs of
+Task 7 caught two bash bugs before any GPU time (an empty array under `set -u` in bash 3.2, and a
+`}` inside `${1:?…}` that ended the expansion early).
+
+**Session A.** Pod `jdzjkbjxmecsdq`, one A100 80 GB, 16:58–17:26 UTC, about \$0.90. Setup
+(Stage 9's versions, M1's hash `1388d076…`, 52 tests in 12 seconds with threads capped) took two
+minutes; Item 1 (3,360 rollouts) and M1's val (three seeds) together took 20 minutes, far under
+the projection. The session stopped at the gate, as A1 requires; no adapter was trained.
+
+M1 on the train split, 8 seeds, strict reward:
+
+| Tasks | Attempt success rate | Solved at least once | Solved sometimes, not always |
+|---|---:|---:|---:|
+| all 420 | 0.839 | 363 | 32 |
+| Item 4's 320 | 0.999 | 320 | 1 |
+| Item 7's 100 | 0.328 | 43 | 31 |
+
+M1 on val, three seeds, on this server: 87, 82, 91 passed, pass@1 0.833, asked instead 9 of 312.
+This reproduces Item 7's 0.833.
+
+| Gate | Result |
+|---|---|
+| STAGE.md: M1's yield on the weak skeletons above M0's | yes: 1.000 on each of the three (M0: 0.044, 0.156, 0.006) |
+| STAGE.md: `points_save_recovery` reaches a write | yes: 160 of 160 rollouts (M0: 5 of 160) |
+| G1: at least 158 mixed tasks in at least two skeletons | **no-go**: 32 mixed, in 5 skeletons |
+| A1: ask-side success at least 5% | **stop**: 1 of 240 (0.4%) |
+
+How M1 fails Item 7's shapes. On the ask side of the two follow-up shapes it acts anyway
+(`UPDATED` in 154 of 160). On `lookup_then_act` it replies `NEED_INPUT` without searching, on
+both sides (0 of 160: on the act side the file exists, and on the ask side the answer lacks the
+listing as evidence). On `json_remove_array_item` it claims `UPDATED` with the file unchanged, or
+writes on a no-op (3 of 160 pass). The skill both arms would select is not in M1's samples: it
+does not look before it decides.
+
+**GRPO smoke** (one iteration on 42 tasks, never used again): 336 rollouts, mean reward 0.845,
+2 mixed groups, 34 all pass, 6 all fail; 103 rows and 3,835 trained tokens; one step in 85
+seconds (loss −0.013, gradient norm 0.78). The whole iteration took 4.3 minutes, sampling
+included, against the 22 projected. The pipeline works end to end on the GPU.
+
+**Decision pending with the user.** Both pre-registered stop conditions fired, so Sessions B and
+C did not start.
