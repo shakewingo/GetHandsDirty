@@ -108,6 +108,9 @@ class FitTests(unittest.TestCase):
             import transformers  # noqa: F401
         except ImportError:
             self.skipTest("torch, transformers and peft are not installed (requirements-train.txt)")
+        # A GPU pod reports the host's cores (128) under a much smaller CPU quota (13.6): torch's
+        # threads then spin and get throttled, and these 11-second tests ran past 47 minutes.
+        torch.set_num_threads(min(torch.get_num_threads(), 4))
         self.torch = torch
 
     def adapted(self):

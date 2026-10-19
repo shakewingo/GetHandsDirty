@@ -1228,6 +1228,14 @@ model's whole-file rewrite on JSON-list edits, and the public When2Call rows tau
 for information it already had, which costs it 0.16 on BFCL against teacher-v3. M1 for
 Stage 10 is mix, chosen on val before these results.
 
+**Item 7 (October 19)** — mix-v2, trained on data that contrasts acting with asking, and a val
+set extended with 40 multi-turn tasks ([STAGE9_ITEM7_PLAN.md](STAGE9_ITEM7_PLAN.md)). On val,
+three seeds, 104 tasks: base 0.615, teacher-v3 0.837, mix 0.833, mix-v2 0.824. Mix-v2 never
+asks where it should act (0 runs of 312, mix 8), but its pass@1 is lower than mix's, and the
+rule needed both, so **M1 stays mix**. No model asks where it should: on the multi-turn ask
+variant all four score 0 of 30, mix-v2 acting anyway in 26. Mix-v2 is kept for Stage 11 under
+the new freeze; its BFCL diagnostic, after a BFCL-motivated change, is 0.360.
+
 ## Stage 10 — expert iteration and outcome learning · draft, conditional
 
 **Primary: 2–3 rounds of expert iteration.** M1 samples → the verifier filters → SFT produces M2
@@ -1289,7 +1297,8 @@ Stage 9 Item 2's 640 rollouts took 26 minutes and \$0.34 on one A40.
 
 **Entry conditions.** Stage 10's rounds start only when each of these is settled:
 
-- [x] Stage 9 Item 4 has chosen M1 on val: mix (val mean pass@1 0.943).
+- [x] Stage 9 Item 4 has chosen M1 on val: mix (val mean pass@1 0.943). Item 7 kept it against
+  mix-v2 on the 104-task val (0.833 against 0.824).
 - [ ] Item 1 is done. If M1's yield on the weak skeletons is no higher than M0's, expert
   iteration has nothing to iterate on, and that is the result to report.
 - [ ] `points_save_recovery` reaches a write in M1's samples. Stage 9 Item 4 left it unchanged
@@ -1457,7 +1466,8 @@ on a host that can hold the 7B weights, and record the retained/lost facts in
 [context-memory.md](context-memory.md); that is Stage 3's one outstanding gap. Stage 8 is
 complete: the benchmark and protocol are frozen and the Qwen3-4B control baseline is recorded
 (`docs/benchmark.md`). Stage 9 is complete: on test, base 0.419, teacher-v3 0.724, mix 0.774;
-mix is M1 but asks instead of acting outside our harness (BFCL 0.285). Stage 10 is next: Item 1
+mix is M1 but asks instead of acting outside our harness (BFCL 0.285); Item 7's mix-v2 stopped
+asking where it should act but did not beat mix on val, so M1 stays mix. Stage 10 is next: Item 1
 samples M1 on the 320 train tasks to measure its yield. For each session record: what I built, what I broke,
 what the evidence shows, what I can explain unaided, and the next smallest gap.
 
