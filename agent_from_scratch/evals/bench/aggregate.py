@@ -1,11 +1,12 @@
 """Combine k sampled bench runs of one split into per-task pass counts and pass rates.
 
-Usage: python -m agent_from_scratch.evals aggregate RUN_DIR RUN_DIR ... [--output FILE]
+Usage: python -m agent_from_scratch.evals aggregate RUN_DIR RUN_DIR ... [--strict] [--output FILE]
 
 For a task passed c times in k samples: mean pass@1 is c/k averaged over tasks, pass^k is the
 share of tasks passed every time (reliability), and pass@k the share passed at least once.
 Tasks with 0 < c < k are the ones whose outcome varies across samples, which Stage 10's GRPO
-precondition needs.
+precondition needs. --strict counts GRPO's reward instead of `passed`: a pass whose answer is
+not exactly the requested value counts as a failure.
 """
 
 import argparse
@@ -21,26 +22,35 @@ def _rates(passes: list[int], k: int) -> dict:
             "mixed": sum(0 < c < k for c in passes)}
 
 
-def aggregate(runs: list[list[dict]], seeds: list[int]) -> dict:
-    """`runs` are results.json record lists, one per seed, over the same task IDs."""
+def aggregate(runs: list[list[dict]], seeds: list[int], *, strict: bool = False) -> dict:
+    """`runs` are results.json record lists, one per seed, over the same task IDs.
+
+    With `strict`, a task's passes count GRPO's reward (`grpo.reward`) instead of `passed`.
+    """
     if len(runs) < 2 or len(set(seeds)) != len(seeds):
         raise ValueError("Aggregate at least two runs with distinct seeds.")
     ids = [{record["id"] for record in run} for run in runs]
     if any(task_ids != ids[0] for task_ids in ids):
         raise ValueError("Every run must cover the same task IDs.")
+    if strict:
+        from ..sft.grpo import reward as counts
+    else:
+        def counts(record: dict) -> int:
+            return int(record["passed"])
     k = len(runs)
     tasks: dict[str, dict] = {}
     for run in runs:
         for record in run:
             row = tasks.setdefault(record["id"], {"skeleton": record["skeleton"],
                                                   "family": record["family"], "passes": 0})
-            row["passes"] += record["passed"]
+            row["passes"] += counts(record)
     groups: dict[str, dict[str, list[int]]] = {"family": {}, "skeleton": {}}
     for row in tasks.values():
         for key in groups:
             groups[key].setdefault(row[key], []).append(row["passes"])
     claims = [r["false_completion"] for run in runs for r in run if r["false_completion"] is not None]
-    return {"k": k, "seeds": seeds, "overall": _rates([r["passes"] for r in tasks.values()], k),
+    return {"k": k, "seeds": seeds, "strict": strict,
+            "overall": _rates([r["passes"] for r in tasks.values()], k),
             "by_family": {name: _rates(p, k) for name, p in sorted(groups["family"].items())},
             "by_skeleton": {name: _rates(p, k) for name, p in sorted(groups["skeleton"].items())},
             "false_completion": {"count": sum(claims), "claims": len(claims)},
@@ -51,13 +61,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("runs", nargs="+", type=Path, help="bench output directories, one per seed")
     parser.add_argument("--output", type=Path, help="Write the JSON report here instead of stdout")
+    parser.add_argument("--strict", action="store_true",
+                        help="Count GRPO's reward (passed, with the exact answer) instead of passed")
     args = parser.parse_args()
     metadata = [json.loads((run / "metadata.json").read_text()) for run in args.runs]
     if len({(m.get("suite"), m.get("split")) for m in metadata}) != 1:
         parser.error("Runs must come from the same bench suite and split.")
     try:
         report = aggregate([json.loads((run / "results.json").read_text()) for run in args.runs],
-                           [m["seed"] for m in metadata])
+                           [m["seed"] for m in metadata], strict=args.strict)
     except ValueError as error:
         parser.error(str(error))
     text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
