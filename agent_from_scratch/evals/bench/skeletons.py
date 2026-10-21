@@ -1518,3 +1518,8 @@ def registered(split: str | None = None) -> list[Skeleton]:
     leveled = [_at_level(shape, shape.name, shape.split, shape.seeds, levels[shape.name])
                for shape in SHAPES if shape.name in levels]
     return [skeleton for skeleton in [*SKELETONS, *leveled] if split is None or skeleton.split == split]
+
+
+# The Stage 10 shapes live in their own modules, use this module's helpers, and add themselves
+# to SHAPES; importing the module (not a name from it) works whichever side is imported first.
+from . import shapes_rules  # noqa: E402,F401
