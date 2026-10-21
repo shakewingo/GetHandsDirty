@@ -112,6 +112,8 @@ parameter rises with the level), plus the shape-specific tests below.
 
 Each: steps as Task 1 (failing tests, run, implement, run, commit `feat: <group> shapes`).
 
+- [x] Tasks 2–5 done: `e4baf3e`, `1eab226`, `1a28f4d` and the exploit review; no cheat earns the reward on the new train shapes at levels 3 and 5.
+
 ### Task 6: The level rule and the pool restriction
 
 **Files:** create `evals/bench/levels.py` (the `levels` command); modify `evals/sft/grpo.py` (`train_pool(skeletons=None)`, `grpo tasks --skeletons`), `scripts/stage10_lib.sh` (`STAGE10_POOL` → `sample_train` passes `--tasks`), `evals/__main__.py`; tests `tests/test_levels.py`, `tests/test_sft_grpo.py`.
