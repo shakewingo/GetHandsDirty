@@ -369,9 +369,42 @@ so a round built on teacher-wide-v2 keeps $k = 3$ (`TEACHER_WIDE=…-teacher-wid
 **Steps.**
 
 - [x] Build `sft-mix-v3` locally: `mix --own teacher-wide-v2 --public when2call toucan --own-share 0.445 --seed 0`; check $k = 3$ and 9,007 rows. Built as `outputs/stage10-sft-mix-v3`: 9,007 rows, $k = 3$, own share 0.4447.
-- [ ] **Session E** (one A100): train mix-v3; serve mix and mix-v3's three epochs; choose the epoch on val seed 0; val seeds 1–2 for that epoch and seeds 0–2 for mix; apply H3. If mix-v3 becomes M1: Item 1 on it (420 tasks × 8 seeds), then wait at the gate for H4's reading. On go, the self-SFT rounds run on the same pod and the GRPO pilot on a second pod. Projected: 6.5 hours to the gate, about \$12.
+- [x] **Session E** (one A100; record below): train mix-v3; serve mix and mix-v3's three epochs; choose the epoch on val seed 0; val seeds 1–2 for that epoch and seeds 0–2 for mix; apply H3. If mix-v3 becomes M1: Item 1 on it (420 tasks × 8 seeds), then wait at the gate for H4's reading. On go, the self-SFT rounds run on the same pod and the GRPO pilot on a second pod. Projected: 6.5 hours to the gate, about \$12.
 - [ ] Record H3 and H4 here and in STAGE.md.
 
 **Cost, revised with Session A's measurements** (an iteration took 4.3 minutes, not 22): Session
 E to the gate about \$12; Sessions B about \$43; C about \$6 (three passes of about 50 minutes);
 D about \$2. Stage 10 about \$64, bringing the total to about \$95 of \$200.
+
+### Record of Session E (October 20–21)
+
+**Two failed starts on a faulty host.** Pod `2xl3p7d3sxxuqd` (A100 SXM): training crashed in
+epoch 2 twice, with different GPU errors at different points (`CUBLAS_STATUS_EXECUTION_FAILED`
+at 04:15, `unspecified launch failure` at 08:53, October 20), and the host rebooted after each.
+RunPod reported a network outage on that server. The crash logs are kept in
+`outputs/stage10-20261020-session-e/crashes/`. The two runs cost about \$15. Lesson: the pod's
+own `runpodctl` has no API key, so the pod-side self-delete guard never worked; the guard must
+run on the Mac.
+
+**The run.** Pod `69e7txgnniygbp`, from 08:56 UTC, October 20. mix-v3 trained 09:22–15:27 (about
+2 hours per epoch). H3 on one server, val three seeds:
+
+| | Passed by seed | pass@1 | Asked instead (of 312) |
+|---|---|---:|---:|
+| mix | 89, 87, 91 | 0.856 | 5 |
+| mix-v3, epoch 2 (seed 0 by epoch: 95, 97, 93) | 97, 97, 96 | **0.929** | 0 |
+
+**mix-v3 becomes M1.** Item 1 on it (420 tasks × 8 seeds, strict reward): attempt success rate
+0.996, every task solved at least once, 9 mixed (7 of Item 4's 320, 2 of Item 7's 100). The ask
+side of the three act/ask shapes: 240 of 240 (mix: 1 of 240).
+
+**H4.** Entry conditions pass (the weak skeletons at 1.00, 1.00 and 0.94; `points_save_recovery`
+writes in 160 of 160). A1 passes. **G1 fails: 2 mixed tasks among Item 7's 100 against 38, so the
+GRPO pilot is a no-go** (STAGE.md: "M1 passes nearly everything on train: add tasks instead").
+Self-SFT runs (Session B, rounds 1–3 from October 21, 02:56 UTC, on the same pod). Note for the
+reading: M1's train yield is already at the ceiling, so the rounds measure whether
+self-distillation holds or drifts on val, not whether yield grows.
+
+The gate waited three hours on October 20 with no reading (the Mac-side watcher and guard had
+stopped with the session) and the session ended at 18:59; the pod stood idle until 02:56 the next
+day, about \$14.
