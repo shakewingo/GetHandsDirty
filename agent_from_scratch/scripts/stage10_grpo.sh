@@ -32,8 +32,12 @@ for p in $(seq 1 "$PASSES"); do
     for i in $(seq 0 $((ITERATIONS - 1))); do
         step_dir="outputs/$PREFIX-p$p-i$i-step"
         if [ -d "$step_dir" ]; then current=$step_dir; continue; fi
-        # shellcheck disable=SC2046
-        tasks=$(python -m agent_from_scratch.evals grpo tasks --pass "$p" --iteration "$i" $(pool_args))
+        if dry && [ -n "${STAGE10_POOL:-}" ]; then
+            tasks="<pass $p iteration $i of the pool>"
+        else
+            # shellcheck disable=SC2046
+            tasks=$(python -m agent_from_scratch.evals grpo tasks --pass "$p" --iteration "$i" $(pool_args))
+        fi
         serve "grpo=$current"
         pids=() runs=()
         for s in $SEEDS; do

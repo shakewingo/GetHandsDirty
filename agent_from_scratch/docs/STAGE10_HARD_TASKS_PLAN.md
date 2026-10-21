@@ -120,15 +120,15 @@ Each: steps as Task 1 (failing tests, run, implement, run, commit `feat: <group>
 
 **Interfaces — produces:** `choose_level(rates: dict[int, float]) -> int | None` (C1); `python -m agent_from_scratch.evals levels RUN_DIR... --output FILE` (strict pass@1 per shape and level, the choice, and C2's verdict); `train_pool(skeletons: Iterable[str] | None = None)`; `iteration_tasks(..., per_iteration=2 × kept train shapes)`, so ten iterations still cover the pool once (12 for six shapes).
 
-- [ ] **Tests:** `test_the_level_closest_to_half_wins` ({1: .9, 2: .6, 3: .3} → 2); `test_a_tie_takes_the_lower_level` ({2: .4, 3: .6} → 2); `test_no_level_in_band_drops_the_shape` ({1: .9, 2: .8} → None); `test_c2_needs_four_train_two_val_two_hardtest`; `test_pool_restricted_to_named_shapes` (120 IDs, 6 shapes); `test_rotation_on_the_restricted_pool` (10 iterations × 12, 2 per shape, all 120 once).
-- [ ] Run, implement, run, commit `feat: the level rule and a restricted Stage 10 pool`.
+- [x] **Tests:** `test_the_level_closest_to_half_wins` ({1: .9, 2: .6, 3: .3} → 2); `test_a_tie_takes_the_lower_level` ({2: .4, 3: .6} → 2); `test_no_level_in_band_drops_the_shape` ({1: .9, 2: .8} → None); `test_c2_needs_four_train_two_val_two_hardtest`; `test_pool_restricted_to_named_shapes` (120 IDs, 6 shapes); `test_rotation_on_the_restricted_pool` (10 iterations × 12, 2 per shape, all 120 once).
+- [x] Run, implement, run, commit `feat: the level rule and a restricted Stage 10 pool`.
 
 ### Task 7: Session scripts
 
 **Files:** create `scripts/stage10_calibrate.sh` (serve M1, `bench --split calib` at 8 seeds in parallel, `levels`); create `scripts/stage10_session_g.sh` (Item 1 on the final pool and val at three seeds; K8's gate decided in the script; on pass: the GRPO pilot, then the three self-SFT rounds, then Session D's comparison on one server; each stage packed for the copy-back).
 
-- [ ] `bash -n` both; dry runs with `STAGE10_DRY=1` (expected: calibration lists 12 shapes × 5 levels × 6 seeds; Session G lists the gate, 3 passes of 10 iterations, 3 rounds, and the final val runs).
-- [ ] Commit `feat: calibration and Session G drivers`.
+- [x] `bash -n` both; dry runs with `STAGE10_DRY=1` (expected: calibration lists 12 shapes × 5 levels × 6 seeds; Session G lists the gate, 3 passes of 10 iterations, 3 rounds, and the final val runs).
+- [x] Commit `feat: calibration and Session G drivers`.
 
 ## 5. Steps — GPU sessions
 
