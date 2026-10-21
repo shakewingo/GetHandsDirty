@@ -4,7 +4,7 @@ from copy import deepcopy
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from agent_from_scratch.evals.bench.faults import FaultyTool
 from agent_from_scratch.evals.bench.run import registry_for, run_case, specs
@@ -92,7 +92,8 @@ class RunFrameworkTests(unittest.TestCase):
         original = list(skeletons.SKELETONS)
         skeletons.SKELETONS[:] = [PROBE]
         try:
-            entries = specs()
+            with patch.object(skeletons, "load_levels", return_value={}):  # no Stage 10 shape
+                entries = specs()
             self.assertEqual([(s.name, c.seed, c.condition) for s, c in entries],
                              [("probe_check", 0, "clean"), ("probe_check", 0, "fault")])
         finally:

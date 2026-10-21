@@ -26,9 +26,12 @@ class DatasetCommandTests(unittest.TestCase):
             result = self.command("--split", "train", "--output", out)
             self.assertEqual(result.returncode, 0, result.stderr)
             metadata = json.loads((out / "metadata.json").read_text())
-            self.assertEqual(metadata["task_counts"], {"train": 420})
+            # 420 Stage 8-9 train tasks, plus the Stage 10 shapes at the levels levels.json names.
+            train = len(run.specs("train"))
+            self.assertGreaterEqual(train, 420)
+            self.assertEqual(metadata["task_counts"], {"train": train})
             tasks = list((out / "tasks").glob("*/task.json"))
-            self.assertEqual(len(tasks), 420)
+            self.assertEqual(len(tasks), train)
             for path in tasks:
                 task = json.loads(path.read_text())
                 self.assertEqual(task["split"], "train")
@@ -40,10 +43,12 @@ class DatasetCommandTests(unittest.TestCase):
             result = self.command("--output", out, "--check")
             self.assertEqual(result.returncode, 0, result.stderr)
             summary = json.loads((out / "summary.json").read_text())
-            # 420 train and 140 test tasks.
-            self.assertEqual(summary["correct"], {"passed": 560, "attempts": 560})
-            self.assertEqual(summary["answer_only"], {"passed": 0, "attempts": 560})
-            self.assertEqual(summary["wrong_answer"], {"passed": 0, "attempts": 560})
+            # Every train and test task (420 and 140 from Stage 8-9, plus the leveled Stage 10 train shapes).
+            total = len(run.specs("train")) + len(run.specs("test"))
+            self.assertGreaterEqual(total, 560)
+            self.assertEqual(summary["correct"], {"passed": total, "attempts": total})
+            self.assertEqual(summary["answer_only"], {"passed": 0, "attempts": total})
+            self.assertEqual(summary["wrong_answer"], {"passed": 0, "attempts": total})
             self.assertTrue(summary["gates_passed"])
 
     def test_existing_output_is_never_overwritten(self):

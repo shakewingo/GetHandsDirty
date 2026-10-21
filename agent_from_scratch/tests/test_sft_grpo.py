@@ -58,6 +58,8 @@ def fake_run(root: Path, name: str, seed: int, outcomes: dict, *, split: str = "
 
 class PoolTests(unittest.TestCase):
     def setUp(self):
+        # The Stage 8-9 split; a test that needs Stage 10 shapes patches its own levels.
+        self.enterContext(patch.object(skeletons, "load_levels", return_value={}))
         self.pool = train_pool()
 
     def test_pool_is_the_whole_train_split(self):

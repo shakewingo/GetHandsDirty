@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from agent_from_scratch.evals.bench.run import run_case, specs
-from agent_from_scratch.evals.bench.skeletons import answer, call
+from agent_from_scratch.evals.bench.skeletons import SKELETONS, answer, call
 from agent_from_scratch.evals.bench.spec import BuildContext
 from agent_from_scratch.evals.verify import snapshot
 from agent_from_scratch.tests.test_bench_skeletons import _model
@@ -21,7 +21,9 @@ class Stage9TestTaskTests(unittest.TestCase):
     expected_count = 80
 
     def setUp(self):
-        self.entries = [(s, ctx) for s, ctx in specs(self.split) if s.strict]
+        # Stage 9's own shapes; the Stage 10 shapes (also strict) have their own tests.
+        stage9 = {skeleton.name for skeleton in SKELETONS}
+        self.entries = [(s, ctx) for s, ctx in specs(self.split) if s.strict and s.name in stage9]
         self.assertEqual(len(self.entries), self.expected_count)
         self.assertEqual({s.name for s, _ in self.entries}, self.expected_names)
 

@@ -1,1 +1,9 @@
-{}
+{
+  "fault_amid_reconcile": 3,
+  "flag_rollout": 2,
+  "itinerary_dialogue": 5,
+  "long_edit_dialogue": 2,
+  "ordered_migration": 1,
+  "rule_table_apply": 1,
+  "support_dialogue": 4
+}

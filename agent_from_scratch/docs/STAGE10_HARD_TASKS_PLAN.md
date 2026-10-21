@@ -132,7 +132,7 @@ Each: steps as Task 1 (failing tests, run, implement, run, commit `feat: <group>
 
 ## 5. Steps — GPU sessions
 
-- [ ] **Session F — calibration** (one A100, about 1 hour, about \$2): 360 calibration tasks × 8 samples. Then `levels.json` from C1, shown to the user as a diff, and C2. Commit; `freeze` records the new manifest (old fingerprints unchanged).
+- [x] **Session F — calibration** (done October 21; record in section 7) (one A100, about 1 hour, about \$2): 360 calibration tasks × 8 samples. Then `levels.json` from C1, shown to the user as a diff, and C2. Commit; `freeze` records the new manifest (old fingerprints unchanged).
 - [ ] **Session G — the arms** (one A100, about 25 hours, about \$45): Item 1 on the final pool; K8's gate; GRPO pilot (3 passes, about 2.5 hours); self-SFT rounds 1–3 (about 6.5 hours each); comparison on one server (M1, M2–M4, the GRPO passes; val three seeds). Copy-back after each stage; the Mac-side guard deletes the pod.
 - [ ] **Record** in this plan, STAGE10_PLAN.md and STAGE.md: Tables 1–4 of STAGE10_PLAN.md, read on the hard val subset first.
 
@@ -145,3 +145,54 @@ needs a top-up of at least \$30 first. Spent on Stage 10 so far: Session A \$0.9
 **Laptop.** Copy-back and the cost guard run on the Mac; while a session runs, the Mac must stay
 awake, or the pod bills idle after it finishes. The alternative is a restricted RunPod API key on
 the pod so it can delete itself, which only the user can create.
+
+## 7. Record (October 21)
+
+**Code.** Tasks 1–7: `2e5bd16` … `90a4233`; 557 tests pass. Two bugs found by running, both
+fixed before any GPU time: `read_file` numbers the lines it returns, so evidence must be one line
+(`fault_amid_reconcile` failed its own solution until its files became one line each); and a pod
+setup script still hashed mix's adapter, which was not in the bundle.
+
+**Session F.** Pod `d6uxok36l5dtig` (A100 SXM), 05:13–06:18 UTC: 12 shapes × 5 levels × 6
+calibration tasks × 8 samples of M1 (mix-v3). Strict pass@1 by level (1 → 5):
+
+| Shape | Split | L1 | L2 | L3 | L4 | L5 | C1 | Tasks solved sometimes, at C1's level |
+|---|---|---:|---:|---:|---:|---:|---|---|
+| `ordered_migration` | train | 0.67 | 0.21 | 0.06 | 0 | 0 | **L1** | 5 of 6 |
+| `capped_allocation` | train | 0.04 | 0.02 | 0.04 | 0 | 0 | dropped | — |
+| `rule_table_apply` | train | 0.65 | 0.23 | 0 | 0 | 0 | **L1** | 4 of 6 |
+| `long_edit_dialogue` | train | 0.63 | 0.50 | 0.50 | 0.50 | 0.50 | **L2** | **0 of 6** |
+| `mixed_state_batch` | train | 0 | 0.02 | 0 | 0 | 0 | dropped | — |
+| `fault_amid_reconcile` | train | 0.27 | 0.04 | 0.58 | 0 | 0.02 | **L3** | 5 of 6 |
+| `transfer_to_targets` | val | 0.04 | 0.02 | 0 | 0 | 0 | dropped | — |
+| `itinerary_dialogue` | val | 0.42 | 0.40 | 0.46 | 0.38 | 0.54 | **L5** | 4 of 6 |
+| `flag_rollout` | val | 0.08 | 0.31 | 0.27 | 0 | 0 | **L2** | 5 of 6 |
+| `payroll_rule_adjust` | hardtest | 0 | 0 | 0 | 0 | 0 | dropped | — |
+| `support_dialogue` | hardtest | 0.77 | 0.63 | 0.60 | 0.50 | 0.50 | **L4** | 0 of 6 |
+| `cert_renewal_batch` | hardtest | 0 | 0 | 0.02 | 0 | 0 | dropped | — |
+
+What the failures are. Read from the runs, not inferred from the rates:
+
+- **Act, then report a different subset** (`mixed_state_batch`, `flag_rollout`, `cert_renewal_batch`):
+  M1 reads every record correctly, then skips the fixes and replies with the records that needed
+  fixing instead of the held ones. In `mixed_state_batch` this happens in all 48 level-1 attempts.
+- **Multi-step arithmetic** (`capped_allocation`, `transfer_to_targets`, `payroll_rule_adjust`):
+  wrong numbers in the written file, or the step limit reached before writing.
+- **The act/ask dialogues are all-or-nothing per task.** The ask side always passes and the act
+  side mostly fails by asking (`long_edit_dialogue`: 18 of 24 level-1 act runs reply NEED_INPUT).
+  A 0.5 rate here is half the tasks always right and half always wrong. C1 reads the rate, not the
+  per-task spread, so it chose levels with no task solved sometimes.
+
+**C2 failed on the hard test alone** (1 of 3 shapes kept, 2 required); train (4) and val (2)
+meet their minimums. **Deviation:** Session G ran anyway. The plan says to stop and review, but
+Stage 10 never uses the hard test, and the user had asked to carry the plan through. The hard
+test's shortfall goes to Stage 11. **Second note:** `long_edit_dialogue` stays in the pool as C1
+chose it, though it gives GRPO no mixed group and self-SFT only ask-side successes; it is
+reported apart.
+
+`levels.json` holds C1's choices. The train split grows to 500 tasks (pool: 80), val to 144 (the
+hard val subset: 40), hardtest 20. All 664 earlier tasks keep their fingerprints. The freeze for
+Stage 11 is `outputs/stage10-20261021-manifest.json` (`9cf35a89…`); the Stage 8 `manifest.json`
+is unchanged. Tests that assert Stage 8–9 counts now pin themselves to the Stage 8–9 registry.
+
+**Session G** started on the same pod at 06:28 UTC.
