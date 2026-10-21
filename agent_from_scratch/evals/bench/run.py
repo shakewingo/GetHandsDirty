@@ -1,6 +1,6 @@
 """Build Stage 8 benchmark tasks from seeds, run them, and score them.
 
-Usage: python -m agent_from_scratch.evals bench --output DIR --split {train,val,test} [--tasks a,b]
+Usage: python -m agent_from_scratch.evals bench --output DIR --split {train,val,test,calib,hardtest} [--tasks a,b]
            [--seed N] [--backend {llama_cpp,vllm,teacher}] [--base-url URL] [--served-model NAME]
            [--adapter NAME] [--limits '{"planning": true}'] [--final --manifest FILE]
            [--teacher-model ID] [--teacher-effort {none,low,high,max}] [--student-gguf FILE]
@@ -8,6 +8,8 @@ Usage: python -m agent_from_scratch.evals bench --output DIR --split {train,val,
 Every run uses the frozen sampled protocol (config.BENCH_DECODING); `--seed` picks the sample.
 Run once per seed in config.BENCH_SEEDS, then `aggregate` the runs. Val is where every choice is
 made; test is run once per final candidate, with --final and a versioned dataset --manifest.
+Stage 10 adds calib (every shape at every level, to choose each shape's level) and hardtest
+(the hard shapes at their chosen level, under the same rule as test).
 """
 
 import argparse
@@ -20,7 +22,7 @@ import sys
 from tempfile import TemporaryDirectory
 
 from .faults import FaultyTool
-from .skeletons import SKELETONS, Skeleton
+from .skeletons import Skeleton, registered
 from .spec import BuildContext, Task
 from .verify import EVIDENCE_TOOLS, bench_summary, check
 from ..run import open_run, parse_limits, save, seed_every_request
@@ -81,11 +83,12 @@ CHECK_SCRIPT = HERE / "check.py"
 
 
 def specs(split: str | None = None) -> list[tuple[Skeleton, BuildContext]]:
-    """(skeleton, BuildContext) pairs in registration order; touches no disk."""
+    """(skeleton, BuildContext) pairs in registration order; reads only levels.json.
+
+    `split` None is every split but calibration; "calib" is only calibration (`registered`).
+    """
     entries = []
-    for skeleton in SKELETONS:
-        if split is not None and skeleton.split != split:
-            continue
+    for skeleton in registered(split):
         for seed in skeleton.seeds:
             for condition in (("clean", "fault") if skeleton.recovery else (None,)):
                 entries.append((skeleton, BuildContext(skeleton.name, skeleton.family,
@@ -206,7 +209,8 @@ def main():
     from .manifest import manifest_drift, protocol_mismatch
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--split", choices=("train", "val", "test"), default="val")
+    parser.add_argument("--split", choices=("train", "val", "test", "calib", "hardtest"), default="val",
+                        help="calib: Stage 10's shapes at every level, to choose levels; never training data")
     parser.add_argument("--tasks", help="Comma-separated task IDs; default: every task in --split")
     parser.add_argument("--seed", type=int, default=0,
                         help="Sample index passed to every request; workspaces are seeded separately")
@@ -234,8 +238,8 @@ def main():
         parser.error("The teacher may only see the train split.")
     if args.backend == "teacher" and (args.student_gguf is None or not args.student_gguf.is_file()):
         parser.error("--backend teacher needs --student-gguf, an existing GGUF of the student model.")
-    if args.split == "test" and (not args.final or args.manifest is None or overrides):
-        parser.error("The test split needs --final and --manifest; limit overrides are not allowed.")
+    if args.split in ("test", "hardtest") and (not args.final or args.manifest is None or overrides):
+        parser.error(f"The {args.split} split needs --final and --manifest; limit overrides are not allowed.")
     if args.manifest is not None and not args.manifest.is_file():
         parser.error("The supplied manifest does not exist.")
     if args.adapter and args.backend != "vllm":

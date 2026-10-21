@@ -1457,3 +1457,64 @@ SKELETONS.extend([
     Skeleton("followup_carry_value", "updates", "val", TRAIN_SEEDS, False,
              _build_followup_carry_value, _solution_followup_plain, strict=True),
 ])
+
+
+# Stage 10: shapes with a difficulty level (docs/STAGE10_HARD_TASKS_PLAN.md, K1-K5). Calibration
+# registers every level on seeds no other split uses; train, val and hardtest register a shape
+# only at the level evals/bench/levels.json names, on the shape's own seeds.
+LEVELS = (1, 2, 3, 4, 5)
+CALIB_SEEDS = tuple(range(100, 106))  # three act/ask pairs; seed // 2 pairs them
+CALIB_RECOVERY_SEEDS = tuple(range(100, 103))  # x clean/fault: six tasks per level too
+LEVELS_PATH = Path(__file__).resolve().parent / "levels.json"
+
+
+@dataclass(frozen=True)
+class Shape:
+    """A Stage 10 generator: `build(rng, root, ctx, level)` makes one Task at difficulty `level`.
+
+    `split` is where the shape's final tasks go ("train", "val" or "hardtest"); `seeds` are
+    theirs. Calibration ignores both and uses CALIB_SEEDS at every level.
+    """
+
+    name: str
+    family: str
+    split: str
+    seeds: tuple[int, ...]
+    recovery: bool
+    build: "Callable[[random.Random, Path, BuildContext, int], Task]"
+    solution: "Callable[[Task], list[LLMResponse]]"
+
+
+SHAPES: list[Shape] = []
+
+
+def load_levels() -> dict[str, int]:
+    """Shape name -> chosen level, from levels.json (written from Session F's calibration)."""
+    return json.loads(LEVELS_PATH.read_text(encoding="utf-8"))
+
+
+def _at_level(shape: Shape, name: str, split: str, seeds: tuple[int, ...], level: int) -> Skeleton:
+    def build(rng: random.Random, root: Path, ctx: BuildContext) -> Task:
+        return shape.build(rng, root, ctx, level)
+    return Skeleton(name, shape.family, split, seeds, shape.recovery, build, shape.solution, strict=True)
+
+
+def registered(split: str | None = None) -> list[Skeleton]:
+    """The skeletons of `split`, in registration order; every split but calibration when None.
+
+    "calib" is every shape at every level, named NAME@L<level>, on the calibration seeds. Other
+    splits are the Stage 8-9 skeletons plus each shape at the level levels.json names; a shape
+    it does not name is not registered. Raises ValueError for an unknown shape or level.
+    """
+    if split == "calib":
+        return [_at_level(shape, f"{shape.name}@L{level}", "calib",
+                          CALIB_RECOVERY_SEEDS if shape.recovery else CALIB_SEEDS, level)
+                for shape in SHAPES for level in LEVELS]
+    levels = load_levels()
+    shapes = {shape.name: shape for shape in SHAPES}
+    unknown = [name for name, level in levels.items() if name not in shapes or level not in LEVELS]
+    if unknown:
+        raise ValueError(f"levels.json names unknown shapes or levels outside {LEVELS}: {unknown}")
+    leveled = [_at_level(shape, shape.name, shape.split, shape.seeds, levels[shape.name])
+               for shape in SHAPES if shape.name in levels]
+    return [skeleton for skeleton in [*SKELETONS, *leveled] if split is None or skeleton.split == split]

@@ -93,9 +93,10 @@ All are `strict=True` (Stage 9 scoring). Answers are `required` unless noted. Le
 
 **Interfaces — produces:** `Shape(name, family, split, recovery, build(rng, root, ctx, level), solution, seeds)`; `SHAPES: list[Shape]`; `CALIB_SEEDS = tuple(range(100, 106))`; `specs("calib")` yields one entry per (shape, level 1–5, calib seed) with skeleton name `f"{name}@L{level}"`; `specs("train" | "val" | "hardtest")` include a shape only if `levels.json` names its level; `bench --split calib|hardtest` (hardtest needs `--final`).
 
-- [ ] **Step 1: Failing tests:** `test_calibration_covers_every_level_on_its_own_seeds` (ids like `ordered_migration@L3-100`, no seed below 100); `test_an_unleveled_shape_is_not_registered` (with `levels.json` empty, no new shape in train/val/hardtest); `test_a_leveled_shape_registers_at_that_level` (patched levels → 20 train tasks built at that level); `test_old_tasks_keep_their_fingerprints` (manifest entries of every pre-existing task unchanged); `test_hardtest_needs_final` (exit 2 without `--final`).
-- [ ] **Step 2–4:** run (FAIL), implement, run (PASS).
-- [ ] **Step 5:** commit `feat: difficulty levels, a calibration split and a hard-test split`.
+- [x] **Step 1: Failing tests** (`tests/test_levels.py`, on a toy shape): `test_calibration_covers_every_level_on_its_own_seeds` (ids like `toy_count@L4-100`, seeds 100–105 only, never outside calib); `test_an_unleveled_shape_is_not_registered`; `test_a_leveled_shape_registers_at_that_level` (20 train tasks at that level, and the scripted solution passes); `test_an_unknown_shape_or_level_is_refused`; `test_the_stage_8_and_9_splits_are_unchanged` (420 / 104 / 140 / 0); `test_shapes_match_splits_json` (the new `"shapes"` key); `test_hardtest_needs_final` (exit 2 without `--final`).
+- [x] **Step 2–4:** run (FAIL), implement, run (PASS).
+- [x] **Step 4b: Fingerprints.** `build_manifest()["tasks"]` at the previous commit (a temporary worktree) and now are identical.
+- [x] **Step 5:** commit `feat: difficulty levels, a calibration split and a hard-test split`.
 
 ### Tasks 2–5: The shapes, in four groups
 
