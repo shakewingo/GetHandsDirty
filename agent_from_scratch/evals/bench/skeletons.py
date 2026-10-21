@@ -1523,3 +1523,4 @@ def registered(split: str | None = None) -> list[Skeleton]:
 # The Stage 10 shapes live in their own modules, use this module's helpers, and add themselves
 # to SHAPES; importing the module (not a name from it) works whichever side is imported first.
 from . import shapes_rules  # noqa: E402,F401
+from . import shapes_dialogue  # noqa: E402,F401

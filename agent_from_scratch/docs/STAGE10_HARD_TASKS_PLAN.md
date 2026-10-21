@@ -106,7 +106,7 @@ answer-only fails, wrong-answer fails) and `test_difficulty_grows_with_level` (t
 parameter rises with the level), plus the shape-specific tests below.
 
 - **Task 2 — rules and arithmetic:** `ordered_migration`, `capped_allocation`, `rule_table_apply`, `transfer_to_targets`, `payroll_rule_adjust`. Shape tests: a migration applied out of order fails `files`; an allocation off by one unit fails; a rule table applied last-match-wins fails.
-- **Task 3 — dialogues:** `long_edit_dialogue`, `itinerary_dialogue`, `support_dialogue`. Shape tests: each act/ask pair shares its records (Item 7's pair test); acting on the ask side fails with `asked_instead` false and `unchanged` false; asking on the act side fails and counts `asked_instead`.
+- **Task 3 — dialogues:** `long_edit_dialogue`, `itinerary_dialogue`, `support_dialogue` (one structure, `evals/bench/shapes_dialogue.py`: turn 1 names a group of two, level − 1 turns edit other named records, the last turn edits "the one from my first question"). Shape tests: each act/ask pair shares its records and differs only in turn 1 and the outcome; acting on the ask side fails `files`; asking on the act side fails `files`; editing the other record of the pair fails `files` and counts as a false completion.
 - **Task 4 — mixed states and faults:** `mixed_state_batch`, `fault_amid_reconcile`, `flag_rollout`, `cert_renewal_batch`. Shape tests: touching a locked or already-correct record fails `unchanged`; a fault variant that skips the failed file fails `files` or `evidence`.
 - **Task 5 — exploit review extended:** `tests/test_grpo_exploits.py` already reads `specs("train")`; run it with a patched `levels.json` holding every train shape at L3 and L5, and fix any loophole before calibration.
 
