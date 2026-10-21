@@ -408,3 +408,12 @@ self-distillation holds or drifts on val, not whether yield grows.
 The gate waited three hours on October 20 with no reading (the Mac-side watcher and guard had
 stopped with the session) and the session ended at 18:59; the pod stood idle until 02:56 the next
 day, about \$14.
+
+## 8. Session B stopped; harder tasks next (October 21)
+
+Round 1 of Session B started at 02:56 UTC on Session E's pod and was stopped about 20 minutes in,
+at the user's decision: with M1 at 0.996 on train and 0.929 on val, the rounds could not show a
+gain the seed noise would not hide. The pod was deleted after its logs were copied
+(`outputs/stage10-20261021-session-b/`); `runpodctl pod list --all` is empty. The next step is
+[STAGE10_HARD_TASKS_PLAN.md](STAGE10_HARD_TASKS_PLAN.md): shapes calibrated so that M1 succeeds
+about half the time, then both arms on them.
