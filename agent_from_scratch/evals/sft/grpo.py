@@ -1,7 +1,7 @@
 """Stage 10's GRPO pilot: strict reward, group advantages, task rotation and training rows.
 
 Usage: python -m agent_from_scratch.evals grpo tasks (--pool | --pass P --iteration I)
-           [--per-iteration 42]
+           [--skeletons a,b] [--per-iteration N]
        python -m agent_from_scratch.evals grpo step --runs RUN_DIR ... --adapter-in DIR
            --output DIR [--lr 1e-5]
 
@@ -39,24 +39,34 @@ OPTIMIZER_FILE = "optimizer.pt"
 SAMPLED_STATUSES = ("completed", "parse_error")
 
 
-def train_pool() -> dict[str, list[str]]:
-    """Skeleton name -> the IDs of its train tasks, in registration order."""
+def train_pool(skeletons: list[str] | None = None) -> dict[str, list[str]]:
+    """Skeleton name -> the IDs of its train tasks, in registration order; only `skeletons` when given.
+
+    Raises ValueError for a named skeleton that is not on the train split (an unleveled Stage 10
+    shape is not registered).
+    """
     from ..bench.run import specs  # the skeleton registry is heavy; `aggregate` imports `reward` only
 
     pool: dict[str, list[str]] = {}
     for skeleton, ctx in specs("train"):
-        pool.setdefault(skeleton.name, []).append(ctx.id)
+        if skeletons is None or skeleton.name in skeletons:
+            pool.setdefault(skeleton.name, []).append(ctx.id)
+    missing = sorted(set(skeletons or ()) - set(pool))
+    if missing:
+        raise ValueError(f"Not train skeletons: {missing}")
     return pool
 
 
 def iteration_tasks(pool: dict[str, list[str]], pass_index: int, iteration: int,
-                    per_iteration: int = 42) -> list[str]:
+                    per_iteration: int | None = None) -> list[str]:
     """The task IDs that iteration `iteration` (0-based) of pass `pass_index` samples.
 
     Within a pass, each skeleton's tasks are shuffled with a seed of their own, then taken in
     turn across the skeletons in name order, so each chunk of `per_iteration` IDs draws evenly
-    from every skeleton and one pass covers every task once.
+    from every skeleton and one pass covers every task once. The default, two per skeleton,
+    makes ten iterations a pass for 20 tasks per skeleton.
     """
+    per_iteration = per_iteration or 2 * len(pool)
     queues = []
     for name in sorted(pool):
         ids = list(pool[name])
@@ -261,7 +271,8 @@ def main():
     which.add_argument("--pool", action="store_true", help="Every train task")
     which.add_argument("--pass", dest="pass_index", type=int, help="The pass (1-based), with --iteration")
     tasks.add_argument("--iteration", type=int, help="The iteration within the pass (0-based)")
-    tasks.add_argument("--per-iteration", type=int, default=42)
+    tasks.add_argument("--per-iteration", type=int, help="Default: 2 per skeleton, so 10 iterations make a pass")
+    tasks.add_argument("--skeletons", help="Comma-separated train skeletons: the pool (default: the whole split)")
     update = commands.add_parser("step", help="One optimizer step on one iteration's runs")
     update.add_argument("--runs", type=Path, nargs="+", required=True, help="bench --split train runs, one per seed")
     update.add_argument("--adapter-in", type=Path, required=True, help="The adapter that sampled the runs")
@@ -289,7 +300,10 @@ def main():
             summary |= {key: round(record["step"][key], 4) for key in ("loss", "grad_norm")}
         print(json.dumps(summary))
         return
-    pool = train_pool()
+    try:
+        pool = train_pool(args.skeletons.split(",") if args.skeletons else None)
+    except ValueError as error:
+        parser.error(str(error))
     if args.pool:
         ids = [task_id for task_ids in pool.values() for task_id in task_ids]
     else:

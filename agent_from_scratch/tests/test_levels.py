@@ -9,7 +9,8 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from agent_from_scratch.evals.bench import run, skeletons
+from agent_from_scratch.evals.bench import levels, run, skeletons
+from agent_from_scratch.evals.bench.levels import choose_level, verdict
 from agent_from_scratch.evals.bench.run import run_case, specs
 from agent_from_scratch.evals.bench.skeletons import CALIB_SEEDS, LEVELS, SHAPES, Shape, answer, call
 from agent_from_scratch.evals.bench.spec import Answer, Expect, Task
@@ -97,6 +98,54 @@ class LevelTests(unittest.TestCase):
             run.main()
         self.assertEqual(error.exception.code, 2)
         self.assertFalse(out.exists())
+
+
+class LevelRuleTests(unittest.TestCase):
+    """C1 and C2 (docs/STAGE10_HARD_TASKS_PLAN.md, K4), and the levels command."""
+
+    def test_the_level_closest_to_half_wins(self):
+        self.assertEqual(choose_level({1: 0.9, 2: 0.6, 3: 0.3}), 2)
+
+    def test_a_tie_takes_the_lower_level(self):
+        self.assertEqual(choose_level({2: 0.4, 3: 0.6}), 2)
+
+    def test_no_level_in_band_drops_the_shape(self):
+        self.assertIsNone(choose_level({1: 0.9, 2: 0.8, 3: 0.2}))
+        self.assertIsNone(choose_level({}))
+
+    def test_the_band_edges_are_inside(self):
+        self.assertEqual((choose_level({4: 0.75}), choose_level({5: 0.25})), (4, 5))
+
+    def test_c2_needs_four_train_two_val_two_hardtest(self):
+        splits = {f"t{i}": "train" for i in range(7)} | {"v1": "val", "v2": "val", "h1": "hardtest", "h2": "hardtest"}
+        enough = {**{f"t{i}": 3 for i in range(4)}, "v1": 2, "v2": 4, "h1": 1, "h2": 5}
+        self.assertTrue(verdict(enough, splits)["passed"])
+        self.assertFalse(verdict({**enough, "t3": None}, splits)["passed"])
+        self.assertFalse(verdict({**enough, "h2": None}, splits)["passed"])
+
+    def test_the_command_reads_calibration_runs(self):
+        root = Path(self.enterContext(TemporaryDirectory()))
+        runs = []
+        for seed in (0, 1):
+            run = root / f"calib-s{seed}"
+            run.mkdir()
+            # ordered_migration: level 1 always passes, level 2 half the time, level 3 never.
+            records = [{"skeleton": "ordered_migration@L1", "passed": True, "checks": {"format_exact": True}},
+                       {"skeleton": "ordered_migration@L2", "passed": seed == 0, "checks": {"format_exact": True}},
+                       {"skeleton": "ordered_migration@L3", "passed": False, "checks": {"format_exact": True}}]
+            (run / "results.json").write_text(json.dumps(records))
+            (run / "metadata.json").write_text(json.dumps({"split": "calib", "seed": seed}))
+            runs.append(str(run))
+        report, chosen = root / "report.json", root / "levels.json"
+        argv = ["levels", *runs, "--output", str(report), "--levels", str(chosen)]
+        with patch.object(sys, "argv", argv), patch("sys.stdout"):
+            levels.main()
+        data = json.loads(report.read_text())
+        self.assertEqual(data["rates"]["ordered_migration"], {"1": 1.0, "2": 0.5, "3": 0.0})
+        self.assertEqual(data["chosen"]["ordered_migration"], 2)
+        self.assertIsNone(data["chosen"]["capped_allocation"])  # no calibration runs: dropped
+        self.assertFalse(data["passed"])
+        self.assertEqual(json.loads(chosen.read_text()), {"ordered_migration": 2})
 
 
 if __name__ == "__main__":

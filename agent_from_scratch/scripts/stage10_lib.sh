@@ -63,10 +63,17 @@ bench() {  # bench OUT SPLIT SEED ADAPTER [TASKS]: one bench run against the ser
         --adapter "$4" ${tasks[@]+"${tasks[@]}"} --output "outputs/$1"
 }
 
-sample_train() {  # sample_train NAME ADAPTER: 8 seeds of the whole train split in parallel, then both counts
-    local pids=() runs=()
+pool_args() {  # the --skeletons argument when STAGE10_POOL (comma-separated train skeletons) names a pool
+    [ -n "${STAGE10_POOL:-}" ] && echo "--skeletons $STAGE10_POOL"
+    return 0
+}
+
+sample_train() {  # sample_train NAME ADAPTER: 8 seeds of the pool (STAGE10_POOL, else the whole train split)
+    local pids=() runs=() tasks=""
+    # shellcheck disable=SC2046
+    [ -n "${STAGE10_POOL:-}" ] && tasks=$(python -m agent_from_scratch.evals grpo tasks --pool $(pool_args))
     for s in $SEEDS; do
-        bench "$1-train-s$s" train "$s" "$2" & pids+=($!)
+        bench "$1-train-s$s" train "$s" "$2" "$tasks" & pids+=($!)
         runs+=("outputs/$1-train-s$s")
     done
     wait_all "${pids[@]}"

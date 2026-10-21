@@ -15,6 +15,7 @@ Commands:
   train     train a LoRA adapter on an exported SFT dataset (needs torch, transformers, peft)
   replay    continue each SFT prompt greedily on a vLLM server and compare with its target
   grpo      Stage 10's GRPO pilot: the task rotation (`grpo tasks`)              (no model)
+  levels    choose each Stage 10 shape's level from calibration runs           (no model)
 
 Each command takes --help. Start with evals/README.md.
 """
@@ -26,7 +27,7 @@ COMMANDS = {"pressure": "pressure", "bench": "bench.run",
            "freeze": "bench.manifest",
            "aggregate": "bench.aggregate", "compare": "trajectory", "dataset": "bench.dataset",
            "export": "sft.export", "public": "sft.public", "mix": "sft.mix",
-           "train": "sft.train", "replay": "sft.replay", "grpo": "sft.grpo",
+           "train": "sft.train", "replay": "sft.replay", "grpo": "sft.grpo", "levels": "bench.levels",
            "when2call": "external.when2call", "bfcl": "external.bfcl"}
 
 
