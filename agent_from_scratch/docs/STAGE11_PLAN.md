@@ -83,9 +83,9 @@ Val (144): mix-v3 0.752, M4 0.852 (Stage 10, one server). The hard test holds on
 | `shipping_fee_table` | first-match fee rules (weight, zone, express), fee = base + rate × kg rounded down; write `fees.txt`; reply `PRICED` | (rules, orders) = (2,3) … (8,14) | `rule_table_apply` · a computed fee, not a looked-up value |
 | `ledger_audit_fault` (clean/fault) | compare `bank/` statements with `ledger.csv`, write `audit.txt` with every mismatch; the fault variant fails one read mid-scan | K = 3, 5, 7, 9, 12 | `fault_amid_reconcile` · amounts with cents, two sources per line |
 
-- [ ] Tests (as Stage 10's): every level keeps the gates; difficulty grows; a skipped step, an off-by-one fee and an unretried read fail.
-- [ ] Run; the full suite passes; the 804 tasks of Stage 10's manifest keep their fingerprints.
-- [ ] Commit `feat: three hard-test shapes`.
+- [x] Tests (as Stage 10's): every level keeps the gates; difficulty grows; a skipped step, an off-by-one fee and an unretried read fail.
+- [x] Run; the full suite passes; the 804 tasks of Stage 10's manifest keep their fingerprints.
+- [x] Commit `feat: three hard-test shapes`.
 
 ### Task 2: Results module
 
@@ -93,8 +93,8 @@ Val (144): mix-v3 0.752, M4 0.852 (Stage 10, one server). The hard test holds on
 
 **Interfaces — produces:** `pass_at_1(runs: list[list[dict]]) -> float`; `paired(a: list[list[dict]], b: list[list[dict]]) -> dict` (wins, losses, ties by task and seed; McNemar exact p over the discordant pairs); `bootstrap_diff(a, b, *, resamples=10000, seed=0) -> tuple[float, float]` (resamples task ids, keeping every seed of a task); `table(arms: dict[str, list[Path]], subsets: dict[str, set[str]]) -> str` (markdown). The command takes `--arm NAME=RUN,RUN,RUN` repeatedly and `--subset NAME=SKELETON,…`.
 
-- [ ] Tests: worked examples for each function; `test_bootstrap_resamples_tasks_not_runs`; `test_a_missing_seed_is_reported`; `test_mcnemar_matches_compare` (agrees with `compare` on the same runs).
-- [ ] Run; commit `feat: a results module for Stage 11`.
+- [x] Tests: worked examples for each function; `test_bootstrap_resamples_tasks_not_runs`; `test_a_missing_seed_is_reported`; `test_mcnemar_matches_compare` (agrees with `compare` on the same runs).
+- [x] Run; commit `feat: a results module for Stage 11`.
 
 ### Task 3: Session scripts
 
@@ -107,8 +107,14 @@ Val (144): mix-v3 0.752, M4 0.852 (Stage 10, one server). The hard test holds on
 5. External: `when2call mcq` and `when2call generate` and `bfcl`, for mix-v2, mix-v3, M4.
 6. Each step packed for the copy-back.
 
-- [ ] `bash -n`; dry runs (`STAGE10_DRY=1`) list the expected runs (9 test, 18 hard test, 9 external).
-- [ ] Commit `feat: Stage 11 drivers`.
+- [x] `bash -n`; dry runs (`STAGE10_DRY=1`) list the expected runs (9 test, 18 hard test, 9 external).
+- [x] Commit `feat: Stage 11 drivers`.
+- [x] Follow-up (`4df8351`): `stage11_calibrate.sh` prints the hard test's C2 with the hardtest
+  shapes `levels.json` already keeps (the `levels` report sees only the three new shapes, so its
+  own C2 always fails there); `stage11_session.sh` refuses to freeze an uncommitted tree. Checked
+  on the Mac: today's code reproduces Stage 9's 140 test fingerprints
+  (`outputs/stage9-item6-20261016-session/outputs/stage9-item6-20261016-data/manifest.json`, the
+  file to pass as `STAGE9_MANIFEST`).
 
 ### Task 4: An OpenAI-compatible chat backend
 
@@ -116,16 +122,21 @@ Val (144): mix-v3 0.752, M4 0.852 (Stage 10, one server). The hard test holds on
 
 **Interfaces — produces:** `ChatAPIClient(base_url, model, api_key, *, temperature, max_tokens)` with `LLM`'s interface (`generate`, `measure_context`, `settings`, `read_usage`). Tools are sent as OpenAI tool schemas and replies parsed from `tool_calls`; the context budget is estimated from characters (`count_method: "estimate"`) where the API has no token counter; `make_model() -> LLM | ChatAPIClient` chooses by whether `AGENT_BASE_URL` is set.
 
-- [ ] Tests: a tool-call reply becomes an `LLMResponse` with the same calls; a plain reply; an HTTP error is retried, then raised as the existing backend error; `make_model` picks each backend; the agent loop runs a two-tool task end to end on the fake transport.
-- [ ] Run against one real endpoint (DeepSeek, whose key Stage 9 already uses); commit `feat: any OpenAI-compatible model as the agent's backend`.
+- [x] Tests: a tool-call reply becomes an `LLMResponse` with the same calls; a plain reply; an HTTP error is retried, then raised as the existing backend error; `make_model` picks each backend; the agent loop runs a two-tool task end to end on the fake transport.
+- [x] Run against one real endpoint (DeepSeek, whose key Stage 9 already uses); commit `feat: any OpenAI-compatible model as the agent's backend`.
+- [x] Beyond the plan: the fit rule (`context.context_blocker`, `window_share_ratio`) accepted
+  only `"exact"` and would have blocked every request, so it now also accepts `"estimate"`. The
+  estimate is characters × a token rate that starts at 1/3 and rises to the highest rate the API
+  reports. A fourth, optional variable, `AGENT_N_CTX`, gives the window (default 32,768), since a
+  local server's is often smaller. Neither changes the vLLM benchmark path.
 
 ### Task 5: The walkthrough notebook
 
 **Files:** create `examples/walkthrough.ipynb` (outputs saved, so it reads on GitHub without running).
 
-- [ ] Six sections in stage order (F7), each a short explanation, the few calls that show the idea, and its output: (1) one turn, one tool; (2) the agent loop and a follow-up turn; (3) context management: a long session compacted, what was kept, the session resumed; (4) evaluation: a generated task, the scripted correct run passing and two cheats failing, the verifier's checks; (5) post-training data: one verified run exported as SFT examples, the loss mask shown on the tokens; (6) expert iteration and GRPO: the strict reward and advantages on recorded rollouts, and Stage 10's results table.
-- [ ] The first cell picks the model (F8): `AGENT_BASE_URL` set, or the local GGUF.
-- [ ] Run it top to bottom on the Mac with an API model; commit it with its outputs.
+- [x] Six sections in stage order (F7), each a short explanation, the few calls that show the idea, and its output: (1) one turn, one tool; (2) the agent loop and a follow-up turn; (3) context management: a long session compacted, what was kept, the session resumed; (4) evaluation: a generated task, the scripted correct run passing and two cheats failing, the verifier's checks; (5) post-training data: one verified run exported as SFT examples, the loss mask shown on the tokens; (6) expert iteration and GRPO: the strict reward and advantages on recorded rollouts, and Stage 10's results table.
+- [x] The first cell picks the model (F8): `AGENT_BASE_URL` set, or the local GGUF.
+- [x] Run it top to bottom on the Mac with an API model; commit it with its outputs.
 
 ## 4. Steps — GPU sessions
 
