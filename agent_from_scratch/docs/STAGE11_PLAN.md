@@ -89,7 +89,7 @@ Val (144): mix-v3 0.752, M4 0.852 (Stage 10, one server). The hard test holds on
 
 ### Task 2: Results module
 
-**Files:** create `evals/results.py` (`python -m agent_from_scratch.evals results`); test `tests/test_results.py`.
+**Files:** create `evals/report.py` (`python -m agent_from_scratch.evals report`; not `results.py`, which `.gitignore`'s `*result*` would hide); test `tests/test_report.py`.
 
 **Interfaces — produces:** `pass_at_1(runs: list[list[dict]]) -> float`; `paired(a: list[list[dict]], b: list[list[dict]]) -> dict` (wins, losses, ties by task and seed; McNemar exact p over the discordant pairs); `bootstrap_diff(a, b, *, resamples=10000, seed=0) -> tuple[float, float]` (resamples task ids, keeping every seed of a task); `table(arms: dict[str, list[Path]], subsets: dict[str, set[str]]) -> str` (markdown). The command takes `--arm NAME=RUN,RUN,RUN` repeatedly and `--subset NAME=SKELETON,…`.
 
