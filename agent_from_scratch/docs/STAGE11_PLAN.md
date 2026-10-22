@@ -140,7 +140,30 @@ Val (144): mix-v3 0.752, M4 0.852 (Stage 10, one server). The hard test holds on
 
 ## 4. Steps — GPU sessions
 
-- [ ] **Session H — hard-test calibration** (A40, about 30 minutes, about \$0.30): M1 on the three new shapes × 5 levels × 6 calibration tasks × 8 samples; C1 per shape; C2 for the hard test (at least 2 of 4). Commit `levels.json`; stop and review if C2 fails.
+- [x] **Session H — hard-test calibration** (A40, about 30 minutes, about \$0.30): M1 on the three new shapes × 5 levels × 6 calibration tasks × 8 samples; C1 per shape; C2 for the hard test (at least 2 of 4). Commit `levels.json`; stop and review if C2 fails.
+
+  **Record (October 22).** Pod `a4fnenuzwb5jjz` (A40), calibration 10:27–11:00 UTC; deleted
+  11:01 UTC by the Mac guard after the copy-back (`outputs/stage11-20261022-session-h`). The pod had
+  been rented at 08:48 UTC by an earlier session and sat idle until 10:24; about \$1.30 in all.
+  Strict pass@1 of M1 by level (1 → 5):
+
+  | Shape | L1 | L2 | L3 | L4 | L5 | C1 | Tasks solved sometimes, at C1's level |
+  |---|---:|---:|---:|---:|---:|---|---|
+  | `config_patch_plan` | 0.60 | 0.08 | 0.06 | 0 | 0 | **L1** | 3 of 6 |
+  | `shipping_fee_table` | 0.33 | 0.04 | 0 | 0 | 0 | **L1** | 5 of 6 |
+  | `ledger_audit_fault` | 0.73 | 0.31 | 0.83 | 0.15 | 0.19 | **L2** | 4 of 6 |
+
+  C2 passes: all four hardtest shapes kept; the hard test grows to 80 tasks (20 per shape).
+
+  **`ledger_audit_fault` is not monotone in its level**, read from the runs: (1) the mismatched
+  share is `count // 3` of the payments, 1/3, 1/5, 2/7, 3/9, 4/12, so L2 is the sparsest, and M1's
+  usual failure is to find no mismatch (21 of 24 L2 clean runs wrote an empty `audit.txt` or none);
+  (2) at L4–L5 the 9 or 12 statements exceed the 8 tool calls a reply may hold, M1 asks for all of
+  them at once, and most runs end in `no_progress` (13–24 refused replies per task), so those levels
+  measure the batch limit, not the audit; (3) clean and fault tasks share their data, so a level's
+  rate rests on 3 workspaces. The task itself is sound (its scripted gates pass). Decided with the
+  user: keep C1's L2 (it tests a sparse mismatch and a reread, under the batch limit) and report
+  the caveat with its hard-test results.
 - [ ] **Session I — final runs** (A40, about 5 hours, about \$3): Task 3's session. Copy back, delete the pod. Judge the When2Call replies on the Mac (DeepSeek, about \$1).
 - [ ] **Results:** `docs/results.md` from the results module; STAGE.md's Stage 11 marked done.
 
