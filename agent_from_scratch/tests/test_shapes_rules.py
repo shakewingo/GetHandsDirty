@@ -5,9 +5,22 @@ import json
 import unittest
 
 from agent_from_scratch.evals.bench.shapes_rules import (RULE_SHAPES, adjust_pay, allocate, apply_migration,
-                                                         first_match, plan_transfers)
+                                                         apply_patch, fee, first_match, plan_transfers, render_ini)
 from agent_from_scratch.evals.bench.skeletons import answer, call
 from agent_from_scratch.tests.shape_harness import ShapeGates, calib
+
+
+def parse_ini(text: str) -> dict:
+    """service.ini back into apply_patch's state: section -> [[key, value], ...], numbers as ints."""
+    state, section = {}, None
+    for line in text.splitlines():
+        if line.startswith("["):
+            section = line[1:-1]
+            state[section] = []
+        elif " = " in line:
+            key, value = line.split(" = ", 1)
+            state[section].append([key, int(value) if value.isdigit() else value])
+    return state
 
 
 class RuleShapeTests(ShapeGates, unittest.TestCase):
@@ -46,6 +59,32 @@ class RuleShapeTests(ShapeGates, unittest.TestCase):
         self.assertNotEqual(wrong, task.expect.files["discounts.txt"])
         _, record = self.deliver("rule_table_apply", 5, "discounts.txt", wrong, "APPLIED")
         self.assertFalse(record["checks"]["files"])
+
+    def test_a_patch_that_skips_its_last_step_fails(self):
+        root, task = self.build(*calib("config_patch_plan", 5))
+        partial = apply_patch(parse_ini((root / "service.ini").read_text()), task.debug["ops"][:-1])
+        self.assertNotEqual(render_ini(partial), task.expect.files["service.ini"])
+        _, record = self.deliver("config_patch_plan", 5, "service.ini", render_ini(partial), "PATCHED")
+        self.assertFalse(record["checks"]["files"])
+
+    def test_a_fee_off_by_one_fails(self):
+        _, task = self.build(*calib("shipping_fee_table", 5))
+        lines = task.expect.files["fees.txt"].splitlines()
+        order, amount = lines[0].split("=")
+        wrong = "\n".join([f"{order}={int(amount) + 1}", *lines[1:]]) + "\n"
+        _, record = self.deliver("shipping_fee_table", 5, "fees.txt", wrong, "PRICED")
+        self.assertFalse(record["checks"]["files"])
+
+    def test_apply_patch_worked_example(self):
+        state = {"a": [["x", 2], ["y", "p"]], "b": [["z", 5]]}
+        ops = [("rename", "a", "x", "w"), ("multiply", "a", "w", 3), ("add", "b", "q", "n-1"), ("delete", "a", "y", None)]
+        self.assertEqual(render_ini(apply_patch(state, ops)), "[a]\nw = 6\n\n[b]\nz = 5\nq = n-1\n")
+        self.assertEqual(state["a"][0], ["x", 2])  # the input is not changed
+
+    def test_fee_worked_example(self):
+        rules = [((("zone", "is", "north"), ("kg", "over", 5)), (8, 2)), ((), (4, 1))]
+        self.assertEqual(fee({"zone": "north", "kg": 7.5, "tenths": 75}, rules), 23)  # 8 + floor(2 x 7.5)
+        self.assertEqual(fee({"zone": "south", "kg": 7.5, "tenths": 75}, rules), 11)  # 4 + floor(1 x 7.5)
 
     def test_apply_migration_worked_example(self):
         ops = [("rename", "limit", "cap"), ("multiply", "cap", 3), ("append", "tags", "b"), ("delete", "owner", None)]

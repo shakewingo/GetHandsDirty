@@ -202,12 +202,48 @@ def _build_cert_renewal_batch(rng: random.Random, root: Path, ctx: BuildContext,
         max_iterations=8 + 2 * count)
 
 
+# --- ledger_audit_fault (hardtest, Stage 11, clean/fault): amounts with cents, a read fails ----
+
+def _cents(amount: int) -> str:
+    return f"{amount // 100}.{amount % 100:02d}"
+
+
+def _build_ledger_audit_fault(rng: random.Random, root: Path, ctx: BuildContext, level: int) -> Task:
+    rng = _paired_rng(rng, ctx)
+    count = BATCH_SIZES[level - 1]
+    refs = sorted(f"R-{number}" for number in rng.sample(range(100, 999), count))
+    ledger = {ref: rng.randint(1000, 50000) for ref in refs}
+    differing = set(rng.sample(refs, max(1, count // 3)))
+    bank = {ref: ledger[ref] + (rng.choice((-1, 1)) * rng.randint(5, 500) if ref in differing else 0) for ref in refs}
+    ledger_text = "ref,amount\n" + "".join(f"{ref},{_cents(ledger[ref])}\n" for ref in refs)
+    _write(root, "ledger.csv", ledger_text)
+    files = {}
+    for ref in rng.sample(refs, count):  # one line per statement: read_file numbers lines
+        files[f"bank/{ref}.txt"] = content = f"ref={ref} amount={_cents(bank[ref])}\n"
+        _write(root, f"bank/{ref}.txt", content)
+    report = "".join(f"{ref}: ledger {_cents(ledger[ref])}, bank {_cents(bank[ref])}\n" for ref in refs if ref in differing)
+    fault = (Fault("read_file", 1 + min(count, max(1, count * level // 5)), READ_FAILURE)
+             if ctx.condition == "fault" else None)
+    return _batch_task(
+        ctx, level, folder="bank", files=files, fixed={"audit.txt": report}, held=[], empty="AUDITED",
+        prompt=("ledger.csv lists each payment's expected amount, and bank/ holds one statement per payment. List "
+                "bank/, read ledger.csv and every statement, and write audit.txt with one line per payment whose "
+                "amounts differ, as REF: ledger L, bank B (amounts as written, with cents), sorted by ref. If a read "
+                "fails, read that file again. Read audit.txt back and reply only AUDITED."),
+        tools=("list_files", "read_file", "write_file"), extra_reads=("ledger.csv",), fault=fault,
+        signal=READ_FAILURE, evidence=(*ledger_text.splitlines()[1:], *(c.strip() for c in files.values())),
+        claim="AUDITED", max_iterations=8 + 2 * count)
+
+
 STATE_SHAPES = [
     Shape("mixed_state_batch", "stopping", "train", FINAL_SEEDS, False, _build_mixed_state_batch, _solution_planned),
     Shape("fault_amid_reconcile", "recovery", "train", FINAL_RECOVERY_SEEDS, True, _build_fault_amid_reconcile,
           _solution_planned),
     Shape("flag_rollout", "stopping", "val", FINAL_SEEDS, False, _build_flag_rollout, _solution_planned),
     Shape("cert_renewal_batch", "stopping", "hardtest", FINAL_SEEDS, False, _build_cert_renewal_batch,
+          _solution_planned),
+    # Stage 11 (docs/STAGE11_PLAN.md, F2).
+    Shape("ledger_audit_fault", "recovery", "hardtest", FINAL_RECOVERY_SEEDS, True, _build_ledger_audit_fault,
           _solution_planned),
 ]
 

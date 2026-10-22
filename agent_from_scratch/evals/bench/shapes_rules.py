@@ -365,6 +365,125 @@ def _build_transfer_to_targets(rng: random.Random, root: Path, ctx: BuildContext
                 debug={"reads": ["stock.json", "targets.json"], "level": level, "size": count * kinds})
 
 
+# --- config_patch_plan (hardtest, Stage 11): an ordered patch of an INI file --------------------
+
+INI_KEYS = ("region", "replicas", "backup", "quota", "retention", "owner", "tier", "window", "lane", "shard",
+            "prefix", "batch", "zone", "limit", "grace", "label")
+
+
+def apply_patch(state: dict, ops: list) -> dict:
+    """`state` (section -> [[key, value], ...]) after each (kind, section, key, argument) op in
+    order: a renamed key keeps its place, an added key goes to the end of its section."""
+    result = {section: [list(pair) for pair in pairs] for section, pairs in state.items()}
+    for kind, section, key, argument in ops:
+        pairs = result[section]
+        index = next((i for i, (k, _) in enumerate(pairs) if k == key), None)
+        if kind == "add":
+            pairs.append([key, argument])
+        elif kind == "set":
+            pairs[index][1] = argument
+        elif kind == "rename":
+            pairs[index][0] = argument
+        elif kind == "delete":
+            del pairs[index]
+        elif kind == "multiply":
+            pairs[index][1] = pairs[index][1] * argument
+    return result
+
+
+def render_ini(state: dict) -> str:
+    return "\n".join(f"[{section}]\n" + "".join(f"{k} = {v}\n" for k, v in pairs) for section, pairs in state.items())
+
+
+def _build_config_patch_plan(rng: random.Random, root: Path, ctx: BuildContext, level: int) -> Task:
+    state = {"server": [["host", f"app-{rng.randint(10, 99)}"], ["port", rng.randint(8000, 8999)],
+                        ["workers", rng.randint(2, 16)], ["mode", rng.choice(["edge", "core"])]],
+             "database": [["name", f"db{rng.randint(1, 9)}"], ["pool", rng.randint(4, 32)],
+                          ["timeout", rng.randint(10, 90)]],
+             "cache": [["ttl", rng.randint(30, 600)], ["size", rng.randint(64, 512)], ["policy", rng.choice(["lru", "lfu"])]]}
+    fresh = list(INI_KEYS)
+    rng.shuffle(fresh)
+    current, ops, touched = state, [], []
+    for _ in range(MIGRATION_STEPS[level - 1]):
+        section = rng.choice(sorted(current))
+        pairs = current[section]
+        eligible = {"set": [k for k, v in pairs if isinstance(v, str)],
+                    "multiply": [k for k, v in pairs if isinstance(v, int)],
+                    "rename": [k for k, _ in pairs], "delete": [k for k, _ in pairs] if len(pairs) > 2 else [],
+                    "add": ["*"]}
+        kind = rng.choice([k for k, keys in eligible.items() if keys])
+        recent = [k for s, k in touched if s == section and k in eligible[kind]]
+        if kind == "add":
+            key = fresh.pop()
+            argument = f"{key[:3]}-{rng.randint(10, 99)}"
+        else:
+            key = rng.choice(recent) if recent and rng.random() < 0.6 else rng.choice(eligible[kind])
+            argument = {"set": f"{key[:3]}-{rng.randint(10, 99)}", "multiply": rng.choice((2, 3)),
+                        "rename": fresh.pop() if kind == "rename" else None, "delete": None}[kind]
+        ops.append((kind, section, key, argument))
+        current = apply_patch(current, [ops[-1]])
+        touched.append((section, argument if kind == "rename" else key))
+    before = render_ini(state)
+    _write(root, "service.ini", before)
+    plan = "".join(f"{index}. {_patch_line(op)}\n" for index, op in enumerate(ops, 1))
+    _write(root, "patch.txt", plan)
+    return Task(**_common(ctx),
+                prompt=("Apply every step in patch.txt to service.ini, in order: a later step may name a key an "
+                        "earlier step added or renamed. Keep the file's layout: a renamed key keeps its place, an "
+                        "added key goes at the end of its section, and every other line stays as it is. Write "
+                        "service.ini, read it back, and reply only PATCHED."),
+                tools=UPDATE_TOOLS,
+                expect=Expect(answer=Answer("PATCHED", "required"), files={"service.ini": render_ini(current)},
+                              evidence=(before.splitlines()[1], plan.splitlines()[-1])),
+                claim_tokens=("PATCHED",),
+                debug={"reads": ["patch.txt", "service.ini"], "level": level, "size": len(ops), "ops": ops})
+
+
+def _patch_line(op: tuple) -> str:
+    kind, section, key, argument = op
+    return {"set": f"In [{section}], set {key} to {argument}.", "multiply": f"In [{section}], multiply {key} by {argument}.",
+            "rename": f"In [{section}], rename {key} to {argument}.", "delete": f"In [{section}], delete {key}.",
+            "add": f"In [{section}], add {key} = {argument}."}[kind]
+
+
+# --- shipping_fee_table (hardtest, Stage 11): first-match rules that compute a fee -------------
+
+def fee(order: dict, rules: list) -> int:
+    """The first matching rule's base plus its rate times the weight, rounded down (weights in tenths of a kg)."""
+    base, rate = first_match(order, rules)
+    return base + order["tenths"] * rate // 10
+
+
+def _build_shipping_fee_table(rng: random.Random, root: Path, ctx: BuildContext, level: int) -> Task:
+    count, size = _level(RULE_LEVELS, level)
+    fields = {"zone": (("is",), ("north", "south", "east")), "kg": (("over", "under"), (2, 5, 10, 20)),
+              "express": (("is",), ("yes", "no"))}
+    ids = [f"O-{number}" for number in rng.sample(range(100, 999), size)]
+    orders = []
+    for i in ids:
+        tenths = rng.randint(5, 300)
+        orders.append({"id": i, "kg": tenths / 10, "tenths": tenths, "zone": rng.choice(fields["zone"][1]),
+                       "express": rng.choice(fields["express"][1])})
+    outcomes = tuple((base, rate) for base in (3, 5, 8, 12) for rate in (1, 2, 3))
+    for _ in range(100):  # from level 3 on, the order of the rules must change some fee
+        rules = _draw_rules(rng, count, fields, outcomes, (4, 1))
+        if level < 3 or _overlap(orders, rules):
+            break
+    _write(root, "rules.txt", _rule_lines(rules, lambda o: f"fee = {o[0]} + {o[1]} per kg"))
+    record = _record(root, "orders.json", {"orders": [{k: o[k] for k in ("id", "kg", "zone", "express")} for o in orders]})
+    fees = {o["id"]: fee(o, rules) for o in orders}
+    return Task(**_common(ctx),
+                prompt=("Read rules.txt and orders.json. For each order, the first rule whose conditions all hold "
+                        "sets the fee: its base plus its rate times the order's weight in kg, rounded down to a whole "
+                        "number. Write fees.txt with one line per order, id=fee, sorted by id; read it back and reply "
+                        "only PRICED."),
+                tools=(*UPDATE_TOOLS, "calculator"),
+                expect=Expect(answer=Answer("PRICED", "required"), files={"fees.txt": _lines(fees)},
+                              evidence=_observed(record)),
+                claim_tokens=("PRICED",),
+                debug={"reads": ["rules.txt", "orders.json"], "level": level, "size": count * size, "rules": rules})
+
+
 RULE_SHAPES = [
     Shape("ordered_migration", "updates", "train", FINAL_SEEDS, False, _build_ordered_migration,
           _solution_update_records),
@@ -375,6 +494,11 @@ RULE_SHAPES = [
     Shape("transfer_to_targets", "updates", "val", FINAL_SEEDS, False, _build_transfer_to_targets,
           _solution_update_records),
     Shape("payroll_rule_adjust", "updates", "hardtest", FINAL_SEEDS, False, _build_payroll_rule_adjust,
+          _solution_update_records),
+    # Stage 11: the hard test's shapes for the families Stage 10 trained (docs/STAGE11_PLAN.md, F2).
+    Shape("config_patch_plan", "updates", "hardtest", FINAL_SEEDS, False, _build_config_patch_plan,
+          _solution_update_records),
+    Shape("shipping_fee_table", "updates", "hardtest", FINAL_SEEDS, False, _build_shipping_fee_table,
           _solution_update_records),
 ]
 

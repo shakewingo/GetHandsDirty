@@ -58,22 +58,30 @@ class StateShapeTests(ShapeGates, unittest.TestCase):
 
 
 class ReconcileShapeTests(ShapeGates, unittest.TestCase):
-    SHAPE_NAMES = ("fault_amid_reconcile",)
+    SHAPE_NAMES = ("fault_amid_reconcile", "ledger_audit_fault")  # the second is the hard test's (Stage 11)
     CONDITIONS = ("clean", "fault")
 
     def test_the_fault_moves_later_with_the_level(self):
-        calls = [self.build(*calib("fault_amid_reconcile", level, condition="fault"))[1].fault.on_call
-                 for level in (1, 2, 3, 4, 5)]
-        self.assertEqual(calls, sorted(calls))
-        self.assertGreater(calls[-1], calls[0])
+        for name in self.SHAPE_NAMES:
+            calls = [self.build(*calib(name, level, condition="fault"))[1].fault.on_call for level in (1, 2, 3, 4, 5)]
+            with self.subTest(shape=name):
+                self.assertEqual(calls, sorted(calls))
+                self.assertGreater(calls[-1], calls[0])
 
     def test_a_read_that_fails_and_is_not_retried_fails(self):
-        skeleton, ctx = calib("fault_amid_reconcile", 3, condition="fault")
-        _, task = self.build(skeleton, ctx)
-        record = self.run_script(skeleton, ctx, responses(without_retry(task.debug["script"])))
-        self.assertFalse(record["passed"])
-        self.assertFalse(record["checks"]["evidence"])
-        self.assertTrue(record["checks"]["fault_observed"])
+        for name in self.SHAPE_NAMES:
+            skeleton, ctx = calib(name, 3, condition="fault")
+            _, task = self.build(skeleton, ctx)
+            record = self.run_script(skeleton, ctx, responses(without_retry(task.debug["script"])))
+            with self.subTest(shape=name):
+                self.assertFalse(record["passed"])
+                self.assertFalse(record["checks"]["evidence"])
+                self.assertTrue(record["checks"]["fault_observed"])
+
+    def test_the_audit_writes_amounts_with_cents(self):
+        _, task = self.build(*calib("ledger_audit_fault", 2, condition="clean"))
+        line = task.expect.files["audit.txt"].splitlines()[0]
+        self.assertRegex(line, r"^R-\d{3}: ledger \d+\.\d{2}, bank \d+\.\d{2}$")
 
 
 if __name__ == "__main__":
