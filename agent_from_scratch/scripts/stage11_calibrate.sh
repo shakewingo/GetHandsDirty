@@ -26,3 +26,12 @@ stop_server
 run_logged "$LOGS/s11-calib-levels.log" python -m agent_from_scratch.evals levels "${runs[@]}" \
     --output outputs/s11-calib-report.json --levels outputs/s11-calib-levels.json
 dry || cat outputs/s11-calib-levels.json
+# The report's own C2 sees only these three shapes, so it always fails; the hard test's C2 (F2)
+# counts them with the hardtest shapes levels.json already keeps (Stage 10's support_dialogue).
+dry || python - outputs/s11-calib-levels.json <<'EOF'
+import json, sys
+from agent_from_scratch.evals.bench.skeletons import SHAPES, load_levels
+chosen = set(load_levels()) | set(json.load(open(sys.argv[1])))
+kept = sorted(s.name for s in SHAPES if s.split == "hardtest" and s.name in chosen)
+print(f"C2 for the hard test (at least 2 kept): {kept}:", "passed" if len(kept) >= 2 else "FAILED")
+EOF
