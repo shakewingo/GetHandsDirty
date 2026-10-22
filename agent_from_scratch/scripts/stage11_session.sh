@@ -42,7 +42,8 @@ final_run() {  # final_run OUT SPLIT SEED ARM: one frozen-protocol run (the base
 if ! finished freeze; then
     stamp "I: freeze"
     # The freeze hashes the working tree's sources, so it must be the committed tree (F4).
-    dry || [ -z "$(git status --porcelain --untracked-files=no)" ] || { echo "Uncommitted changes; freeze from a clean clone" >&2; exit 2; }
+    dry || { changes=$(git status --porcelain --untracked-files=no) && [ -z "$changes" ]; } \
+        || { echo "Uncommitted changes, or git failed; freeze from a clean clone" >&2; exit 2; }
     run_logged "$LOGS/dataset.log" python -m agent_from_scratch.evals dataset --output "$DATA" --check
     dry || grep -q '"gates_passed": true' "$DATA/summary.json"
     dry || python - "$MANIFEST" "${STAGE9_MANIFEST:?Stage 9 freeze}" <<'EOF'
