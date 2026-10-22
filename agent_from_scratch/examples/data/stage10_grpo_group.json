@@ -1,0 +1,1111 @@
+{
+ "source": "outputs/stage10-20261021-session-fg/s10g-grpo-p1/outputs/s10-grpo-p1-i0-s0..7",
+ "sampled_by": "M1 (mix-v3), Stage 10 GRPO pass 1 iteration 0",
+ "step_groups": {
+  "rollouts": 64,
+  "tasks": 8,
+  "mixed": 3,
+  "all_pass": 3,
+  "all_fail": 2,
+  "mean_reward": 0.5938,
+  "rows": 127
+ },
+ "rollouts": [
+  {
+   "id": "ordered_migration-7",
+   "skeleton": "ordered_migration",
+   "seed": 0,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "MIGRATED"
+  },
+  {
+   "id": "ordered_migration-11",
+   "skeleton": "ordered_migration",
+   "seed": 0,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "MIGRATED"
+  },
+  {
+   "id": "rule_table_apply-3",
+   "skeleton": "rule_table_apply",
+   "seed": 0,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "APPLIED"
+  },
+  {
+   "id": "rule_table_apply-4",
+   "skeleton": "rule_table_apply",
+   "seed": 0,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "APPLIED"
+  },
+  {
+   "id": "long_edit_dialogue-8",
+   "skeleton": "long_edit_dialogue",
+   "seed": 0,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": false,
+    "format_exact": false,
+    "observed_before_write": true
+   },
+   "final_answer": "NEED_INPUT"
+  },
+  {
+   "id": "long_edit_dialogue-13",
+   "skeleton": "long_edit_dialogue",
+   "seed": 0,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "NEED_INPUT"
+  },
+  {
+   "id": "fault_amid_reconcile-6-fault",
+   "skeleton": "fault_amid_reconcile",
+   "seed": 0,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": false,
+    "observed_before_write": true,
+    "fault_observed": true
+   },
+   "final_answer": "No discrepancies found. RECONCILED"
+  },
+  {
+   "id": "fault_amid_reconcile-7-clean",
+   "skeleton": "fault_amid_reconcile",
+   "seed": 0,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "RECONCILED"
+  },
+  {
+   "id": "ordered_migration-7",
+   "skeleton": "ordered_migration",
+   "seed": 1,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "MIGRATED"
+  },
+  {
+   "id": "ordered_migration-11",
+   "skeleton": "ordered_migration",
+   "seed": 1,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "MIGRATED"
+  },
+  {
+   "id": "rule_table_apply-3",
+   "skeleton": "rule_table_apply",
+   "seed": 1,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "APPLIED"
+  },
+  {
+   "id": "rule_table_apply-4",
+   "skeleton": "rule_table_apply",
+   "seed": 1,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "APPLIED"
+  },
+  {
+   "id": "long_edit_dialogue-8",
+   "skeleton": "long_edit_dialogue",
+   "seed": 1,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": false,
+    "format_exact": false,
+    "observed_before_write": true
+   },
+   "final_answer": "NEED_INPUT"
+  },
+  {
+   "id": "long_edit_dialogue-13",
+   "skeleton": "long_edit_dialogue",
+   "seed": 1,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "NEED_INPUT"
+  },
+  {
+   "id": "fault_amid_reconcile-6-fault",
+   "skeleton": "fault_amid_reconcile",
+   "seed": 1,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true,
+    "fault_observed": true
+   },
+   "final_answer": "RECONCILED"
+  },
+  {
+   "id": "fault_amid_reconcile-7-clean",
+   "skeleton": "fault_amid_reconcile",
+   "seed": 1,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "RECONCILED"
+  },
+  {
+   "id": "ordered_migration-7",
+   "skeleton": "ordered_migration",
+   "seed": 2,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "MIGRATED"
+  },
+  {
+   "id": "ordered_migration-11",
+   "skeleton": "ordered_migration",
+   "seed": 2,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "MIGRATED"
+  },
+  {
+   "id": "rule_table_apply-3",
+   "skeleton": "rule_table_apply",
+   "seed": 2,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "APPLIED"
+  },
+  {
+   "id": "rule_table_apply-4",
+   "skeleton": "rule_table_apply",
+   "seed": 2,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": false,
+    "format_exact": false,
+    "observed_before_write": true
+   },
+   "final_answer": "C-525=25\nC-665=0\nC-795=25"
+  },
+  {
+   "id": "long_edit_dialogue-8",
+   "skeleton": "long_edit_dialogue",
+   "seed": 2,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": false,
+    "format_exact": false,
+    "observed_before_write": true
+   },
+   "final_answer": "NEED_INPUT"
+  },
+  {
+   "id": "long_edit_dialogue-13",
+   "skeleton": "long_edit_dialogue",
+   "seed": 2,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "NEED_INPUT"
+  },
+  {
+   "id": "fault_amid_reconcile-6-fault",
+   "skeleton": "fault_amid_reconcile",
+   "seed": 2,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true,
+    "fault_observed": true
+   },
+   "final_answer": "RECONCILED"
+  },
+  {
+   "id": "fault_amid_reconcile-7-clean",
+   "skeleton": "fault_amid_reconcile",
+   "seed": 2,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": false,
+    "observed_before_write": true
+   },
+   "final_answer": "No discrepancies. RECONCILED"
+  },
+  {
+   "id": "ordered_migration-7",
+   "skeleton": "ordered_migration",
+   "seed": 3,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "MIGRATED"
+  },
+  {
+   "id": "ordered_migration-11",
+   "skeleton": "ordered_migration",
+   "seed": 3,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "MIGRATED"
+  },
+  {
+   "id": "rule_table_apply-3",
+   "skeleton": "rule_table_apply",
+   "seed": 3,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "APPLIED"
+  },
+  {
+   "id": "rule_table_apply-4",
+   "skeleton": "rule_table_apply",
+   "seed": 3,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "APPLIED"
+  },
+  {
+   "id": "long_edit_dialogue-8",
+   "skeleton": "long_edit_dialogue",
+   "seed": 3,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": false,
+    "format_exact": false,
+    "observed_before_write": true
+   },
+   "final_answer": "NEED_INPUT"
+  },
+  {
+   "id": "long_edit_dialogue-13",
+   "skeleton": "long_edit_dialogue",
+   "seed": 3,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "NEED_INPUT"
+  },
+  {
+   "id": "fault_amid_reconcile-6-fault",
+   "skeleton": "fault_amid_reconcile",
+   "seed": 3,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true,
+    "fault_observed": true
+   },
+   "final_answer": "RECONCILED"
+  },
+  {
+   "id": "fault_amid_reconcile-7-clean",
+   "skeleton": "fault_amid_reconcile",
+   "seed": 3,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "RECONCILED"
+  },
+  {
+   "id": "ordered_migration-7",
+   "skeleton": "ordered_migration",
+   "seed": 4,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "MIGRATED"
+  },
+  {
+   "id": "ordered_migration-11",
+   "skeleton": "ordered_migration",
+   "seed": 4,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "MIGRATED"
+  },
+  {
+   "id": "rule_table_apply-3",
+   "skeleton": "rule_table_apply",
+   "seed": 4,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "APPLIED"
+  },
+  {
+   "id": "rule_table_apply-4",
+   "skeleton": "rule_table_apply",
+   "seed": 4,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "APPLIED"
+  },
+  {
+   "id": "long_edit_dialogue-8",
+   "skeleton": "long_edit_dialogue",
+   "seed": 4,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": false,
+    "format_exact": false,
+    "observed_before_write": true
+   },
+   "final_answer": "NEED_INPUT"
+  },
+  {
+   "id": "long_edit_dialogue-13",
+   "skeleton": "long_edit_dialogue",
+   "seed": 4,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "NEED_INPUT"
+  },
+  {
+   "id": "fault_amid_reconcile-6-fault",
+   "skeleton": "fault_amid_reconcile",
+   "seed": 4,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": false,
+    "observed_before_write": true,
+    "fault_observed": true
+   },
+   "final_answer": "No discrepancies found. RECONCILED"
+  },
+  {
+   "id": "fault_amid_reconcile-7-clean",
+   "skeleton": "fault_amid_reconcile",
+   "seed": 4,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": false,
+    "format_exact": false,
+    "observed_before_write": true
+   },
+   "final_answer": "No discrepancies found. All counted numbers match the ledger."
+  },
+  {
+   "id": "ordered_migration-7",
+   "skeleton": "ordered_migration",
+   "seed": 5,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "MIGRATED"
+  },
+  {
+   "id": "ordered_migration-11",
+   "skeleton": "ordered_migration",
+   "seed": 5,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "MIGRATED"
+  },
+  {
+   "id": "rule_table_apply-3",
+   "skeleton": "rule_table_apply",
+   "seed": 5,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "APPLIED"
+  },
+  {
+   "id": "rule_table_apply-4",
+   "skeleton": "rule_table_apply",
+   "seed": 5,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "APPLIED"
+  },
+  {
+   "id": "long_edit_dialogue-8",
+   "skeleton": "long_edit_dialogue",
+   "seed": 5,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": false,
+    "format_exact": false,
+    "observed_before_write": true
+   },
+   "final_answer": "NEED_INPUT"
+  },
+  {
+   "id": "long_edit_dialogue-13",
+   "skeleton": "long_edit_dialogue",
+   "seed": 5,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "NEED_INPUT"
+  },
+  {
+   "id": "fault_amid_reconcile-6-fault",
+   "skeleton": "fault_amid_reconcile",
+   "seed": 5,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": false,
+    "observed_before_write": true,
+    "fault_observed": true
+   },
+   "final_answer": "No discrepancies. RECONCILED"
+  },
+  {
+   "id": "fault_amid_reconcile-7-clean",
+   "skeleton": "fault_amid_reconcile",
+   "seed": 5,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": false,
+    "observed_before_write": true
+   },
+   "final_answer": "No discrepancies found. All counted numbers match the ledger.\nRECONCILED"
+  },
+  {
+   "id": "ordered_migration-7",
+   "skeleton": "ordered_migration",
+   "seed": 6,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "MIGRATED"
+  },
+  {
+   "id": "ordered_migration-11",
+   "skeleton": "ordered_migration",
+   "seed": 6,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "MIGRATED"
+  },
+  {
+   "id": "rule_table_apply-3",
+   "skeleton": "rule_table_apply",
+   "seed": 6,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "APPLIED"
+  },
+  {
+   "id": "rule_table_apply-4",
+   "skeleton": "rule_table_apply",
+   "seed": 6,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "APPLIED"
+  },
+  {
+   "id": "long_edit_dialogue-8",
+   "skeleton": "long_edit_dialogue",
+   "seed": 6,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": false,
+    "format_exact": false,
+    "observed_before_write": true
+   },
+   "final_answer": "NEED_INPUT"
+  },
+  {
+   "id": "long_edit_dialogue-13",
+   "skeleton": "long_edit_dialogue",
+   "seed": 6,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "NEED_INPUT"
+  },
+  {
+   "id": "fault_amid_reconcile-6-fault",
+   "skeleton": "fault_amid_reconcile",
+   "seed": 6,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": false,
+    "observed_before_write": true,
+    "fault_observed": true
+   },
+   "final_answer": "No discrepancies found. RECONCILED"
+  },
+  {
+   "id": "fault_amid_reconcile-7-clean",
+   "skeleton": "fault_amid_reconcile",
+   "seed": 6,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": false,
+    "observed_before_write": true
+   },
+   "final_answer": "No discrepancies. RECONCILED"
+  },
+  {
+   "id": "ordered_migration-7",
+   "skeleton": "ordered_migration",
+   "seed": 7,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "MIGRATED"
+  },
+  {
+   "id": "ordered_migration-11",
+   "skeleton": "ordered_migration",
+   "seed": 7,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "MIGRATED"
+  },
+  {
+   "id": "rule_table_apply-3",
+   "skeleton": "rule_table_apply",
+   "seed": 7,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "APPLIED"
+  },
+  {
+   "id": "rule_table_apply-4",
+   "skeleton": "rule_table_apply",
+   "seed": 7,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "APPLIED"
+  },
+  {
+   "id": "long_edit_dialogue-8",
+   "skeleton": "long_edit_dialogue",
+   "seed": 7,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": false,
+    "format_exact": false,
+    "observed_before_write": true
+   },
+   "final_answer": "NEED_INPUT"
+  },
+  {
+   "id": "long_edit_dialogue-13",
+   "skeleton": "long_edit_dialogue",
+   "seed": 7,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true
+   },
+   "final_answer": "NEED_INPUT"
+  },
+  {
+   "id": "fault_amid_reconcile-6-fault",
+   "skeleton": "fault_amid_reconcile",
+   "seed": 7,
+   "passed": true,
+   "checks": {
+    "normal_finish": true,
+    "files": true,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": true,
+    "observed_before_write": true,
+    "fault_observed": true
+   },
+   "final_answer": "RECONCILED"
+  },
+  {
+   "id": "fault_amid_reconcile-7-clean",
+   "skeleton": "fault_amid_reconcile",
+   "seed": 7,
+   "passed": false,
+   "checks": {
+    "normal_finish": true,
+    "files": false,
+    "unchanged": true,
+    "evidence": true,
+    "process": true,
+    "answer_content": true,
+    "format_exact": false,
+    "observed_before_write": true
+   },
+   "final_answer": "No discrepancies. RECONCILED"
+  }
+ ]
+}
