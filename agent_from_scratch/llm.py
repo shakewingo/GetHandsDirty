@@ -6,6 +6,9 @@ from hashlib import sha256
 from dataclasses import dataclass, field
 from enum import StrEnum
 import json
+import math
+import os
+import time
 from loguru import logger
 from typing import Dict, Any, TYPE_CHECKING, List
 
@@ -437,11 +440,138 @@ class VLLMClient:
         self.http.close()
 
 
+class ChatAPIClient:
+    """Any OpenAI-compatible `/chat/completions` API as the model backend, with `LLM`'s interface.
+
+    Messages and tool schemas are already in the API's shape, so they are sent as they are and
+    the reply goes through `LLM.parse_response`, the one parser. The server's own chat template
+    and tool parser are used, so this backend is for daily use, never for the benchmark protocol.
+    Most such APIs have no token counter, so the context budget is an estimate kept on the high
+    side: characters times a token rate that starts at one token per three characters and rises
+    to the highest rate any reply's reported prompt tokens show.
+
+    Args:
+        base_url: the API root, ending where `/chat/completions` follows (often `.../v1`).
+        api_key: sent as a bearer token; None for a local server.
+        n_ctx: the model's context window, for the budget only.
+    """
+
+    START_TOKENS_PER_CHAR = 1 / 3
+
+    def __init__(self, base_url: str, model: str, api_key: str | None = None, *,
+                 temperature: float = TEMPERATURE, max_tokens: int = MAX_TOKENS, n_ctx: int = N_CTX,
+                 timeout: float = 600.0, retries: int = 3, backoff: float = 2.0, transport=None):
+        import httpx
+
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        self.http = httpx.Client(base_url=base_url.rstrip("/"), timeout=timeout, headers=headers,
+                                 transport=transport)
+        self.base_url, self.model, self.n_ctx = base_url, model, n_ctx
+        self.temperature, self.max_tokens = temperature, max_tokens
+        self.retries, self.backoff = retries, backoff
+        self.tokens_per_char = self.START_TOKENS_PER_CHAR
+        # First tool-call ID of a turn -> the reasoning that came with it. DeepSeek's thinking
+        # mode asks for it back while tools are in play; the harness does not keep it.
+        self._reasoning: dict[str, str] = {}
+
+    def _request(self, body: dict) -> dict:
+        import httpx
+
+        for attempt in range(self.retries):
+            try:
+                response = self.http.post("/chat/completions", json=body)
+                if response.status_code < 500 and response.status_code != 429:
+                    response.raise_for_status()
+                    return response.json()
+                error: Exception = RuntimeError(f"HTTP {response.status_code}: {response.text[:300]}")
+            except (httpx.TransportError, httpx.TimeoutException) as transport:
+                error = transport
+            if attempt == self.retries - 1:
+                raise error
+            time.sleep(self.backoff * 2 ** attempt)
+        raise AssertionError("unreachable")
+
+    def _messages(self, messages: list) -> list[dict]:
+        """The harness's messages with only the fields the API defines."""
+        converted = []
+        for message in messages:
+            entry = {"role": message["role"], "content": message.get("content") or ""}
+            if message["role"] == "tool":
+                entry["tool_call_id"] = message["tool_call_id"]
+            elif message["role"] == "assistant" and message.get("tool_calls"):
+                entry["tool_calls"] = message["tool_calls"]
+                reasoning = self._reasoning.get(message["tool_calls"][0]["id"])
+                if reasoning is not None:
+                    entry["reasoning_content"] = reasoning
+            converted.append(entry)
+        return converted
+
+    @staticmethod
+    def _characters(messages, tools) -> int:
+        return len(json.dumps(messages, ensure_ascii=False)) + len(json.dumps(list(tools.values()), ensure_ascii=False))
+
+    def measure_context(self, messages, tools, *, max_tokens: int | None = None) -> dict[str, Any]:
+        """Same contract as `LLM.measure_context`, with an estimated count."""
+        configured = self.max_tokens if max_tokens is None else max_tokens
+        reserve = configured if configured is not None and configured > 0 else None
+        count = math.ceil(self._characters(messages, tools) * self.tokens_per_char)
+        return {"count_method": "estimate", "prompt_tokens": count, "window_tokens": self.n_ctx,
+                "response_reserve": reserve,
+                "remaining_tokens": self.n_ctx - count - reserve if reserve is not None else None}
+
+    read_usage = staticmethod(LLM.read_usage)
+
+    def generate(self, messages, tools, *, max_tokens: int | None = None,
+                 max_tool_calls: int | None = None) -> LLMResponse:
+        body: dict[str, Any] = {"model": self.model, "messages": self._messages(messages),
+                                "temperature": self.temperature,
+                                "max_tokens": self.max_tokens if max_tokens is None else max_tokens,
+                                "stream": False}
+        if tools:
+            body["tools"] = list(tools.values())
+        raw = self._request(body)
+        try:
+            parsed = LLM.parse_response(
+                raw, MAX_TOOL_CALLS_PER_RESPONSE if max_tool_calls is None else max_tool_calls)
+        except ResponseError as error:
+            error.raw_response = raw
+            raise
+        reported = (parsed.usage or {}).get("prompt_tokens")
+        if reported:
+            self.tokens_per_char = max(self.tokens_per_char, reported / self._characters(messages, tools))
+        reasoning = raw["choices"][0]["message"].get("reasoning_content")
+        if parsed.tool_calls and isinstance(reasoning, str):
+            self._reasoning[parsed.tool_calls[0].call_id] = reasoning
+        parsed.raw_response = raw
+        return parsed
+
+    def settings(self) -> dict[str, Any]:
+        return {"backend": "chat_api", "base_url": self.base_url, "model": self.model,
+                "temperature": self.temperature, "max_tokens": self.max_tokens, "n_ctx": self.n_ctx,
+                "count_method": "estimate", "chat_template_sha256": None}
+
+    def close(self) -> None:
+        self.http.close()
+
+
+def make_model() -> LLM | ChatAPIClient:
+    """The agent's model: the chat API AGENT_BASE_URL names, or the local GGUF when it is unset
+    (config.AGENT_API_VARIABLES)."""
+    base_url = os.environ.get("AGENT_BASE_URL")
+    if not base_url:
+        return LLM()
+    model = os.environ.get("AGENT_MODEL")
+    if not model:
+        raise ValueError("AGENT_BASE_URL is set; set AGENT_MODEL to the model ID to use.")
+    return ChatAPIClient(base_url, model, os.environ.get("AGENT_API_KEY") or None,
+                         n_ctx=int(os.environ.get("AGENT_N_CTX") or N_CTX))
+
+
 if __name__ == "__main__":
     from .tools.register import default_tool_schemas
 
     user_input = "What is 2*2?"
-    llm = LLM()
+    llm = make_model()
     messages: list[ChatCompletionRequestMessage] = [
         {"role": "system", "content": render_prompt("system.md")},
         {"role": "user", "content": user_input},
