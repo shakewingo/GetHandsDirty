@@ -417,3 +417,13 @@ gain the seed noise would not hide. The pod was deleted after its logs were copi
 (`outputs/stage10-20261021-session-b/`); `runpodctl pod list --all` is empty. The next step is
 [STAGE10_HARD_TASKS_PLAN.md](STAGE10_HARD_TASKS_PLAN.md): shapes calibrated so that M1 succeeds
 about half the time, then both arms on them.
+
+## 9. Result (October 22)
+
+Run on the harder pool of [STAGE10_HARD_TASKS_PLAN.md](STAGE10_HARD_TASKS_PLAN.md) (section 7 holds
+the tables), with mix-v3 as M1. At every equal number of rollouts, self-SFT beat the GRPO pilot on
+val. The best model, M4 (three self-SFT rounds), reached val 0.852 against M1's 0.752: the 40 hard
+val tasks 0.225 → 0.617, the old 104 kept (0.955 → 0.942), false completions 33 → 3. GRPO raised its
+train reward but lost on val (0.718–0.731), forgetting part of the old 104. As data generators the
+models improve once and then flatten (pool success 0.58 → 0.74 → 0.75 → 0.77). Stage 10 is
+complete; M4 goes to Stage 11 with M1 as the reference.

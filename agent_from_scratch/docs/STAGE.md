@@ -1437,6 +1437,22 @@ A40, and they parallelize; training takes about 1.3 seconds per row. A six-pass 
 fit the existing \$0–30 line. The total budget may rise to
 \$150–200 if the pilot needs it (approved October 12, 2026); the projection does not need it.
 
+### Stage 10 complete (October 22, 2026)
+
+Expert iteration and a GRPO pilot, both from M1, compared at equal sampling
+([STAGE10_PLAN.md](STAGE10_PLAN.md), [STAGE10_HARD_TASKS_PLAN.md](STAGE10_HARD_TASKS_PLAN.md)).
+Two findings came before any arm could run. mix solved the original train pool and lacked the
+skill the arms needed (Session A), so the teacher's act/ask demonstrations were added: mix-v3
+became M1 (val 0.929 against 0.856). mix-v3 then solved nearly every train task, so new shapes with
+a difficulty level were calibrated on it (about half solved, on held-out seeds), with harder val
+and hard-test shapes beside them. On that pool, three self-SFT rounds raised val from 0.752 to
+0.852, the 40 hard val tasks from 0.225 to 0.617, kept the old 104 (0.955 → 0.942) and cut false
+completions from 33 to 3. Three GRPO passes, using the same rollouts, raised the train reward but
+lowered val (0.718–0.731). The rounds were not monotone, and each round's self data was about 3%
+of its training rows, so part of the gain may be retraining variance; one run per round cannot
+tell. Neither arm learned a behaviour M1 never produced (the act side of `long_edit_dialogue`).
+M4 goes to Stage 11.
+
 ## Stage 11 — final comparison and delivery · draft
 
 **Required outcome:** Stage 9 reports the base and its SFT candidates on test and the external
@@ -1466,9 +1482,12 @@ on a host that can hold the 7B weights, and record the retained/lost facts in
 [context-memory.md](context-memory.md); that is Stage 3's one outstanding gap. Stage 8 is
 complete: the benchmark and protocol are frozen and the Qwen3-4B control baseline is recorded
 (`docs/benchmark.md`). Stage 9 is complete: on test, base 0.419, teacher-v3 0.724, mix 0.774;
-mix is M1 but asks instead of acting outside our harness (BFCL 0.285); Item 7's mix-v2 stopped
-asking where it should act but did not beat mix on val, so M1 stays mix. Stage 10 is next: Item 1
-samples M1 on the 320 train tasks to measure its yield. For each session record: what I built, what I broke,
+mix asks instead of acting outside our harness (BFCL 0.285); Item 7's mix-v2 stopped asking where
+it should act but did not beat mix on val. Stage 10 made mix-v3 (mix plus the teacher's act/ask
+demonstrations) M1, and on a harder, calibrated pool three self-SFT rounds (M4) raised val from
+0.752 to 0.852; the GRPO pilot did not beat them at equal sampling. Stage 11 is next: give the hard
+test the shapes calibration dropped, then run M4 and M1 once on test and the hard test.
+For each session record: what I built, what I broke,
 what the evidence shows, what I can explain unaided, and the next smallest gap.
 
 [ch1]: ../../../harness-books/book1-claude-code/chapter-01-why-harness-engineering.md

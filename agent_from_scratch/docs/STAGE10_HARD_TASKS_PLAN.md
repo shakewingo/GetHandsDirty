@@ -133,8 +133,8 @@ Each: steps as Task 1 (failing tests, run, implement, run, commit `feat: <group>
 ## 5. Steps — GPU sessions
 
 - [x] **Session F — calibration** (done October 21; record in section 7) (one A100, about 1 hour, about \$2): 360 calibration tasks × 8 samples. Then `levels.json` from C1, shown to the user as a diff, and C2. Commit; `freeze` records the new manifest (old fingerprints unchanged).
-- [ ] **Session G — the arms** (one A100, about 25 hours, about \$45): Item 1 on the final pool; K8's gate; GRPO pilot (3 passes, about 2.5 hours); self-SFT rounds 1–3 (about 6.5 hours each); comparison on one server (M1, M2–M4, the GRPO passes; val three seeds). Copy-back after each stage; the Mac-side guard deletes the pod.
-- [ ] **Record** in this plan, STAGE10_PLAN.md and STAGE.md: Tables 1–4 of STAGE10_PLAN.md, read on the hard val subset first.
+- [x] **Session G — the arms** (done October 21–22; record in section 7) (one A100, about 25 hours, about \$45): Item 1 on the final pool; K8's gate; GRPO pilot (3 passes, about 2.5 hours); self-SFT rounds 1–3 (about 6.5 hours each); comparison on one server (M1, M2–M4, the GRPO passes; val three seeds). Copy-back after each stage; the Mac-side guard deletes the pod.
+- [x] **Record** in this plan, STAGE10_PLAN.md and STAGE.md: Tables 1–4 of STAGE10_PLAN.md, read on the hard val subset first.
 
 ## 6. Cost and budget
 
@@ -195,4 +195,75 @@ hard val subset: 40), hardtest 20. All 664 earlier tasks keep their fingerprints
 Stage 11 is `outputs/stage10-20261021-manifest.json` (`9cf35a89…`); the Stage 8 `manifest.json`
 is unchanged. Tests that assert Stage 8–9 counts now pin themselves to the Stage 8–9 registry.
 
-**Session G** started on the same pod at 06:28 UTC.
+**Session G.** Same pod, 06:28 UTC October 21 to 06:49 UTC October 22. Two interruptions, neither
+of them to the run: the host's runtime was briefly unavailable before G started, and the Mac's disk
+filled during GRPO pass 3, which truncated two copy-backs (fetched again afterwards). The pod was
+deleted at 07:15 UTC October 22; `runpodctl pod list --all` is empty. Pod cost about \$47.
+
+**Gate (K8).** 36 of the pool's 80 tasks mixed (G1 needs 30), in three shapes; the ask side 80 of
+80 (A1); M1's strict success on the pool 0.58 (below 0.90). Both arms ran.
+
+**Table 1: each model as a data generator** (pool of 80 tasks × 8 seeds, strict reward):
+
+| Model | Attempt success | Solved at least once | Solved sometimes, not always | `fault_amid_reconcile` | `long_edit_dialogue` | `ordered_migration` | `rule_table_apply` |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| M1 (mix-v3) | 0.581 | 60 | 36 | 0.36 | 0.50 | 0.74 | 0.72 |
+| M2 | 0.744 | 68 | 19 | 0.84 | 0.50 | 0.80 | 0.83 |
+| M3 | 0.753 | 63 | 9 | 0.90 | 0.50 | 0.71 | 0.91 |
+| M4 | 0.769 | 66 | 9 | 0.87 | 0.50 | 0.72 | 0.98 |
+
+Each round's verified set: 306, 328 and 302 examples (60, 68, 63 tasks), about 3% of the ~9,300 rows
+each round trained on (mix-v3's data, teacher-wide-v2 ×3, plus the set once).
+
+**Table 2: val, every candidate on one server, three seeds** (`outputs/stage10-20261021-session-fg/s10g-compare`):
+
+| Model | Val (144) | Old 104 | **Hard 40** | `flag_rollout` | `itinerary_dialogue` | False completions | Passed by seed |
+|---|---:|---:|---:|---:|---:|---:|---|
+| M1 (mix-v3) | 0.752 | 0.955 | 0.225 | 0.100 | 0.350 | 33 | 113, 106, 106 |
+| M2 (self-SFT round 1) | 0.785 | 0.907 | 0.467 | 0.550 | 0.383 | 48 | 113, 113, 113 |
+| M3 (round 2) | 0.729 | 0.856 | 0.400 | 0.317 | 0.483 | 38 | 104, 107, 104 |
+| **M4 (round 3)** | **0.852** | 0.942 | **0.617** | 0.733 | 0.500 | **3** | 124, 117, 127 |
+| GRPO pass 1 | 0.718 | 0.891 | 0.267 | 0.317 | 0.217 | 53 | 109, 95, 106 |
+| GRPO pass 2 | 0.722 | 0.885 | 0.300 | 0.367 | 0.233 | 51 | 107, 98, 107 |
+| GRPO pass 3 | 0.731 | 0.875 | 0.358 | 0.433 | 0.283 | 52 | 112, 99, 105 |
+
+**Table 3: GRPO against self-SFT at equal sampling** (640 rollouts per pass and per round; tasks
+won and lost against M1, by task and seed):
+
+| Rollouts | Self-SFT | Val | Paired vs M1 (all / hard) | GRPO | Val | Paired vs M1 (all / hard) |
+|---|---|---:|---|---|---:|---|
+| 640 | M2 | 0.785 | +52 −38 / +42 −13 | pass 1 | 0.718 | +28 −43 / +20 −15 |
+| 1,280 | M3 | 0.729 | +44 −54 / +34 −13 | pass 2 | 0.722 | +32 −45 / +23 −14 |
+| 1,920 | M4 | 0.852 | +67 −24 / +57 −10 | pass 3 | 0.731 | +39 −48 / +31 −15 |
+
+**Table 4: GRPO training log.** Each iteration sampled 8 tasks (2 per shape) × 8 seeds; 0–5 of
+the 8 had mixed outcomes, so each step learned from few groups, and 2 of the 30 steps had none
+(skipped). Mean train reward by pass 0.625, 0.695, 0.723 (M1 0.581); losses −0.04 to +0.03,
+gradient norms 0.10–0.85. Full log: `step.json` of every `s10-grpo-p*-i*-step`.
+
+**Reading.**
+
+- **Self-SFT helped; GRPO, at this budget and rate, did not.** At every equal number of rollouts
+  the self-SFT model beats the GRPO adapter on val. GRPO raised its train reward steadily but lost
+  on val: the old 104 fell (0.955 → 0.875–0.891) and false completions rose (33 → 51–53), with a
+  smaller gain on the hard 40 (0.225 → 0.358). The likely reasons are in Table 4: few mixed groups
+  per step, so each update is driven by a handful of tasks, and no anchor to M1's other skills.
+- **The best model is M4:** val 0.852 against M1's 0.752, the hard 40 from 0.225 to 0.617, the old
+  104 kept (0.942 against 0.955), false completions 33 → 3; paired against M1, 67 tasks won and 24
+  lost over three seeds. The gain on the hard val transfers: `flag_rollout` is a val shape whose
+  skill (act, then report a different subset) no train shape in the pool asks for directly.
+- **The rounds are not monotone** (M3 fell below M1 before M4 rose). Each round retrains from the
+  base on mix-v3's data plus a self set of about 3% of the rows, so part of the swing is likely
+  retraining variance, not the self-data alone. One run per round cannot separate the two.
+- **As data generators the models improve, then flatten:** attempt success 0.58 → 0.74 → 0.75 →
+  0.77. Round 1 gives most of the gain; tasks solved sometimes fall from 36 to 9 as the pool
+  saturates. The weak-RSI answer here: M2 is a clearly better generator than M1; M3 and M4 add
+  little.
+- **`long_edit_dialogue` never moved** (0.50 throughout: the ask side always, the act side never).
+  With no act-side success to select, neither arm could learn it. STAGE.md's warning holds:
+  outcome learning selects among behaviours the model already samples.
+
+**Candidates for Stage 11:** M4 (`outputs/stage10-20261021-session-fg/s10g-round3/outputs/s10-m4`),
+with M1 (mix-v3) as the reference; the GRPO adapters are kept but not proposed. Stage 11 runs them
+on Stage 9's test and on the hard test (`outputs/stage10-20261021-manifest.json`), after the hard
+test gets the shapes it lacks (C2).
