@@ -189,6 +189,43 @@ self-SFT round) and `stage10_grpo.sh PASSES` (the pilot, resumable); `STAGE10_DR
 commands without running them. `tests/test_grpo_exploits.py` checks that cheap cheats earn no
 reward.
 
+## Reproduce Stage 11
+
+The final numbers are in [docs/results.md](../docs/results.md). To reproduce one of them:
+
+1. **Setup** on a GPU pod (previous section; one A40): a clean clone of the commit, the adapters
+   under `outputs/`, and `uv pip install vllm==0.30.0 peft -r agent_from_scratch/requirements.txt`.
+2. **Reset the fixtures and run the scripted gates.** Every task's workspace is rebuilt from its
+   seed, so there is no state to reset by hand. `dataset --check` writes the versioned freeze and
+   runs each train and test task's correct script and two cheats through the agent loop:
+
+   ```sh
+   python -m agent_from_scratch.evals dataset --output outputs/NEW_DATA --check   # gates_passed: true
+   ```
+3. **Reload the adapters.** Start the Stage 8 server command with one
+   `--lora-modules NAME=ADAPTER_DIR` per adapter (as `serve` in `scripts/stage10_lib.sh` does), then
+   check a reload with `replay --adapter NAME` against that adapter's training examples.
+4. **One test run**, under the freeze:
+
+   ```sh
+   python -m agent_from_scratch.evals bench --backend vllm --split test --final \
+     --manifest outputs/NEW_DATA/manifest.json --seed 0 --adapter NAME --output outputs/NEW_TEST_S0
+   ```
+
+   `--split hardtest` works the same way. Sampling differs between server sessions, so a rerun
+   matches the reported pass@1 closely, not exactly.
+5. **The tables.** `report` takes one run per seed for each arm:
+
+   ```sh
+   python -m agent_from_scratch.evals report --arm "A=RUN_S0,RUN_S1,RUN_S2" --arm "B=..." \
+     --pair A:B [--subset NAME=SKELETON,...] --output TABLE.md
+   ```
+
+The whole session is `scripts/stage11_session.sh` (freeze, test, hard test, external), after
+`scripts/stage11_calibrate.sh` has chosen the hard test's levels. The pod cannot delete itself:
+keep the Mac awake, open and on power until the cost guard has copied the results back and
+deleted the pod. A closed lid on battery stops the guard and the pod bills idle.
+
 Start here. Everything runs from the **repository root** in the project environment through one
 entry point:
 

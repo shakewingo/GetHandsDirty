@@ -164,8 +164,17 @@ Val (144): mix-v3 0.752, M4 0.852 (Stage 10, one server). The hard test holds on
   rate rests on 3 workspaces. The task itself is sound (its scripted gates pass). Decided with the
   user: keep C1's L2 (it tests a sparse mismatch and a reread, under the batch limit) and report
   the caveat with its hard-test results.
-- [ ] **Session I — final runs** (A40, about 5 hours, about \$3): Task 3's session. Copy back, delete the pod. Judge the When2Call replies on the Mac (DeepSeek, about \$1).
-- [ ] **Results:** `docs/results.md` from the results module; STAGE.md's Stage 11 marked done.
+- [x] **Session I — final runs** (A40, about 5 hours, about \$3): Task 3's session. Copy back, delete the pod. Judge the When2Call replies on the Mac (DeepSeek, about \$1).
+
+  **Record (October 22–23).** Pod `qtqdb3bp81g4py` (A40), from a clean clone of `637c310`: freeze
+  12:00 UTC (640 of 640 scripted passes, both cheats 0 of 640; "140 test tasks match Stage 9's
+  freeze; 80 hard-test tasks frozen"), test 12:03, hard test 12:36, external 13:36, done 15:06
+  (3.2 hours). Every run `--final`, no drift, no protocol mismatch. **The pod then billed idle for
+  11.3 hours:** the Mac's lid was closed on battery at 12:13 UTC, clamshell sleep froze the cost
+  guard, and the pod was found, copied back (checksums match) and deleted at 02:27 UTC October 23.
+  Session cost about \$8.80, of which about \$6.70 idle. When2Call judged on the Mac with
+  `deepseek-flash`, as Stage 9. Evidence: `outputs/stage11-20261022-session-i/`.
+- [x] **Results:** `docs/results.md` from the results module; STAGE.md's Stage 11 marked done.
 
 ## 5. Cost
 

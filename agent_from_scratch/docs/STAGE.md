@@ -1453,7 +1453,7 @@ of its training rows, so part of the gain may be retraining variance; one run pe
 tell. Neither arm learned a behaviour M1 never produced (the act side of `long_edit_dialogue`).
 M4 goes to Stage 11.
 
-## Stage 11 — final comparison and delivery · draft
+## Stage 11 — final comparison and delivery · complete (October 23, 2026)
 
 **Required outcome:** Stage 9 reports the base and its SFT candidates on test and the external
 test. After val selection, any Stage 10 round or GRPO adapter kept as a final candidate is run
@@ -1463,6 +1463,23 @@ uncertainty, regressions and limitations. Do not promise gains, and do not treat
 improvement as broad agent generalization. Package setup, fixture reset/eval, adapter reload, and
 a demo covering tools → recovery → compact → restart → corrected memory. Keep `docs/results.md`
 and `docs/demo.md`.
+
+### Stage 11 complete (October 23, 2026)
+
+Plan and record: [STAGE11_PLAN.md](STAGE11_PLAN.md). Results: [results.md](results.md).
+
+- **Final runs, once each.** A new freeze (its 140 test tasks identical to Stage 9's) ran
+  mix-v2, mix-v3 and M4 on test, all six arms on a hard test of 80 tasks (three shapes added
+  and calibrated in Session H), and the external test for the new arms.
+- **Stage 10's val gain did not transfer.** Test: M4 0.745, mix-v3 0.738 (39 won, 36 lost;
+  interval −0.043 to +0.055), mix-v2 0.714, against Stage 9's mix 0.774 (across sessions). Hard
+  test: mix-v3 0.492, M4 0.471, mix 0.429, base 0.275. Outside the harness M4 asks less where it
+  should act than mix (BFCL 0.395 against 0.285). The gain of the whole project is Stage 9's SFT.
+- **Delivery.** `docs/results.md`; a "Reproduce Stage 11" section in `evals/README.md`; any
+  OpenAI-compatible model as the agent's backend (`AGENT_BASE_URL`); and, in place of
+  `docs/demo.md` (decided October 22), `examples/walkthrough.ipynb`, one section per stage of the
+  build. Durable, corrected memory is not shown: Stage 4 is deferred.
+- **Cost.** About \$10 of GPU, \$6.70 of it a finished pod billing idle after the Mac slept.
 
 ## Reference map and next step
 
@@ -1485,8 +1502,9 @@ complete: the benchmark and protocol are frozen and the Qwen3-4B control baselin
 mix asks instead of acting outside our harness (BFCL 0.285); Item 7's mix-v2 stopped asking where
 it should act but did not beat mix on val. Stage 10 made mix-v3 (mix plus the teacher's act/ask
 demonstrations) M1, and on a harder, calibrated pool three self-SFT rounds (M4) raised val from
-0.752 to 0.852; the GRPO pilot did not beat them at equal sampling. Stage 11 is next: give the hard
-test the shapes calibration dropped, then run M4 and M1 once on test and the hard test.
+0.752 to 0.852; the GRPO pilot did not beat them at equal sampling. Stage 11 is complete: on
+test M4 (0.745) is level with mix-v3 (0.738) and below Stage 9's mix (0.774), so the val gain did
+not transfer ([results.md](results.md)).
 For each session record: what I built, what I broke,
 what the evidence shows, what I can explain unaided, and the next smallest gap.
 
