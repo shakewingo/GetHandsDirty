@@ -48,9 +48,11 @@ def build_manifest() -> dict:
                          "tools_sha256": digest(json.dumps(task.tools).encode()),
                          "workspace_sha256": digest(json.dumps(snapshot(workspace),
                                                                sort_keys=True).encode())})
-            if task.split in ("train", "holdout"):
+            if skeleton.strict:
                 tasks[-1]["fault_signal"] = list(task.fault_signal) if task.fault_signal is not None else None
                 tasks[-1]["fault_path"] = task.fault_path
+            if task.followups:
+                tasks[-1]["followups_sha256"] = digest(json.dumps(task.followups).encode())
     return {"source_sha256": _source_hashes(),
            "system_prompt_sha256": digest((ROOT / "prompts/system.md").read_bytes()),
            "chat_template_sha256": digest(CHAT_TEMPLATE_PATH.read_bytes()),

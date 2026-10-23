@@ -64,6 +64,9 @@ class Task:
     claim_tokens: tuple[str, ...] = ()  # replies that claim completion, for false_completion
     pair_id: str | None = None
     condition: str | None = None  # "clean" | "fault" | None
+    # Later user turns of the same conversation, played after `prompt` in one session; the
+    # verifier scores the state after the last turn and the evidence of every turn.
+    followups: tuple[str, ...] = ()
     debug: dict = field(default_factory=dict)
 
 

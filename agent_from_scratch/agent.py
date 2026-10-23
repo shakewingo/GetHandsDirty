@@ -449,7 +449,9 @@ class Agent:
 
 
 if __name__ == "__main__":
-    llm = LLM()
+    from .llm import make_model
+
+    llm = make_model()  # AGENT_BASE_URL picks a chat API; otherwise the local GGUF
     # Planning lengthens weak-model runs, so the REPL raises the turn budgets with it.
     agent = Agent(llm, state_dir="./outputs/sessions",
                   limits=AgentLimits(planning=True, max_iterations=30, max_tool_calls=60),

@@ -14,7 +14,7 @@ cd GetHandsDirty
 
 python3 -m venv .venv
 source .venv/bin/activate
-pip install llama-cpp-python loguru huggingface_hub -r agent_from_scratch/requirements-tools.txt
+pip install -r agent_from_scratch/requirements.txt
 ```
 
 Once the bot is merged into `main`, you can leave out `-b feat/telegram-bot`.
@@ -30,6 +30,18 @@ hf download Qwen/Qwen2.5-7B-Instruct-GGUF \
 ```
 
 This saves the files to the path in `agent_from_scratch/config.py` (`MODEL_PATH`).
+
+**Or use any OpenAI-compatible model instead** (OpenAI, DeepSeek, OpenRouter, or a local server
+such as Ollama or LM Studio) and skip the download. Set these before starting the bot or the REPL:
+
+```sh
+export AGENT_BASE_URL=https://api.deepseek.com   # the API root; often ends in /v1
+export AGENT_MODEL=deepseek-flash                # the provider's model ID
+export AGENT_API_KEY=sk-...                      # not needed for a local server
+export AGENT_N_CTX=8192                          # optional: the model's window (default 32768)
+```
+
+With `AGENT_BASE_URL` unset, the agent uses the local GGUF.
 
 ## 3. Create your bot in Telegram
 

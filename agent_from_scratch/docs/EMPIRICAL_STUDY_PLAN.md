@@ -655,13 +655,13 @@ frozen budget wins); after the loop, `save(out / "trajectory.json", profile(reco
 - [x] **Step 4:** rerun; full suite green.
 - [x] **Step 5:** commit `feat: profile eval trajectories and pair runs with an exact McNemar test`.
 
-### Task 3.3: real-model ablation on the dev suite
+### Task 3.3: real-model ablation on the Stage 2B suite
 
 - [x] Run September 21, 2026 on a 16 GB Apple-silicon Mac at `N_CTX = 32768`; results and the
   follow-up pressure suite are in the [stage log](#task-33--run-at-the-32k-window).
 
-Three fresh runs of the 17 dev tasks, then profiles and pairwise comparisons. The commands below
-are the original wording; the entry point is now `python -m agent_from_scratch.evals dev` and
+Three fresh runs of the 17 Stage 2B tasks, then profiles and pairwise comparisons. The commands below
+are the original wording; the suite later ran through `python -m agent_from_scratch.evals` (both have since been removed) and
 `... evals compare` (same flags), and outputs go outside the package:
 
 ```sh
@@ -1011,21 +1011,21 @@ Run September 21, 2026: greedy decoding (temperature 0), seed 11, **one run per 
 16 GB Apple-silicon Mac, `n_ctx = 32768`. Source was HEAD `5c02cef` plus uncommitted edits that do
 not change behavior (the `window_share` to `window_share_ratio` rename, comments, one config field
 moved); the core-file hashes are identical across all 11 runs. Evidence: `outputs/study-*`
-(`study-t3`, `-t4`, `-t4-plan` for the dev suite; `study-pressure-*` and `study-two-*` for the
+(`study-t3`, `-t4`, `-t4-plan` for the Stage 2B suite; `study-pressure-*` and `study-two-*` for the
 pressure suite; each has `metadata.json`, `results.json`, `trajectory.json` and per-task traces).
 The conditions are T3 (`elide_ratio: null`, summaries only), T4 (the default, elision then
 summaries) and T4+plan (`planning: true`).
 
-**What was missing, and its estimate.** The plan predicted "no pressure reached" for the dev
+**What was missing, and its estimate.** The plan predicted "no pressure reached" for the Stage 2B
 suite, and that was right, so the ablation could not test the mechanisms it was written for. The
 suite needed evidence that outgrows the window. Sizing it used the real tokenizer (vocab-only
 load): a 14,000-character file is 2,984 tokens, so a 15,000-character read costs about 3k tokens
 and 0.6 of the usable window (18,432) falls at the 6th read and 0.85 (26,112) at the 8th. That
-sets 9 files of 15,000 characters per task. Cost, measured: a dev run takes 1.6 to 4.4 minutes;
+sets 9 files of 15,000 characters per task. Cost, measured: a Stage 2B run takes 1.6 to 4.4 minutes;
 a 4-task pressure run takes 17 to 27 minutes, because each read adds ~3k tokens of prefill and
 elision invalidates the cached prefix; the full ablation is about 70 minutes.
 
-**Dev suite (17 tasks), Task 3.3 as written.**
+**Stage 2B suite (17 tasks), Task 3.3 as written.**
 
 | Condition | Passed | Model requests | Total tokens | Wall clock | Peak prompt / usable | Elided | Plan updates |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -1123,8 +1123,8 @@ elision, summaries and planning are inert in the primary weight comparison anywa
 
 | Item | When | Why |
 |---|---|---|
-| Answer-format policy in the verifiers: score artifacts and evidence first, record exact format separately (the `answer_found` pattern) | **Now**, inside Stage 8 | Format slips are the most common failure in both suites (one of three dev regressions, two of three pressure failures). Left unsplit, an SFT gain that is only format learning would read as a capability gain in Stage 11 |
-| Stage 8 benchmark with skeleton-split generated variants on the **current** tool registry (`edit_file`, `glob_files`, `grep_text`) | **Now** | The dev suite cannot exercise the new tools, and its tasks influenced prompt choices, so they cannot serve as the reserved test set. `pressure.py` is the pattern: generate from a seed, store nothing large. Reserve the test skeletons first |
+| Answer-format policy in the verifiers: score artifacts and evidence first, record exact format separately (the `answer_found` pattern) | **Now**, inside Stage 8 | Format slips are the most common failure in both suites (one of three Stage 2B regressions, two of three pressure failures). Left unsplit, an SFT gain that is only format learning would read as a capability gain in Stage 11 |
+| Stage 8 benchmark with skeleton-split generated variants on the **current** tool registry (`edit_file`, `glob_files`, `grep_text`) | **Now** | The Stage 2B suite cannot exercise the new tools, and its tasks influenced prompt choices, so they cannot serve as the reserved test set. `pressure.py` is the pattern: generate from a seed, store nothing large. Reserve the test skeletons first |
 | Freeze the mechanism settings as untuned defaults: `elide_ratio` 0.6, `compact_ratio` 0.85, planning off, memory off | **Now** | Stage 8 must freeze compact policy before comparing weights. Record them as defaults, not as calibrated values |
 | Keep `pressure` (v2) as the separate long-context harness evaluation; log the T3 summary that lost a code in [context-memory.md](context-memory.md) | **Now**, small | Stage 8 asks for long-session and compact evaluations to stay separate from the main benchmark. Task 3.3 already produced a retained/lost-facts example |
 | Real-model `continuation_demo.py` and `compact_demo.py` (Stage 3's one outstanding gap) | **Now**, about an hour | This host can hold the model now; the demos pin `n_ctx=4096`, so they create pressure without long fixtures |
@@ -1158,8 +1158,8 @@ scoring through `run_case`:
 
 | Change | Where |
 |---|---|
-| `python -m agent_from_scratch.evals {dev,pressure,compare}` single entry point | `evals/__main__.py` |
-| Shared run setup (`open_run`, `parse_limits`) and `--n-ctx` for the dev and pressure suites | `evals/run.py` |
+| `python -m agent_from_scratch.evals` single entry point (then for the Stage 2B suite, `pressure` and `compare`) | `evals/__main__.py` |
+| Shared run setup (`open_run`, `parse_limits`) and `--n-ctx` for the Stage 2B and pressure suites | `evals/run.py` |
 | Window-pressure suite with generated fixtures, `answer_found` and its tests | `evals/pressure.py`, `tests/test_pressure.py` |
 | Removed the Stage 1 read-coverage CLI; `digest` and `measure` moved into `verify.py` | `evals/foundation.py` deleted |
 | Checkpoint docs and the old README moved out of the script folder | `docs/checkpoints/` (later kept out of the published docs) |

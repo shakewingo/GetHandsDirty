@@ -120,10 +120,12 @@ class TrainSkeletonTests(unittest.TestCase):
                 self.assertEqual(snapshot(a), snapshot(b))
                 self.assertEqual(task_a, task_b)
 
-    def test_dev_test_tasks_and_protocol_match_the_frozen_manifest(self):
+    def test_stage8_tasks_and_protocol_match_the_frozen_manifest(self):
+        # The Stage 8 freeze covers the 64 val tasks and the 60 Stage 8 test tasks.
         frozen = json.loads(MANIFEST_PATH.read_text())
         current = build_manifest()
-        eval_tasks = [task for task in current["tasks"] if task["split"] in ("dev", "test")]
+        frozen_ids = {task["id"] for task in frozen["tasks"]}
+        eval_tasks = [task for task in current["tasks"] if task["id"] in frozen_ids]
         self.assertEqual(eval_tasks, frozen["tasks"])
         for key in ("model", "decoding", "seeds", "n_ctx", "limits", "memory",
                     "system_prompt_sha256", "chat_template_sha256", "verifier_sha256"):

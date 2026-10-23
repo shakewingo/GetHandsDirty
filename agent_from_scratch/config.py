@@ -29,6 +29,12 @@ N_GPU_LAYERS = -1
 
 MAX_TOOL_CALLS_PER_RESPONSE = 8
 
+# Any OpenAI-compatible chat API as the agent's model (OpenAI, DeepSeek, OpenRouter, Ollama,
+# LM Studio, llama.cpp's server, vLLM): `llm.make_model` uses it when AGENT_BASE_URL is set and
+# the local GGUF otherwise. AGENT_N_CTX is the model's window for the context budget (default
+# N_CTX); a local server's own window is often smaller and must then be given.
+AGENT_API_VARIABLES = ("AGENT_BASE_URL", "AGENT_MODEL", "AGENT_API_KEY", "AGENT_N_CTX")
+
 # Stage 8 benchmark protocol, frozen in evals/bench/manifest.json. The control checkpoint is
 # served by vLLM in bf16 so that a LoRA adapter can later be compared on the same server with
 # only the adapter toggled. Sampling uses the model card's recommended values

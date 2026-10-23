@@ -82,6 +82,18 @@ class RenderTests(unittest.TestCase):
                 self.assertEqual(render_chat(compile_chat_template(template), CONVERSATION, tools),
                                  expected)
 
+    def test_rendering_a_turn_without_the_generation_prompt_extends_the_prompt(self):
+        compiled = compile_chat_template(CHAT_TEMPLATE_PATH.read_text())
+        turn = {"role": "assistant", "content": "", "tool_calls": [{"id": "c2", "type": "function",
+            "function": {"name": "read_file", "arguments": json.dumps({"path": "b.json"})}}]}
+        prompt = render_chat(compiled, CONVERSATION, default_tool_schemas)
+        full = render_chat(compiled, [*CONVERSATION, turn], default_tool_schemas,
+                           add_generation_prompt=False)
+        self.assertTrue(prompt.endswith("<|im_start|>assistant\n"))
+        self.assertEqual(full[len(prompt):],
+                         '<tool_call>\n{"name": "read_file", "arguments": {"path": "b.json"}}\n</tool_call><|im_end|>\n')
+        self.assertTrue(full.startswith(prompt))
+
 
 class ClientTests(unittest.TestCase):
     def test_generate_sends_the_rendered_prompt_and_frozen_sampling(self):
@@ -133,7 +145,7 @@ class ClientTests(unittest.TestCase):
         self.assertTrue(protocol_mismatch(client(FakeServer([])).settings(), 7))
 
     def test_a_bench_task_runs_end_to_end_through_the_http_backend(self):
-        skeleton, ctx = next((s, c) for s, c in specs("dev") if s.name == "single_field_edit")
+        skeleton, ctx = next((s, c) for s, c in specs("val") if s.name == "single_field_edit")
         directory = Path(self.enterContext(TemporaryDirectory()))
         task = skeleton.build(random.Random(f"bench:{ctx.name}:{ctx.seed}:{ctx.condition}"), directory, ctx)
         expected = json.loads(task.expect.files["config.json"])

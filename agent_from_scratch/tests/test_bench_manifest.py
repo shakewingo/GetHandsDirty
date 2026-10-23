@@ -12,9 +12,13 @@ class ManifestTests(unittest.TestCase):
         first, second = build_manifest(), build_manifest()
         self.assertEqual(first, second)
         self.assertEqual(first["memory"], "off")
-        counts = {split: sum(task["split"] == split for task in first["tasks"])
-                  for split in ("dev", "test", "train", "holdout")}
-        self.assertEqual(counts, {"dev": 64, "test": 60, "train": 80, "holdout": 80})
+        # The Stage 8-9 tasks alone; the Stage 10 shapes join at the levels levels.json names.
+        with patch("agent_from_scratch.evals.bench.skeletons.load_levels", return_value={}):
+            stage9 = build_manifest()
+        counts = {split: sum(task["split"] == split for task in stage9["tasks"])
+                  for split in ("train", "val", "test")}
+        self.assertEqual(counts, {"train": 420, "val": 104, "test": 140})
+        self.assertLessEqual({t["id"] for t in stage9["tasks"]}, {t["id"] for t in first["tasks"]})
 
     def test_manifest_drift_is_empty_before_any_freeze(self):
         with patch("agent_from_scratch.evals.bench.manifest.MANIFEST_PATH", Path("/nonexistent.json")):

@@ -12,7 +12,7 @@ agent capability; this only adds a way to reach the agent that already exists.
 
 ## Constraints that shaped this
 
-- The primary dev laptop cannot stay powered on 24/7 (it travels, gets shut down), so the
+- The primary development laptop cannot stay powered on 24/7 (it travels, gets shut down), so the
   process must live somewhere else.
 - A Mac mini M4 (16 GB RAM, ~50 GB free disk) is available and can stay on continuously. That
   is enough headroom for the local Qwen2.5-7B q4 GGUF model plus `llama-cpp-python`'s Metal

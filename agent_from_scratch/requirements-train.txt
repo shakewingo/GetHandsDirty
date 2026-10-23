@@ -1,0 +1,8 @@
+# Training-only packages for `evals train` and its tests, on top of requirements.txt:
+#   pip install -r agent_from_scratch/requirements.txt -r agent_from_scratch/requirements-train.txt
+# Pinned to what `vllm==0.30.0 peft` resolves to on the Linux pod (October 13, 2026), so an
+# adapter is debugged on the Mac with the libraries that train and serve it.
+# Do not install this file on the pod: vLLM pins its own torch and transformers there.
+torch==2.13.0
+transformers==5.19.0
+peft==0.21.2

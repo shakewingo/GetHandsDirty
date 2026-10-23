@@ -1,6 +1,6 @@
 """Window-pressure suite: tasks whose evidence outgrows the context window.
 
-The 17-task dev suite peaks near 8% of a 32k window, so it never reaches the elision
+The retired 17-task Stage 2B suite peaked near 8% of a 32k window, so it never reached the elision
 (`elide_ratio`) or summary (`compact_ratio`) triggers. Each task here builds a fresh workspace of
 nine ~15,000-character files. One `read_file` costs about 3.3k tokens, so 0.6 of the usable window
 is crossed on the 6th read and 0.85 on the 8th. Files come from `--seed`; nothing large is stored.

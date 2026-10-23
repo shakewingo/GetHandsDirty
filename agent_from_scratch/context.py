@@ -248,13 +248,17 @@ class ContextState:
         return boundary
 
 
+MEASURED = ("exact", "estimate")
+
+
 def context_blocker(budget: dict | None, margin: int) -> tuple[str, str] | None:
     """Return (error_code, detail) when a measurement cannot support a request at margin.
 
     Single definition of the fit rule: both the soft compaction trigger and the hard
-    request gate read it, so the two can never drift apart.
+    request gate read it, so the two can never drift apart. An "estimate" (`ChatAPIClient`,
+    kept on the high side) counts as a measurement; "unavailable" does not.
     """
-    if (not budget or budget.get("count_method") != "exact"
+    if (not budget or budget.get("count_method") not in MEASURED
             or budget.get("remaining_tokens") is None):
         return ("context_unavailable",
                 "Cannot establish request fit: exact prompt measurement "
@@ -272,8 +276,8 @@ def context_blocker(budget: dict | None, margin: int) -> tuple[str, str] | None:
 
 
 def window_share_ratio(budget: dict | None) -> float | None:
-    """Fraction of the usable window (window minus output reserve) an exact measurement fills."""
-    if not budget or budget.get("count_method") != "exact" or budget.get("response_reserve") is None:
+    """Fraction of the usable window (window minus output reserve) a measurement fills."""
+    if not budget or budget.get("count_method") not in MEASURED or budget.get("response_reserve") is None:
         return None
     return budget["prompt_tokens"] / (budget["window_tokens"] - budget["response_reserve"])
 

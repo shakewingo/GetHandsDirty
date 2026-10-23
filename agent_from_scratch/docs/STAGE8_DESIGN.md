@@ -7,10 +7,10 @@ and run on the control checkpoint; results are in [benchmark.md](benchmark.md).
 
 Give Stage 9–11 a benchmark that can be trusted before any weight is trained: generated tasks on
 the **current** tool registry, split by skeleton, scored by one verifier that accepts any valid
-tool path, and frozen with a manifest. It replaces the 17-task dev suite for weight comparisons;
+tool path, and frozen with a manifest. It replaces the 17-task Stage 2B suite for weight comparisons;
 that suite was retired after Stage 8 (see `evals/README.md`).
 
-Why now: the dev suite predates `edit_file`, `glob_files` and `grep_text`, its tasks shaped prompt
+Why now: the Stage 2B suite predates `edit_file`, `glob_files` and `grep_text`, its tasks shaped prompt
 choices so they cannot be a reserved test set, and its strict format check let one failure mode
 (a correct value inside a sentence) dominate results (see the Task 3.3 section of
 [EMPIRICAL_STUDY_PLAN.md](EMPIRICAL_STUDY_PLAN.md)). Stage 8's requirements are in
@@ -22,31 +22,31 @@ the end maps each bullet to a section here.
 | Decision | Choice |
 |---|---|
 | Test size | 10 skeletons × 6 variants = **60** tasks (inside the 50–100 target, so not a pilot) |
-| Dev set | Originally 4 skeletons = **15** tasks; expanded to 8 skeletons = **64** tasks after the 7B pilot (see *Revision after the 7B pilot*) |
+| Val set | Originally 4 skeletons = **15** tasks; expanded to 8 skeletons = **64** tasks after the 7B pilot (see *Revision after the 7B pilot*) |
 | Definition of a task | Python builder emits a declarative spec; **one generic verifier** interprets it |
 | `passed` | **Content first.** Format is recorded separately and only gates tasks whose reply token is the deliverable |
-| Web tasks | Excluded from this version. Web is not one of Stage 8's four families, and the dev suite's `RecordedWeb` replays extracted text through a frozen legacy interface, so web tasks need their own recorded-response generator. The dev suite's two web failures are **not** web failures: in all three Task 3.3 runs the model batched `web_fetch` with a `write_file` whose JSON `content` was single-quoted and filled with empty placeholders, three identical malformed calls in a row, then `no_progress`. That weakness (dependent calls in one batch, JSON-in-a-string arguments) is still exercised by the update skeletons. Candidate addition later |
+| Web tasks | Excluded from this version. Web is not one of Stage 8's four families, and the Stage 2B suite's `RecordedWeb` replays extracted text through a frozen legacy interface, so web tasks need their own recorded-response generator. The Stage 2B suite's two web failures are **not** web failures: in all three Task 3.3 runs the model batched `web_fetch` with a `write_file` whose JSON `content` was single-quoted and filled with empty placeholders, three identical malformed calls in a row, then `no_progress`. That weakness (dependent calls in one batch, JSON-in-a-string arguments) is still exercised by the update skeletons. Candidate addition later |
 | Memory | Stage 4A–4B deferred past Stage 11; the freeze records `memory: off`. Memory tools must stay out of the frozen registry because they change the prompt |
 | Test-set guard | `--split test` needs `--final` and refuses on manifest drift |
 | 7B real-model use | Pipeline check only; the base control is Qwen3-4B-Instruct-2507 on vLLM, frozen as the protocol below |
 
 ## Revision after the 7B pilot (September 26, 2026)
 
-The 7B dev pilot and test pipeline check (`docs/benchmark.md`) showed most update and stopping
+The 7B val pilot and test pipeline check (`docs/benchmark.md`) showed most update and stopping
 failures had one harness cause, and that the freeze was a 7B freeze. Before any control-checkpoint
 run, and so before any weight comparison, these changed:
 
 | Change | Why |
 |---|---|
-| `read_file`'s description says the `N| ` prefixes must never be copied into `write_file` **or** `edit_file` content (it named only `edit_file`, which update tasks did not offer) | The model wrote the line-numbered text back verbatim in the dev pilot's `single_field_edit` and `no_op_correct_config` failures |
+| `read_file`'s description says the `N| ` prefixes must never be copied into `write_file` **or** `edit_file` content (it named only `edit_file`, which update tasks did not offer) | The model wrote the line-numbered text back verbatim in the val pilot's `single_field_edit` and `no_op_correct_config` failures |
 | A `.json` write or edit whose content does not parse is **refused** (file unchanged, error names the `N| ` prefix when present); `.py` still writes and reports `diagnostics` | An `ok` result with a buried diagnostic read as success: the pilot's model claimed `DONE` over a `JSONDecodeError` |
 | Every skeleton that edits a file offers `edit_file` beside `write_file`, except `flaky_write_retry` (its fault targets `write_file`) | A targeted edit is a valid path and avoids regenerating whole files, which was ~85% of test-run time |
-| Dev: seeds 0–9 for the original non-recovery skeletons, 0–4 for `check_fix_recheck`, plus four new skeletons (below): **64** tasks | One dev skeleton per family and 15 tasks are too few to select between checkpoints in Stages 9–11 |
+| Val: seeds 0–9 for the original non-recovery skeletons, 0–4 for `check_fix_recheck`, plus four new skeletons (below): **64** tasks | One val skeleton per family and 15 tasks are too few to select between checkpoints in Stages 9–11 |
 | Protocol frozen on the control checkpoint: model, revision, backend, sampling, k seeds, window | The previous manifest froze the 7B's chat template and greedy decoding and did not record the model at all |
-| `pointer_lookup`'s prompt asks for "the value of its output field" instead of "its output filename" | The local Qwen3-4B dev check read the old phrase as the profile file's own name (0/10 → 4/10 after the fix; the rest skip reading the profile, a real weakness) |
+| `pointer_lookup`'s prompt asks for "the value of its output field" instead of "its output filename" | The local Qwen3-4B val check read the old phrase as the profile file's own name (0/10 → 4/10 after the fix; the rest skip reading the profile, a real weakness) |
 | `edit_file`'s not-found error names the `N| ` prefix when `old_text` starts with one, as the refused write already does | The same check had the model paste line-numbered text into `old_text` and get only a generic error |
 
-All changes were motivated by dev evidence (the 7B pilot and the local Qwen3-4B check) and apply
+All changes were motivated by val evidence (the 7B pilot and the local Qwen3-4B check) and apply
 uniformly; no test skeleton's prompt, workspace or expectation changed (27 existing tasks changed
 only their tool list).
 
@@ -62,7 +62,7 @@ New subpackage `agent_from_scratch/evals/bench/`, run through the existing dispa
 | `faults.py` | `FaultyTool`, an eval-only wrapper that fails a named tool's k-th call |
 | `run.py` | Runner, CLI, summary, manifest drift check |
 | `manifest.py` | `freeze` command and manifest comparison |
-| `splits.json` | Skeleton IDs per split: `dev`, `test`, `train` (reserved, empty until Stage 9) |
+| `splits.json` | Skeleton IDs per split: `val`, `test`, `train` (reserved, empty until Stage 9) |
 | `manifest.json` | Generated by `freeze`, committed |
 
 `python -m agent_from_scratch.evals bench …` and `… freeze` are added to `evals/__main__.py`. The
@@ -134,9 +134,9 @@ values, dependency length and fault position. The model always gets the confined
 (`list_files`, `glob_files`, `grep_text`, `read_file`, `write_file`, `edit_file`, `calculator`),
 narrowed per task by `tools`, plus a shell with only the fixed `check_fixture` command where a
 task lists `shell` (`evals/bench/check.py`, moved there from `evals/check.py` when the Stage 2B
-`dev` suite was retired).
+suite was retired).
 
-**Dev (8)**
+**Val (8)**
 
 | Skeleton | Family | Shape | Verified by |
 |---|---|---|---|
@@ -167,9 +167,9 @@ task lists `shell` (`evals/bench/check.py`, moved there from `evals/check.py` wh
 Variants: test non-recovery skeletons use seeds 0–5; test recovery skeletons use seeds 0–2 × two
 conditions, so each contributes six tasks that form three matched pairs;
 `pair_id = "<skeleton>-<seed>"`. Test: 8 non-recovery skeletons × 6 + 2 recovery × 6 = 60.
-Dev: the original three non-recovery skeletons × 10 (seeds 0–9), `check_fix_recheck` 5 pairs,
+Val: the original three non-recovery skeletons × 10 (seeds 0–9), `check_fix_recheck` 5 pairs,
 the three new non-recovery skeletons × 6, `transient_list_failure` 3 pairs: 30 + 10 + 18 + 6 = 64.
-(The original dev set was 15; seeds 0–2 of the original four still build the same tasks.)
+(The original val set was 15; seeds 0–2 of the original four still build the same tasks.)
 
 ## Splits and reservation
 
@@ -178,7 +178,7 @@ placeholder names in the Stage 2B suite's `evals/splits.json` (`merge_records_re
 `joined_totals_reserved`, `single_record_seed`, `division_seed`) were never used here, and that
 file was removed with the suite after Stage 8. `train`
 is empty and reserved for the Stage 9 generator, which is written after the test set is frozen.
-Tests require: every skeleton ID appears in exactly one split, and no dev skeleton shares a
+Tests require: every skeleton ID appears in exactly one split, and no val skeleton shares a
 builder with a test skeleton.
 
 ## Freeze manifest and guard
@@ -193,10 +193,10 @@ protocol from `config.py`: `model` (id, pinned revision, dtype, backend), `decod
 `max_tokens`), `seeds` and `n_ctx`. Only the adapter is a free variable: it is the thing compared.
 
 Every `bench` run records `manifest_drift`, the fields that differ from the manifest.
-`--split test` requires `--final` and refuses on drift unless `--allow-drift` is given, which is
-recorded. `--final` also refuses a backend whose settings differ from the frozen protocol
+`--split test` requires `--final` and refuses on drift. (Revised October 14, 2026: test also
+needs a versioned dataset `--manifest`, and drift can no longer be overridden.) `--final` also refuses a backend whose settings differ from the frozen protocol
 (`manifest.protocol_mismatch`: backend, served model, sampling, window, seed in `BENCH_SEEDS`);
-the served revision is not visible through the API, so the launch command pins it. Dev runs never
+the served revision is not visible through the API, so the launch command pins it. Val runs never
 refuse.
 
 ## Reporting
@@ -211,8 +211,8 @@ pass^k (passed every time), pass@k and the count of mixed-outcome tasks (0 < c <
 
 ## Real-model protocol on the 7B
 
-1. Run the 15 dev tasks and fix **evaluator** bugs only. Difficulty knobs (chain length,
-   distractor count) are set from the dev pilot before the freeze, never from test results.
+1. Run the 15 val tasks and fix **evaluator** bugs only. Difficulty knobs (chain length,
+   distractor count) are set from the val pilot before the freeze, never from test results.
 2. Freeze, then run the 60 test tasks **once** to confirm the pipeline completes and failures
    are interpretable. No prompt, limit or tool changes follow from it.
 3. Record everything in `docs/benchmark.md`. The base control for weight comparisons is the
@@ -225,9 +225,9 @@ sampled at the frozen settings, k = 3 seeds per task. The steps and commands are
 `docs/benchmark.md`:
 
 1. Validate on the live server: the template's control markers are single tokens (checked at
-   client start), `measure_context` equals the server's reported `prompt_tokens`, and a few dev
+   client start), `measure_context` equals the server's reported `prompt_tokens`, and a few val
    tasks' raw replies parse into tool calls.
-2. Run dev × 3 seeds. Evaluator or harness bugs found here are fixed and re-frozen; test has not
+2. Run val × 3 seeds. Evaluator or harness bugs found here are fixed and re-frozen; test has not
    been run on this checkpoint, so this is still allowed. Difficulty is not retuned from it.
 3. Run test × 3 seeds **once** under the final freeze, `aggregate` each split, and record the
    baseline. From here the protocol, harness and test split stay fixed through Stage 11.
@@ -281,7 +281,7 @@ version with its own manifest, not as an edit to this one.
 | Stage 8 bullet | Where |
 |---|---|
 | Cover inspection, updates, recovery, stopping with 2–6 dependent interactions; vary layout, distractors, values, dependency, fault position; allow multiple valid solutions | Skeletons; evidence and file checks (any tool path passes) |
-| Isolate train/dev/test by skeleton before variants; reset workspace and session per task; 50–100 test cases | Splits and reservation; 60 test tasks |
+| Isolate train/val/test by skeleton before variants; reset workspace and session per task; 50–100 test cases | Splits and reservation; 60 test tasks |
 | Verify artifacts independently; report counts, false completion, invalid calls, matched-fault recovery, stopping, tokens, requests, latency, cost | Scoring; Reporting |
 | Compare full history and compact on fitting tasks; memory off/on from identical facts | Compaction stays in the `pressure` suite; memory deferred, recorded as off |
 | Freeze code, prompts, tools, template, decoding, budgets, compact policy, memory, splits, verifiers | Freeze manifest and guard |

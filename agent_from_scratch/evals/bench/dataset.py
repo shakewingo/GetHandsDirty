@@ -1,6 +1,6 @@
 """Generate Stage 9 fixtures and optional scripted gates, without loading a model.
 
-Usage: python -m agent_from_scratch.evals dataset --output DIR [--split train|holdout|all] [--check]
+Usage: python -m agent_from_scratch.evals dataset --output DIR [--split train|test|all] [--check]
 Contracts live outside each workspace; only workspace files and Task.prompt reach the agent.
 """
 
@@ -48,14 +48,14 @@ def generate(out: Path, split: str = "all", check: bool = False) -> dict:
         raise ValueError("Output must be outside the source package.")
     if out.exists():
         raise ValueError("Output already exists; evidence is never overwritten.")
-    entries = [(s, ctx) for s, ctx in specs() if ctx.split in ("train", "holdout")
+    entries = [(s, ctx) for s, ctx in specs() if ctx.split in ("train", "test")
                and (split == "all" or ctx.split == split)]
     if not entries:
         raise ValueError("No tasks selected.")
     out.mkdir(parents=True)
     save(out / "manifest.json", build_manifest())
     counts = dict(Counter(ctx.split for _, ctx in entries))
-    save(out / "metadata.json", {"dataset_version": "stage9-v2", "task_counts": counts,
+    save(out / "metadata.json", {"dataset_version": "stage9-v3", "task_counts": counts,
                                  "skeletons": sorted({s.name for s, _ in entries}),
                                  "scripted_check": check, "model_inference": False,
                                  "context_measurement": "scripted controlled-fit fixture, not actor token counts"})
@@ -68,7 +68,8 @@ def generate(out: Path, split: str = "all", check: bool = False) -> dict:
         save(directory / "task.json", asdict(task))
         if check:
             scripts = {"correct": skeleton.solution(task),
-                       "answer_only": [answer(task.expect.answer.value)],
+                       # One reply per turn: a follow-up turn needs a response of its own.
+                       "answer_only": [answer(task.expect.answer.value)] * (1 + len(task.followups)),
                        "wrong_answer": skeleton.solution(task)[:-1] + [answer("WRONG")]}
             for label, script in scripts.items():
                 result = run_case(ScriptedModel(script), skeleton, ctx, out / "runs" / f"{ctx.id}-{label}")
@@ -89,7 +90,7 @@ def generate(out: Path, split: str = "all", check: bool = False) -> dict:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--split", choices=("train", "holdout", "all"), default="all")
+    parser.add_argument("--split", choices=("train", "test", "all"), default="all")
     parser.add_argument("--check", action="store_true", help="Run correct and deliberately failing scripted fixtures")
     args = parser.parse_args()
     logger.remove()
